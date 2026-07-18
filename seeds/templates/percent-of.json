@@ -1,0 +1,29 @@
+{
+  "name": "Percent of amount",
+  "entry_node_id": "calc",
+  "params": [
+    { "key": "amount", "label": "Сумма", "control": "number", "required": true, "default": 1000 },
+    { "key": "percent", "label": "Процент", "control": "slider", "required": true, "default": 10, "minimum": 0, "maximum": 100, "step": 1 }
+  ],
+  "nodes": [
+    {
+      "id": "calc",
+      "type": "logic.math",
+      "inputs": {
+        "op": { "literal": "mul" },
+        "a": { "literal": "{{vars.amount}}" },
+        "b": { "literal": "{{vars.percent}}" }
+      },
+      "edges": { "next": "normalize" }
+    },
+    {
+      "id": "normalize",
+      "type": "logic.math",
+      "inputs": {
+        "op": { "literal": "div" },
+        "a": { "ref": "calc.result" },
+        "b": { "literal": 100 }
+      }
+    }
+  ]
+}

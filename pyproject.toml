@@ -1,0 +1,127 @@
+[project]
+name = "lzt-flow"
+version = "0.2.0"
+description = "Server-side no-code automation engine for the lzt.market marketplace."
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.29",
+    "sqlalchemy>=2.0",
+    "asyncpg>=0.29",
+    "alembic>=1.13",
+    "redis>=5.0",
+    "arq>=0.26",
+    "apscheduler>=3.10,<4",
+    "pydantic>=2.7",
+    "pydantic-settings>=2.3",
+    "structlog>=24.1",
+    "cryptography>=42.0",
+    # Outbound HTTP for request nodes. Direct dependency, not inherited: the egress transport pins
+    # connections to a policy-checked IP via httpcore's sni_hostname extension, so the version this
+    # relies on must be stated rather than whatever fastapi happens to pull in.
+    "httpx>=0.27",
+    # Module manifests are YAML — a human writes and reviews them in a pull request.
+    "pyyaml>=6.0",
+    # Telegram admin bot (phase 3). Optional at runtime — the bot only starts when configured.
+    "aiogram>=3.7",
+    # Sync driver for APScheduler's SQLAlchemyJobStore (jobstore is sync-only; SQLite dev mode
+    # uses its stdlib sqlite3 driver instead, no extra dependency needed there).
+    "psycopg[binary]>=3.1",
+    # Marketplace transport SDK + event engine — local path sources during dev (see the sources
+    # table below); published to github.com/open-lzt before contest submission.
+    "pylzt",
+    "lzt-eventus[engine]",
+]
+
+[project.optional-dependencies]
+dev = [
+    "ruff>=0.5",
+    "mypy>=1.10",
+    "pytest>=8.2",
+    "pytest-asyncio>=0.23",
+    "pytest-cov>=5.0",
+    "respx>=0.21",
+    "freezegun>=1.5",
+    "asgi-lifespan>=2.1",
+    # No-Docker dev mode + deterministic tests: SQLite async + in-process Redis.
+    "aiosqlite>=0.20",
+    "fakeredis>=2.23",
+    "types-PyYAML>=6.0",
+    # The plugin fixture is a real distribution that advertises a real lzt_flow.nodes entry point.
+    # It is a dev dependency rather than something the plugin tests install themselves, because a
+    # test that skips when a fixture is missing verifies nothing — and the entry-point path is the
+    # whole extension contract.
+    "lzt-flow-demo-plugin",
+    # The full-plugin fixture: a real distribution advertising a lzt_flow.plugins runtime plugin
+    # (node + API router + bot router + lifecycle). Same reasoning as the node-only fixture above.
+    "lzt-flow-demo-runtime",
+]
+
+[tool.uv.sources]
+# Private repos (org open-lzt), published before contest submission. Git access is configured
+# via the shell's git credentials. Pinned to a SHA per R-10 (no drift mid-sprint); bump deliberately.
+# Local clones for reading/reference: ../aiolzt (lztforge), ../lzt-open-source (lzt-eventus).
+pylzt = { git = "https://github.com/open-lzt/pylzt.git", branch = "main" }
+lzt-flow-demo-plugin = { path = "tests/fixtures/plugin_pkg", editable = true }
+lzt-flow-demo-runtime = { path = "tests/fixtures/plugin_runtime_pkg", editable = true }
+lzt-eventus = { git = "https://github.com/open-lzt/lzt-eventus.git", branch = "main" }
+
+[project.scripts]
+# The SAME validator the backend calls (D-6) — the lzt-flows CI installs lzt-flow and runs this,
+# so a module cannot pass CI and fail import, or vice versa.
+lzt-flow-validate = "app.domain.modules.cli:main"
+# The admin bot as its own process — it is a client of the API, not part of it.
+lzt-flow-bot = "app.bot.main:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["app"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "ASYNC", "PL"]
+# TC00x (flake8-type-checking) removed: FastAPI/Pydantic/SQLAlchemy need annotation types at
+# runtime, so hoisting them into TYPE_CHECKING breaks DI/validation. B008: Depends() in defaults
+# is the FastAPI idiom. UP046: keep classic Generic[...] for ABC clarity.
+ignore = ["PLR0913", "B008", "UP046"]
+
+[tool.ruff.lint.isort]
+# Without this, ruff misclassifies the app.* imports in dev.py as third-party and "fixes" the file
+# by hoisting them into the uvicorn/sqlalchemy block: a sorted-looking file that files a first-party
+# import among strangers, and an I001 that cannot be cleared by writing the imports correctly.
+known-first-party = ["app"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["PLR2004", "PLC0415"]
+# dev.py is single-file dev glue: env must be set before app import (E402), and local imports
+# after the redis/arq patches are intentional (PLC0415).
+"dev.py" = ["E402", "PLC0415", "PLR0402"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+plugins = ["pydantic.mypy"]
+
+[[tool.mypy.overrides]]
+module = ["apscheduler.*", "arq.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+markers = [
+    "live: hits the real api.lzt.market (needs LZT_LIVE_TOKEN); skipped by default",
+    "pg: needs a real Postgres (LZT_FLOW_DATABASE_URL reachable); skipped by default",
+    "e2e: hermetic full-stack test over a real dev.py subprocess (market mocked inside via respx, no token). Runs by default — catches boot/wiring regressions unit tests can't.",
+]
+# e2e runs by default (testnet-mocked, self-contained). `live` (real market, needs a token) and `pg`
+# (needs a reachable Postgres) stay opt-in — run them with `-m live` / `-m pg`.
+addopts = "-m 'not live and not pg'"
+
+[tool.coverage.run]
+source = ["app"]

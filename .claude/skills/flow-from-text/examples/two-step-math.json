@@ -1,0 +1,25 @@
+{
+  "name": "two-step-math",
+  "entry_node_id": "first",
+  "nodes": [
+    {
+      "id": "first",
+      "type": "logic.math",
+      "inputs": {
+        "op": { "literal": "add" },
+        "a": { "literal": 2 },
+        "b": { "literal": 3 }
+      },
+      "edges": { "next": "second" }
+    },
+    {
+      "id": "second",
+      "type": "logic.math",
+      "inputs": {
+        "op": { "literal": "mul" },
+        "a": { "ref": "first.result" },
+        "b": { "literal": 10 }
+      }
+    }
+  ]
+}

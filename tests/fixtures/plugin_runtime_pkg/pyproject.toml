@@ -1,0 +1,17 @@
+[project]
+name = "lzt-flow-demo-runtime"
+version = "0.1.0"
+description = "Test fixture: a real distribution advertising a full lzt_flow.plugins runtime plugin (node + API router + bot router + lifecycle)."
+requires-python = ">=3.12"
+
+# The whole full-plugin install story: one entry point advertising a MODULE (no :attr). The manager
+# reads PRE_INIT / POST_INIT / SHUTDOWN off the module.
+[project.entry-points."lzt_flow.plugins"]
+demo_runtime = "lzt_flow_demo_runtime.plugin"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/lzt_flow_demo_runtime"]

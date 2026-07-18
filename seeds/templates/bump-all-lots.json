@@ -1,0 +1,15 @@
+{
+  "name": "Bump all my lots",
+  "entry_node_id": "fetch",
+  "params": [],
+  "nodes": [
+    { "id": "fetch", "type": "logic.get_my_lots", "edges": { "next": "loop" } },
+    {
+      "id": "loop",
+      "type": "logic.for_each_lot",
+      "inputs": { "item_ids": { "ref": "fetch.item_ids" } },
+      "edges": { "body": "bump" }
+    },
+    { "id": "bump", "type": "market.bump", "inputs": { "item_id": { "ref": "loop.item_id" } } }
+  ]
+}

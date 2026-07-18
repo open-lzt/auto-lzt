@@ -1,0 +1,77 @@
+.sidebar {
+  /* width is owned by useResizablePane */
+  flex-shrink: 0;
+  padding: 16px 12px;
+  border-right: 1px solid var(--border);
+  background: var(--surface-1);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.sidebar__group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sidebar__heading {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-faint);
+  letter-spacing: 0.02em;
+  margin: 0 0 4px 6px;
+}
+
+.sidebar__item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  text-align: left;
+  transition: background 140ms ease-out;
+}
+
+.sidebar__item:hover {
+  background: var(--surface-2);
+}
+
+.sidebar__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.sidebar__dot--trigger {
+  background: var(--cat-trigger);
+}
+
+.sidebar__dot--action {
+  background: var(--cat-action);
+}
+
+.sidebar__dot--logic {
+  background: var(--cat-logic);
+}
+
+.sidebar__dot--composite {
+  background: var(--accent);
+}
+
+.sidebar__loading,
+.sidebar__error {
+  font-size: 12px;
+  color: var(--text-faint);
+  padding: 0 6px;
+}
+
+.sidebar__error {
+  color: var(--danger);
+}

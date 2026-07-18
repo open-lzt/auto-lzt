@@ -1,0 +1,10 @@
+{
+  "name": "Bump a single lot",
+  "entry_node_id": "bump",
+  "params": [
+    { "key": "item_id", "label": "ID лота", "control": "number", "required": true, "default": 1 }
+  ],
+  "nodes": [
+    { "id": "bump", "type": "market.bump", "inputs": { "item_id": { "literal": "{{vars.item_id}}" } } }
+  ]
+}

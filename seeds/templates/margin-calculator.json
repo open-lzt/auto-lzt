@@ -1,0 +1,39 @@
+{
+  "name": "Margin calculator",
+  "entry_node_id": "markup",
+  "params": [
+    { "key": "buy_price", "label": "Цена покупки", "control": "number", "required": true, "default": 100 },
+    { "key": "markup_pct", "label": "Наценка, %", "control": "slider", "required": true, "default": 20, "minimum": 0, "maximum": 500, "step": 5 }
+  ],
+  "nodes": [
+    {
+      "id": "markup",
+      "type": "logic.math",
+      "inputs": {
+        "op": { "literal": "mul" },
+        "a": { "literal": "{{vars.buy_price}}" },
+        "b": { "literal": "{{vars.markup_pct}}" }
+      },
+      "edges": { "next": "to_fraction" }
+    },
+    {
+      "id": "to_fraction",
+      "type": "logic.math",
+      "inputs": {
+        "op": { "literal": "div" },
+        "a": { "ref": "markup.result" },
+        "b": { "literal": 100 }
+      },
+      "edges": { "next": "sell_price" }
+    },
+    {
+      "id": "sell_price",
+      "type": "logic.math",
+      "inputs": {
+        "op": { "literal": "add" },
+        "a": { "literal": "{{vars.buy_price}}" },
+        "b": { "ref": "to_fraction.result" }
+      }
+    }
+  ]
+}

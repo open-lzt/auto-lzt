@@ -1,0 +1,126 @@
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.app__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 56px;
+  flex-shrink: 0;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-1);
+}
+
+.app__flow-name {
+  height: 34px;
+  padding: 0 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+  min-width: 200px;
+  transition: background 140ms ease-out, border-color 140ms ease-out;
+}
+
+.app__flow-name:hover {
+  background: var(--surface-2);
+}
+
+.app__flow-name:focus {
+  background: var(--surface-2);
+  border-color: var(--border-strong);
+}
+
+.app__section-title {
+  min-width: 200px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.app__view-tabs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.app__view-tab {
+  height: 32px;
+  padding: 0 12px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 140ms ease-out, color 140ms ease-out;
+}
+
+.app__view-tab:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.app__view-tab--active {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.app__header-right {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.app__view-empty {
+  flex: 1;
+  display: flex;
+  align-items: flex-start;
+  padding: 24px;
+}
+
+.app__view-empty .empty-prompt {
+  max-width: 380px;
+}
+
+.app__switch-error {
+  font-size: 13px;
+  color: var(--danger);
+  max-width: 280px;
+}
+
+.app__trigger-warning {
+  font-size: 13px;
+  color: var(--warning, #d9a441);
+  max-width: 320px;
+}
+
+.app__body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+/* The editor is a three-pane desktop surface (flows + palette + inspector). Below the floor it
+   scrolls horizontally as one plane instead of crushing panes into unusable slivers. */
+.app {
+  min-width: 1024px;
+  overflow-x: auto;
+}
+
+@media (max-width: 1200px) {
+  .app__view-tab {
+    padding: 0 10px;
+  }
+
+  .app__header-right {
+    gap: 10px;
+  }
+}

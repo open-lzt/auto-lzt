@@ -1,0 +1,53 @@
+.boundary-node {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  border: 1px solid var(--accent);
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.4);
+  transition:
+    box-shadow 160ms ease-out,
+    transform 160ms ease-out;
+}
+
+.boundary-node--selected {
+  box-shadow: 0 0 0 3px var(--accent-dim);
+}
+
+.boundary-node__kind {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--accent);
+  text-transform: lowercase;
+}
+
+.boundary-node__name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 160px;
+}
+
+.boundary-node__placeholder {
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface-1);
+  color: var(--text-muted);
+  font-size: 12px;
+  padding: 2px 6px;
+  transition:
+    background 140ms ease-out,
+    color 140ms ease-out;
+}
+
+.boundary-node__placeholder:hover {
+  background: var(--accent-dim);
+  border-color: var(--accent);
+  color: var(--accent);
+}

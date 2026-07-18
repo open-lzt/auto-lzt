@@ -1,0 +1,5 @@
+# Plugin notification texts. Override the whole file via LZT_FLOW_PLUGIN_TEXTS_PATH.
+# `update_line` is a template — {name} {current} {available} are substituted per update.
+[notifications]
+updates_header = "Новые версии плагинов (нужен рестарт, чтобы применить):"
+update_line = "• {name}: {current} → {available}"

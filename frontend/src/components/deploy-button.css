@@ -1,0 +1,39 @@
+.deploy {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.deploy__button {
+  height: 34px;
+  padding: 0 18px;
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 600;
+  font-size: 13px;
+  transition:
+    background 140ms ease-out,
+    transform 140ms ease-out,
+    opacity 140ms ease-out;
+}
+
+.deploy__button:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+
+.deploy__button:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.deploy__button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.deploy__error {
+  font-size: 12px;
+  color: var(--danger);
+  max-width: 360px;
+}

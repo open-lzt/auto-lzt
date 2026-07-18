@@ -1,0 +1,32 @@
+{
+  "name": "Relist a lot",
+  "entry_node_id": "relist",
+  "params": [
+    { "key": "price", "label": "Цена", "control": "number", "required": true, "default": 100 },
+    { "key": "category", "label": "Категория", "control": "category_picker", "required": true, "default": "steam" },
+    {
+      "key": "currency",
+      "label": "Валюта",
+      "control": "select",
+      "required": true,
+      "default": "rub",
+      "options": [
+        { "value": "rub", "label": "RUB" },
+        { "value": "usd", "label": "USD" }
+      ]
+    },
+    { "key": "origin", "label": "Происхождение", "control": "text", "required": true, "default": "brute" }
+  ],
+  "nodes": [
+    {
+      "id": "relist",
+      "type": "market.relist",
+      "inputs": {
+        "price": { "literal": "{{vars.price}}" },
+        "category_id": { "literal": "{{vars.category}}" },
+        "currency": { "literal": "{{vars.currency}}" },
+        "item_origin": { "literal": "{{vars.origin}}" }
+      }
+    }
+  ]
+}

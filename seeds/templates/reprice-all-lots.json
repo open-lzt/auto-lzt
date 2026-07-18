@@ -1,0 +1,34 @@
+{
+  "name": "Reprice all my lots",
+  "entry_node_id": "fetch",
+  "params": [
+    {
+      "key": "currency",
+      "label": "Валюта",
+      "control": "select",
+      "required": true,
+      "default": "rub",
+      "options": [
+        { "value": "rub", "label": "RUB" },
+        { "value": "usd", "label": "USD" }
+      ]
+    }
+  ],
+  "nodes": [
+    { "id": "fetch", "type": "logic.get_my_lots", "edges": { "next": "loop" } },
+    {
+      "id": "loop",
+      "type": "logic.for_each_lot",
+      "inputs": { "item_ids": { "ref": "fetch.item_ids" } },
+      "edges": { "body": "reprice" }
+    },
+    {
+      "id": "reprice",
+      "type": "market.reprice",
+      "inputs": {
+        "item_id": { "ref": "loop.item_id" },
+        "currency": { "literal": "{{vars.currency}}" }
+      }
+    }
+  ]
+}

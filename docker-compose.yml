@@ -1,0 +1,150 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: lzt
+      # Demo default is `lzt`; set POSTGRES_PASSWORD in .env before exposing the stack.
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-lzt}
+      POSTGRES_DB: lztflow
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U lzt"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    # Empty REDIS_PASSWORD = no auth (loopback demo). Set it in .env to require AUTH; the client URLs
+    # below embed the same value so server and clients stay in sync from one source.
+    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD:-}"]
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+    ports:
+      - "127.0.0.1:6379:6379"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$${REDIS_PASSWORD}\" ping | grep -q PONG"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build: .
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+    environment:
+      LZT_FLOW_DATABASE_URL: postgresql+asyncpg://lzt:${POSTGRES_PASSWORD:-lzt}@postgres:5432/lztflow
+      LZT_FLOW_REDIS_URL: redis://:${REDIS_PASSWORD:-}@redis:6379/0
+      LZT_FLOW_MASTER_KEY: ${LZT_FLOW_MASTER_KEY:-}
+      LZT_FLOW_API_KEY: ${LZT_FLOW_API_KEY:-}
+    volumes:
+      # Folder plugins (.py + manifest) shared across api/worker/bot so a bot-installed plugin is
+      # visible to the engine. NB: a plugin's pip deps install into each container's own venv, so
+      # they do NOT persist across `up --build` — that's a separate persistence item, not fixed here.
+      - plugins:/app/.system/plugins
+    ports:
+      # Host-side loopback only — the API has no request auth (single-tenant self-host). The
+      # frontend nginx reaches it over the compose network; expose it publicly only behind an
+      # authenticating reverse proxy.
+      - "127.0.0.1:8000:8000"
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      # /health now pings DB + Redis and 503s if either is down, so this gates frontend startup on a
+      # genuinely-ready API. curl is absent from python:slim — use stdlib urllib (503 raises => fail).
+      test:
+        - "CMD-SHELL"
+        - "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health',timeout=3).status==200 else 1)\""
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 25s
+
+  # React Flow canvas (wave-06). Static build served by nginx, which also reverse-proxies /api ->
+  # api:8000 (same prefix-strip contract as the Vite dev proxy, see frontend/vite.config.ts) so the
+  # SPA never hardcodes a backend host in either environment.
+  frontend:
+    build: ./frontend
+    ports:
+      - "5173:80"
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+
+  # Separate process from `api` so the resume test proves cross-process pickup, not just in-process
+  # restart. arq re-enqueues time out / crashed jobs; the optimistic lock makes a double-pickup safe.
+  #
+  # Wave 5: also embeds the APScheduler leader + the lzt-eventus EventEngine (Decision #16 — no
+  # separate daemon, no second network seam). `python -m app.worker` supervises arq + the engine
+  # under one graceful SIGTERM; only run ONE replica of this service (the scheduler is a single
+  # leader, not horizontally scaled — see `schedule_trigger.py`).
+  worker:
+    build: .
+    command: python -m app.worker
+    environment:
+      LZT_FLOW_DATABASE_URL: postgresql+asyncpg://lzt:${POSTGRES_PASSWORD:-lzt}@postgres:5432/lztflow
+      LZT_FLOW_REDIS_URL: redis://:${REDIS_PASSWORD:-}@redis:6379/0
+      LZT_FLOW_MASTER_KEY: ${LZT_FLOW_MASTER_KEY:-}
+      LZT_FLOW_WORKER_ID: ${LZT_FLOW_WORKER_ID:-worker-1}
+      # lzt-eventus's own config surface (LZT_ prefix, separate from LZT_FLOW_ — decisions #21/#24).
+      LZT_TOKENS: ${LZT_TOKENS:-}
+      LZT_TOKEN_ENC_KEY: ${LZT_TOKEN_ENC_KEY:-}
+      LZT_DATABASE_URL: postgresql://lzt:${POSTGRES_PASSWORD:-lzt}@postgres:5432/lztflow
+      LZT_REDIS_URL: redis://:${REDIS_PASSWORD:-}@redis:6379/0
+      LZT_ADMIN_API_KEY: ${LZT_ADMIN_API_KEY:-}
+      LZT_ADVISORY_LOCK_KEY: ${LZT_ADVISORY_LOCK_KEY:-}
+    volumes:
+      - plugins:/app/.system/plugins
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      # Connectivity liveness only: proves the worker container can still reach Postgres + Redis.
+      # It does NOT prove the arq loop is draining jobs (that needs a heartbeat — out of scope);
+      # `restart: unless-stopped` covers a hard crash.
+      test:
+        - "CMD-SHELL"
+        - "python -c \"import socket; socket.create_connection(('postgres',5432),3); socket.create_connection(('redis',6379),3)\""
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  # Admin control bot (aiogram, long-poll). OPTIONAL — only starts under the `bot` profile:
+  #   docker compose --profile bot up -d
+  # Off by default so the demo stack runs with no Telegram token (the bot process hard-exits without
+  # LZT_FLOW_BOT_TOKEN + admin ids, which would crash-loop if it were always-on). Talks to `api` over
+  # the compose network under the same X-API-Key gate as the web UI.
+  bot:
+    build: .
+    command: lzt-flow-bot
+    profiles: ["bot"]
+    environment:
+      LZT_FLOW_BOT_TOKEN: ${LZT_FLOW_BOT_TOKEN:-}
+      LZT_FLOW_BOT_ADMIN_IDS: ${LZT_FLOW_BOT_ADMIN_IDS:-}
+      LZT_FLOW_BOT_API_BASE_URL: http://api:8000
+      LZT_FLOW_BOT_API_KEY: ${LZT_FLOW_API_KEY:-}
+      LZT_FLOW_PLUGIN_INDEX_URL: ${LZT_FLOW_PLUGIN_INDEX_URL:-}
+      LZT_FLOW_PLUGIN_INDEX_TOKEN: ${LZT_FLOW_PLUGIN_INDEX_TOKEN:-}
+    volumes:
+      - plugins:/app/.system/plugins
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  pgdata:
+  plugins:

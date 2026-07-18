@@ -1,0 +1,15 @@
+{
+  "name": "auto-reply-flow",
+  "entry_node_id": "reply1",
+  "nodes": [
+    {
+      "id": "reply1",
+      "type": "forum.auto_reply",
+      "inputs": {
+        "conversation_id": { "literal": 1 },
+        "message": { "literal": "Thanks for your message, we'll get back to you shortly." }
+      },
+      "edges": {}
+    }
+  ]
+}

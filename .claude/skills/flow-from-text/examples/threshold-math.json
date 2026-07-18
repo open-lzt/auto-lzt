@@ -1,0 +1,27 @@
+{
+  "name": "threshold-math",
+  "entry_node_id": "calc",
+  "params": [
+    {
+      "key": "threshold",
+      "label": "Порог",
+      "control": "slider",
+      "required": true,
+      "default": 100,
+      "minimum": 0,
+      "maximum": 1000,
+      "step": 10
+    }
+  ],
+  "nodes": [
+    {
+      "id": "calc",
+      "type": "logic.math",
+      "inputs": {
+        "op": { "literal": "mul" },
+        "a": { "literal": "{{vars.threshold}}" },
+        "b": { "literal": 2 }
+      }
+    }
+  ]
+}

@@ -1,0 +1,123 @@
+.flow-canvas {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.flow-canvas__stage {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+
+.flow-canvas__loading {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg);
+}
+
+.react-flow__attribution {
+  display: none;
+}
+
+.react-flow__controls {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  box-shadow: none;
+}
+
+.react-flow__controls-button {
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-muted);
+}
+
+.react-flow__controls-button:hover {
+  background: var(--surface-3);
+  color: var(--text);
+}
+
+.react-flow__edge-path {
+  stroke: var(--text-faint);
+  stroke-width: 1.5;
+}
+
+.react-flow__edge.selected .react-flow__edge-path,
+.react-flow__edge:hover .react-flow__edge-path {
+  stroke: var(--accent);
+}
+
+/* hover-chain highlight (useConnectedChain) */
+.react-flow__node.flow-node-dim {
+  opacity: 0.35;
+  transition: opacity 160ms ease-out;
+}
+
+.react-flow__node.flow-node-highlight .flow-node {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-dim);
+}
+
+.react-flow__edge.flow-edge-dim {
+  opacity: 0.25;
+  transition: opacity 160ms ease-out;
+}
+
+.react-flow__edge.flow-edge-highlight .react-flow__edge-path {
+  stroke: var(--accent);
+  stroke-width: 2;
+}
+
+/* node hover tooltip (ui/Tooltip.tsx) */
+.tooltip {
+  position: relative;
+}
+
+.tooltip__bubble {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%) translateY(4px);
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-3);
+  border: 1px solid var(--border-strong);
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.4;
+  white-space: normal;
+  max-width: 220px;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 160ms ease-out, transform 160ms ease-out;
+  z-index: 20;
+}
+
+.tooltip:hover .tooltip__bubble,
+.tooltip:focus-within .tooltip__bubble {
+  opacity: 1;
+  visibility: visible;
+  transform: translateX(-50%) translateY(0);
+}
+
+.flow-canvas__empty {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  margin: 0;
+  max-width: 320px;
+  text-align: center;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text-faint);
+  pointer-events: none;
+}

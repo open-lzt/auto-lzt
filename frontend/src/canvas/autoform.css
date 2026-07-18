@@ -1,0 +1,202 @@
+.autoform {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.autoform__empty {
+  color: var(--text-faint);
+  font-size: 12px;
+  margin: 0;
+}
+
+/* Parameter surface — the flat settings menu for a whole flow. */
+.param-surface {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.param-surface__row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.autoform__description {
+  font-size: 11px;
+  color: var(--text-faint);
+}
+
+.autoform__error {
+  font-size: 11px;
+  color: #e5484d;
+}
+
+/* Slider control: range track + live numeric readout. */
+.ctl-slider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.ctl-slider__range {
+  flex: 1;
+  accent-color: var(--accent);
+  height: 4px;
+}
+
+.ctl-slider__readout {
+  min-width: 44px;
+  text-align: right;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+.ctl-slider__unit {
+  margin-left: 2px;
+  color: var(--text-faint);
+}
+
+.ctl-textarea {
+  resize: vertical;
+  min-height: 72px;
+  font-family: inherit;
+  line-height: 1.5;
+}
+
+.ctl-radio,
+.ctl-multiselect {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ctl-radio__option,
+.ctl-multiselect__option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.ctl-radio__option input,
+.ctl-multiselect__option input {
+  accent-color: var(--accent);
+}
+
+.param-surface__group {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.param-surface__group-title {
+  margin: 8px 0 0;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--text-muted);
+}
+
+.autoform__field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* boolean fields read as one row: label first, control right — not a checkbox orphaned below text */
+.autoform__field--inline {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.autoform__label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.autoform__required {
+  color: var(--accent);
+  margin-left: 2px;
+}
+
+.autoform__control {
+  appearance: none;
+  height: 34px;
+  padding: 0 10px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-3);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-size: 13px;
+  transition:
+    border-color 140ms ease-out,
+    background 140ms ease-out;
+}
+
+.autoform__control:hover {
+  border-color: var(--border-strong);
+}
+
+.autoform__control:focus {
+  border-color: var(--accent);
+  background: var(--surface-2);
+}
+
+.ctl-select {
+  position: relative;
+  display: flex;
+}
+
+select.autoform__control {
+  cursor: pointer;
+  width: 100%;
+  padding-right: 30px;
+}
+
+.ctl-select__chevron {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  width: 14px;
+  height: 14px;
+  transform: translateY(-50%);
+  color: var(--text-faint);
+  pointer-events: none;
+}
+
+.autoform__checkbox {
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  border: 1px solid var(--border-strong);
+  background: var(--surface-3);
+  cursor: pointer;
+  position: relative;
+  transition: background 140ms ease-out, border-color 140ms ease-out;
+}
+
+.autoform__checkbox:checked {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.autoform__checkbox:checked::after {
+  content: "";
+  position: absolute;
+  left: 5px;
+  top: 1px;
+  width: 5px;
+  height: 9px;
+  border: solid var(--bg);
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}

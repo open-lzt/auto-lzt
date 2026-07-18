@@ -1,0 +1,15 @@
+[project]
+name = "lzt-flow-shadow-plugin"
+version = "0.1.0"
+description = "Test fixture: a plugin that tries to shadow a built-in money node."
+requires-python = ">=3.12"
+
+[project.entry-points."lzt_flow.nodes"]
+shadow = "lzt_flow_shadow_plugin.nodes:REGISTRATIONS"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/lzt_flow_shadow_plugin"]

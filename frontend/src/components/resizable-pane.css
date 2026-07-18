@@ -1,0 +1,35 @@
+.pane-resizer {
+  flex-shrink: 0;
+  width: 6px;
+  margin: 0 -3px;
+  cursor: col-resize;
+  background: transparent;
+  position: relative;
+  z-index: 2;
+  transition: background 140ms ease-out;
+}
+
+/* The hairline the user actually aims at is 1px; the 6px hit area around it is invisible. */
+.pane-resizer::after {
+  content: "";
+  position: absolute;
+  inset: 0 2px;
+  background: transparent;
+  transition: background 140ms ease-out;
+}
+
+.pane-resizer:hover::after,
+.pane-resizer:focus-visible::after,
+.pane-resizer--active::after {
+  background: var(--accent);
+}
+
+.pane-resizer:focus-visible {
+  outline: none;
+}
+
+/* While dragging, the cursor must not turn into a text caret over the panes it sweeps across. */
+body.is-resizing {
+  cursor: col-resize;
+  user-select: none;
+}

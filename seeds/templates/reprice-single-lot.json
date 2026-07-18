@@ -1,0 +1,29 @@
+{
+  "name": "Reprice a single lot",
+  "entry_node_id": "reprice",
+  "params": [
+    { "key": "item_id", "label": "ID лота", "control": "number", "required": true, "default": 1 },
+    {
+      "key": "currency",
+      "label": "Валюта",
+      "control": "select",
+      "required": true,
+      "default": "rub",
+      "options": [
+        { "value": "rub", "label": "RUB" },
+        { "value": "usd", "label": "USD" },
+        { "value": "eur", "label": "EUR" }
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "id": "reprice",
+      "type": "market.reprice",
+      "inputs": {
+        "item_id": { "literal": "{{vars.item_id}}" },
+        "currency": { "literal": "{{vars.currency}}" }
+      }
+    }
+  ]
+}

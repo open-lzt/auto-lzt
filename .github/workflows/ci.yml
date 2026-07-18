@@ -1,0 +1,84 @@
+name: CI
+
+# `master`, not `main`. This repo's default branch is master, so the old trigger meant every push
+# to the default branch matched nothing and ran no CI at all — the failing checks visible in the
+# Actions tab came from an unrelated orphaned workflow registration, which made the gap look like
+# a broken build rather than an absent one.
+#
+# workflow_dispatch is here so this can be answered by pressing a button instead of by pushing a
+# commit and reading tea leaves: a CI you cannot run on demand is a CI you cannot prove runs.
+#
+# NECESSARY BUT NOT SUFFICIENT — do not read the trigger fix as "CI works now". Dispatching this
+# file by hand (run 29578714221) still returns `startup_failure` in 0s with no annotations and no
+# check-runs, and so does the unrelated orphaned workflow on every push. Two independent workflows
+# failing identically before a single step executes points at the account, not at this file, and
+# the usual cause is Actions minutes exhausted on a private repo. Confirming that needs the `user`
+# billing scope, which the token here does not carry, so it is the account owner's to check:
+#
+#     gh auth refresh -h github.com -s user
+#     gh api users/zlexdev/settings/billing/actions
+#
+# Until that returns a live quota, this workflow is correct and still does not run.
+on:
+  push:
+    branches: [master, "feat/**"]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+      - name: Set up Python
+        run: uv python install 3.12
+      - name: Sync deps
+        run: uv sync --extra dev --frozen
+      - name: Ruff
+        run: uv run ruff check .
+      - name: Ruff format
+        run: uv run ruff format --check .
+      - name: Mypy
+        run: uv run mypy app
+      - name: Pytest
+        run: uv run pytest --cov=app --cov-report=term-missing
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Typecheck
+        run: pnpm exec tsc --noEmit
+      - name: Build
+        run: pnpm build
+
+  # Final gate: the no-Docker core loop against the mock market. No live token, no external
+  # services — proves compile -> run -> completed on every commit (closes the open CI question).
+  smoke:
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+      - name: Set up Python
+        run: uv python install 3.12
+      - name: Sync deps
+        run: uv sync --extra dev --frozen
+      - name: Smoke (mock-backed core loop)
+        run: bash scripts/smoke.sh

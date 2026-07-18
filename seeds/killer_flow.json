@@ -1,0 +1,44 @@
+{
+  "name": "killer-flow",
+  "entry_node_id": "get_lots",
+  "nodes": [
+    {
+      "id": "get_lots",
+      "type": "logic.get_my_lots",
+      "inputs": {},
+      "edges": { "next": "loop_lot" }
+    },
+    {
+      "id": "loop_lot",
+      "type": "logic.for_each_lot",
+      "inputs": { "item_ids": { "ref": "get_lots.item_ids" } },
+      "edges": { "body": "bump1" }
+    },
+    {
+      "id": "bump1",
+      "type": "market.bump",
+      "inputs": { "item_id": { "ref": "loop_lot.item_id" } },
+      "edges": { "next": "cond1" }
+    },
+    {
+      "id": "cond1",
+      "type": "logic.condition",
+      "inputs": {
+        "left": { "ref": "bump1.item_id" },
+        "op": { "literal": "gt" },
+        "right": { "literal": 0 }
+      },
+      "edges": { "true": "reprice1" }
+    },
+    {
+      "id": "reprice1",
+      "type": "market.reprice",
+      "inputs": {
+        "item_id": { "ref": "bump1.item_id" },
+        "currency": { "literal": "rub" },
+        "price": { "literal": 999 }
+      },
+      "edges": {}
+    }
+  ]
+}
