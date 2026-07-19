@@ -1,27 +1,10 @@
 name: CI
 
-# `master`, not `main`. This repo's default branch is master, so the old trigger meant every push
-# to the default branch matched nothing and ran no CI at all — the failing checks visible in the
-# Actions tab came from an unrelated orphaned workflow registration, which made the gap look like
-# a broken build rather than an absent one.
-#
-# workflow_dispatch is here so this can be answered by pressing a button instead of by pushing a
-# commit and reading tea leaves: a CI you cannot run on demand is a CI you cannot prove runs.
-#
-# NECESSARY BUT NOT SUFFICIENT — do not read the trigger fix as "CI works now". Dispatching this
-# file by hand (run 29578714221) still returns `startup_failure` in 0s with no annotations and no
-# check-runs, and so does the unrelated orphaned workflow on every push. Two independent workflows
-# failing identically before a single step executes points at the account, not at this file, and
-# the usual cause is Actions minutes exhausted on a private repo. Confirming that needs the `user`
-# billing scope, which the token here does not carry, so it is the account owner's to check:
-#
-#     gh auth refresh -h github.com -s user
-#     gh api users/zlexdev/settings/billing/actions
-#
-# Until that returns a live quota, this workflow is correct and still does not run.
+# The published default branch is `main` — the trigger must name it or pushes run no CI.
+# workflow_dispatch lets CI be proven on demand instead of by pushing a commit and reading the tab.
 on:
   push:
-    branches: [master, "feat/**"]
+    branches: [main, "feat/**"]
   pull_request:
   workflow_dispatch:
 
