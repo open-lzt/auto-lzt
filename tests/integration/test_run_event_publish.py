@@ -78,7 +78,17 @@ async def test_step_completed_and_log_events_published_after_trace_write() -> No
     assert step_events[0].run_id == str(run.id)
     assert step_events[0].node_id == "bump1"
     assert step_events[0].duration_ms >= 0
-    assert events.recorded[0][0] == f"run:{run.id}:events"
+    # Asserts the channel of EVERY step/log event rather than of whichever publish happened to be
+    # first. The original indexed [0], which silently assumed nothing else published earlier — no
+    # longer true now that execute_run announces RUN_STARTED on the tenant task channel right after
+    # the claim. Checking the events this test is actually about is both the correct fix and a
+    # stronger assertion than the one it replaces.
+    run_channel_events = {
+        channel
+        for channel, event in events.recorded
+        if isinstance(event, StepCompletedEvent | LogEvent)
+    }
+    assert run_channel_events == {f"run:{run.id}:events"}
 
 
 async def test_a_raising_event_transport_never_fails_the_run() -> None:
