@@ -52,6 +52,12 @@ class Settings(BaseSettings):
     # Wave-03 run-history retention (FP-1): a long-lived scheduled flow must not unbounded-grow
     # run_traces. Row-cap is enforced inline at write time; the day-based window is pruned by a
     # periodic job.
+    # An SSE connection is held, not completed, so this bounds a resource rather than a rate. Set
+    # from the deployment's connection pool, not guessed: every open stream holds one.
+    max_concurrent_streams: int = Field(
+        default=50, description="Maximum simultaneously open SSE streams across the process."
+    )
+
     run_trace_retention_days: int = Field(default=30)
     run_trace_max_rows_per_run: int = Field(default=5000)
 

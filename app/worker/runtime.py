@@ -67,7 +67,13 @@ from app.domain.flow_engine.base_node import BaseNode, NodeDeps, RunContext
 from app.domain.flow_engine.dtos import StepResultDTO
 from app.domain.flow_engine.env_input import resolve_env
 from app.domain.flow_engine.errors import NodeTimeoutError, RunAlreadyClaimed, RunFailed
-from app.domain.flow_engine.events import EventTransport, LogEvent, StepCompletedEvent
+from app.domain.flow_engine.events import (
+    EventTransport,
+    LogEvent,
+    StepCompletedEvent,
+    TaskEvent,
+    TaskEventReason,
+)
 from app.domain.flow_engine.ir_node import VARS_NODE_ID, EnvRef, IRNode, LiteralValue
 from app.domain.flow_engine.model import (
     FlowIR,
@@ -278,6 +284,7 @@ async def execute_run(
     my_version = await runs.claim(run_id, run.version, worker_id)
     if my_version is None:
         raise RunAlreadyClaimed(run_id, run.version)
+    await _publish_task_event(event_transport, run, TaskEventReason.RUN_STARTED)
 
     ir = await flows.get(run.flow_ir_id)
     if ir is None:
@@ -313,12 +320,40 @@ async def execute_run(
             run_id,
             version_box[0],
         )
+        await _publish_task_event(event_transport, run, TaskEventReason.RUN_FINISHED)
         return RunStatus.COMPLETED
     except RunAlreadyClaimed:
         raise
     except RunFailed as exc:
         await runs.touch(run_id, version_box[0], exc.step, RunStatus.FAILED)
+        await _publish_task_event(event_transport, run, TaskEventReason.RUN_FINISHED)
         raise
+
+
+async def _publish_task_event(
+    event_transport: EventTransport | None, run: Run, reason: TaskEventReason
+) -> None:
+    """Announce a run's LIFECYCLE on the tenant task channel.
+
+    Called from exactly three places in ``execute_run`` — after the claim, and in each terminal
+    branch — and deliberately NEVER from ``_run_chain`` / ``_run_node`` / ``_publish_run_event``.
+    That neighbouring helper fires twice per STEP, so publishing alongside it would put a task event
+    on every step of every run: fifty on a fifty-step run instead of two, each waking every open
+    panel to rebuild a projection that did not change. With for-each-account fan-out it is dozens of
+    redundant round trips per «Поднять сейчас» click.
+
+    Best-effort, mirroring ``_publish_run_event``: a failure to tell the panel something happened
+    must never fail the run that actually happened.
+    """
+    if event_transport is None:
+        return
+    try:
+        await event_transport.publish(
+            f"tenant:{run.tenant_id}:tasks",
+            TaskEvent(flow_id=str(run.flow_id), reason=reason, run_id=str(run.id)),
+        )
+    except Exception:  # noqa: BLE001 — event publish boundary
+        log.exception("task_event.publish_failed", run_id=str(run.id))
 
 
 def _require_ownership(new_version: int | None, run_id: RunId, expected: int) -> int:

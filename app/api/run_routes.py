@@ -15,7 +15,6 @@ token instead (``core/stream_token.py``) rather than being the one hole left in 
 
 from __future__ import annotations
 
-import asyncio
 from collections.abc import AsyncIterator
 from uuid import UUID
 
@@ -27,6 +26,7 @@ from app.core.config import Settings, get_settings
 from app.core.exceptions import Unauthorized
 from app.core.schema import BaseSchema
 from app.core.stream_token import TOKEN_TTL_S, StreamTokenInvalid, issue, verify
+from app.core.streaming import sse_frames
 from app.core.tenant import tenant_id_dep
 from app.domain.account.model import TenantId
 from app.domain.flow_engine.errors import EntityNotFound
@@ -194,36 +194,29 @@ async def get_run_trace(
     ]
 
 
-async def _run_event_frames(
+def _run_event_frames(
     run_id: RunId,
     last_event_id: str | None,
     transport: EventTransport,
     run_repo: RunRepository,
 ) -> AsyncIterator[str]:
-    """SSE frame generator: replays buffered events after ``last_event_id`` then follows live
-    Pub/Sub, sending an idle heartbeat comment every ``_HEARTBEAT_INTERVAL_S`` and closing once
-    the run reaches a terminal status. Reads the module-level heartbeat constant as a global (not
-    a captured default arg) so a test can monkeypatch it to a short interval.
+    """This run's SSE frames: the shared generator plus this route's one domain rule — stop once the
+    run is terminal. The transport mechanics live in ``app.core.streaming`` because they are
+    identical for every channel; only this predicate is specific to a run."""
 
-    The terminal-status check only runs on the *idle* (heartbeat) path, never right after a real
-    event — an already-terminal run must still replay its FULL buffered history before closing,
-    not stop after the first buffered item just because the run itself has already finished."""
-    channel = f"run:{run_id}:events"
-    events = transport.subscribe(channel, last_event_id)
-    while True:
-        try:
-            event_id, event = await asyncio.wait_for(
-                events.__anext__(), timeout=_HEARTBEAT_INTERVAL_S
-            )
-        except TimeoutError:
-            yield ": heartbeat\n\n"
-            current = await run_repo.get(run_id)
-            if current is None or current.status in _TERMINAL_RUN_STATUSES:
-                return
-        except StopAsyncIteration:
-            return
-        else:
-            yield f"id: {event_id}\ndata: {event.model_dump_json()}\n\n"
+    async def _terminal() -> bool:
+        current = await run_repo.get(run_id)
+        return current is None or current.status in _TERMINAL_RUN_STATUSES
+
+    # The interval is read from the module global HERE, at call time, so a test that monkeypatches
+    # it on this module still shortens the beat after the extraction moved the loop out.
+    return sse_frames(
+        f"run:{run_id}:events",
+        last_event_id,
+        transport,
+        is_closed=_terminal,
+        heartbeat_s=_HEARTBEAT_INTERVAL_S,
+    )
 
 
 @router.post("/{run_id}/stream-token", dependencies=protect())

@@ -22,9 +22,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Any
 from uuid import UUID
 
-from sqlalchemy import Row, and_, func, literal, select, tuple_
+from sqlalchemy import Row, Select, and_, func, literal, select, tuple_
 
 from app.db.base import BaseSessionmakerRepo, session_scope
 from app.db.models import FlowORM, RunORM, TriggerORM
@@ -55,16 +56,11 @@ class TaskRepository(BaseSessionmakerRepo[TaskRow, TaskId]):
     """Reads the same three tables the flow-engine repos own, so it shares their lineage
     (``BaseSessionmakerRepo``) rather than introducing a third."""
 
-    async def list_page(
-        self, tenant_id: TenantId, *, cursor: Cursor | None = None, limit: int = 20
-    ) -> tuple[list[TaskRow], bool]:
-        """A page of tasks, newest first, plus whether another page follows.
-
-        Fetches ``limit + 1`` rows and reports the overflow instead of issuing a COUNT — knowing
-        "is there more" is all the UI needs, and a total count would double the query cost of every
-        page to answer a question nobody asks.
-        """
-        limit = max(1, min(limit, MAX_PAGE_SIZE))
+    @staticmethod
+    def _projection(tenant_id: TenantId) -> Select[Any]:
+        """The join both reads share. Factored out so "what a task IS" has one definition — a
+        second hand-written copy for the single-row read is how the two drift apart and start
+        disagreeing about, say, whether a cron-less trigger counts."""
         latest_run = (
             select(
                 RunORM.flow_id.label("flow_id"),
@@ -81,7 +77,7 @@ class TaskRepository(BaseSessionmakerRepo[TaskRow, TaskId]):
             .subquery("latest_run")
         )
 
-        stmt = (
+        return (
             select(
                 TriggerORM.id,
                 TriggerORM.flow_id,
@@ -105,6 +101,26 @@ class TaskRepository(BaseSessionmakerRepo[TaskRow, TaskId]):
                 TriggerORM.kind == TriggerKind.SCHEDULE.value,
                 TriggerORM.schedule_cron.is_not(None),
             )
+        )
+
+    async def get(self, tenant_id: TenantId, task_id: TaskId) -> TaskRow | None:
+        stmt = self._projection(tenant_id).where(TriggerORM.id == task_id)
+        async with session_scope(self._sm) as session:
+            row = (await session.execute(stmt)).first()
+        return _to_row(row) if row is not None else None
+
+    async def list_page(
+        self, tenant_id: TenantId, *, cursor: Cursor | None = None, limit: int = 20
+    ) -> tuple[list[TaskRow], bool]:
+        """A page of tasks, newest first, plus whether another page follows.
+
+        Fetches ``limit + 1`` rows and reports the overflow instead of issuing a COUNT — knowing
+        "is there more" is all the UI needs, and a total count would double the query cost of every
+        page to answer a question nobody asks.
+        """
+        limit = max(1, min(limit, MAX_PAGE_SIZE))
+        stmt = (
+            self._projection(tenant_id)
             .order_by(TriggerORM.created_at.desc(), TriggerORM.id.desc())
             .limit(limit + 1)
         )

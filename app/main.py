@@ -23,11 +23,13 @@ from app.api import (
     module_routes,
     plugin_routes,
     run_routes,
+    task_routes,
     trigger_routes,
 )
 from app.core.config import get_settings
 from app.core.errors import register_error_handlers
 from app.core.logging import configure_logging, request_id_middleware
+from app.core.streaming import StreamLimiter
 from app.db.base import make_engine, make_sessionmaker
 from app.domain.account.crypto import EnvelopeCipher
 from app.domain.account.exclusion import AccountExcluder
@@ -80,6 +82,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     engine = make_engine(settings.database_url)
     sessionmaker = make_sessionmaker(engine)
     app.state.sessionmaker = sessionmaker
+    # One limiter per process, so the cap counts every open stream rather than resetting per
+    # request. Constructed here for the same reason the engine is: it owns process-wide state.
+    app.state.stream_limiter = StreamLimiter(settings.max_concurrent_streams)
     # eventus lives in the worker process (Decision #16); None here means "not embedded here".
     app.state.eventus_engine = None
     # redis-py's from_url is untyped under mypy --strict; the client itself is typed.
@@ -135,6 +140,7 @@ def create_app() -> FastAPI:
     app.include_router(module_routes.router)
     app.include_router(plugin_routes.router)
     app.include_router(run_routes.router)
+    app.include_router(task_routes.router)
     app.include_router(trigger_routes.router)
     return app
 

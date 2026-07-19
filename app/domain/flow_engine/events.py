@@ -68,12 +68,20 @@ class TaskEventReason(StrEnum):
 class TaskEvent(BaseEvent):
     """A task's lifecycle moved. Carries ids only — the client refetches the projected row rather
     than trusting a denormalised copy on the wire, so there is exactly one place task state is
-    computed and the event cannot go stale relative to it."""
+    computed and the event cannot go stale relative to it.
+
+    ``flow_id`` is the redraw key and ``task_id`` is optional, which is the opposite of the obvious
+    guess. A run belongs to a FLOW, and the worker publishing a lifecycle transition genuinely does
+    not know which of that flow's schedules (if any) caused it — a manual «Поднять сейчас» has no
+    trigger at all. Two schedules on one flow are two cards that must both redraw when it runs, so
+    keying on the flow is not a compromise, it is the correct grain. ``task_id`` is set only when a
+    transition really is about one schedule, i.e. TASK_CHANGED.
+    """
 
     type: Literal["task"] = "task"
-    task_id: str
     flow_id: str
     reason: TaskEventReason
+    task_id: str | None = None
     run_id: str | None = None
 
 
