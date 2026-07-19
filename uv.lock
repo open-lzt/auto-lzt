@@ -982,7 +982,7 @@ wheels = [
 [[package]]
 name = "lzt-eventus"
 version = "0.1.0"
-source = { git = "https://github.com/open-lzt/lzt-eventus.git?branch=main#1808de1367685bcb7217e6187ae334048c6cffb5" }
+source = { git = "https://github.com/open-lzt/lzt-eventus.git?branch=main#0ed0e96dfeaa2f76349bd10cfa9bafd44d0233ab" }
 dependencies = [
     { name = "pydantic" },
     { name = "pydantic-settings" },
@@ -1649,7 +1649,7 @@ wheels = [
 [[package]]
 name = "pylzt"
 version = "0.1.0"
-source = { git = "https://github.com/open-lzt/pylzt.git?branch=main#0ccca72e4c41e322b1d4a219a8cd480881784f8b" }
+source = { git = "https://github.com/open-lzt/pylzt.git?branch=main#b04347319f818a1a550e79edaef289896e3be010" }
 dependencies = [
     { name = "httpx", extra = ["socks"] },
     { name = "pydantic" },
