@@ -15,3 +15,8 @@ from pydantic import BaseModel
 
 class BaseSchema(BaseModel):
     pass
+
+
+class EmptyInput(BaseSchema):
+    """Shared input schema for a node wired with no inputs — one class instead of a per-node
+    ``class XInput(BaseSchema): pass``. ``BaseNode.input_schema`` defaults to this."""

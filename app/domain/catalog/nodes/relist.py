@@ -24,11 +24,12 @@ republish. That window is inherent to the redis-TTL design and applies to every 
 
 from __future__ import annotations
 
-from pylzt.types import Currency, ItemOrigin
 from pydantic import Field
+from pylzt.types import Currency, ItemOrigin
 
 from app.core.schema import BaseSchema
 from app.domain.account.errors import NoAvailableAccount
+from app.domain.catalog.capabilities import MARKET_MUTATE_MONEY, NodeCategory
 from app.domain.flow_engine.base_node import BaseNode, RunContext
 from app.domain.flow_engine.dtos import StepResultDTO
 from app.domain.flow_engine.errors import RunFailed
@@ -58,6 +59,11 @@ def _str_or_none(value: str | int | float | bool | None) -> str | None:
 
 class RelistNode(BaseNode):
     node_type = "market.relist"
+    category = NodeCategory.ACTION
+    idempotent = False
+    capabilities = MARKET_MUTATE_MONEY
+    input_schema = RelistInput
+    output_schema = RelistOutput
     required_inputs = ("price", "category_id", "currency", "item_origin")
     batchable = True
 

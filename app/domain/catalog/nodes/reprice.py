@@ -8,10 +8,11 @@ from __future__ import annotations
 
 from decimal import ROUND_HALF_UP, Decimal
 
-from pylzt.types import Currency
 from pydantic import Field
+from pylzt.types import Currency
 
 from app.core.schema import BaseSchema
+from app.domain.catalog.capabilities import MARKET_MUTATE, NodeCategory
 from app.domain.flow_engine.base_node import BaseNode, RunContext
 from app.domain.flow_engine.dtos import StepResultDTO
 from app.domain.flow_engine.errors import RunFailed
@@ -72,6 +73,12 @@ def _target_price(ctx: RunContext) -> int:
 
 class RepriceNode(BaseNode):
     node_type = "market.reprice"
+    category = NodeCategory.ACTION
+    idempotent = True
+    # reprice edits an existing lot's price and spends nothing, so it mutates without being MONEY.
+    capabilities = MARKET_MUTATE
+    input_schema = RepriceInput
+    output_schema = RepriceOutput
     required_inputs = ("item_id", "currency")
     batchable = True
 

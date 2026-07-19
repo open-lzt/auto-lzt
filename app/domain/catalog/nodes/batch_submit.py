@@ -20,6 +20,7 @@ import asyncio
 import json
 
 from app.core.schema import BaseSchema
+from app.domain.catalog.capabilities import MARKET_MUTATE_MONEY, NodeCategory
 from app.domain.flow_engine.base_node import BaseNode, RunContext
 from app.domain.flow_engine.dtos import StepResultDTO
 from app.domain.flow_engine.env_input import resolve_env
@@ -33,10 +34,6 @@ _BATCHABLE_NODE_TO_CALL: dict[str, tuple[str, str]] = {
     "market.reprice": ("market", "managing_edit"),
     "market.relist": ("market", "publishing_add"),
 }
-
-
-class BatchSubmitInput(BaseSchema):
-    pass
 
 
 class BatchSubmitOutput(BaseSchema):
@@ -108,7 +105,11 @@ async def _run_child(
 
 class BatchNode(BaseNode):
     node_type = "logic.batch"
-    required_inputs = ()
+    category = NodeCategory.LOGIC
+    idempotent = False
+    # batch.submit fans out to arbitrary child nodes, so it inherits their worst case.
+    capabilities = MARKET_MUTATE_MONEY
+    output_schema = BatchSubmitOutput
 
     async def execute(self, ctx: RunContext) -> StepResultDTO:
         # No batch-level guard: the money is spent per child, so the key is per child (_run_child).

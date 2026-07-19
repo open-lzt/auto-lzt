@@ -9,6 +9,7 @@ from __future__ import annotations
 from pydantic import Field
 
 from app.core.schema import BaseSchema
+from app.domain.catalog.capabilities import MARKET_MUTATE_MONEY, NodeCategory
 from app.domain.flow_engine.base_node import BaseNode, RunContext
 from app.domain.flow_engine.dtos import StepResultDTO
 
@@ -30,6 +31,12 @@ def _as_int(value: str | int | float | bool | None) -> int:
 
 class BumpNode(BaseNode):
     node_type = "market.bump"
+    category = NodeCategory.ACTION
+    idempotent = True
+    # MONEY: must call guard.check_and_set before the effect; a contract test enforces it.
+    capabilities = MARKET_MUTATE_MONEY
+    input_schema = BumpInput
+    output_schema = BumpOutput
     required_inputs = ("item_id",)
     batchable = True
 

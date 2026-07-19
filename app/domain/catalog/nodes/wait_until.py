@@ -14,6 +14,7 @@ import asyncio
 from pydantic import Field
 
 from app.core.schema import BaseSchema
+from app.domain.catalog.capabilities import PURE, NodeCategory
 from app.domain.flow_engine.base_node import BaseNode, RunContext
 from app.domain.flow_engine.dtos import StepResultDTO
 from app.domain.flow_engine.errors import RunFailed, WaitTimeoutError
@@ -34,6 +35,11 @@ class WaitUntilOutput(BaseSchema):
 
 class WaitUntilNode(BaseNode):
     node_type = "logic.wait_until"
+    category = NodeCategory.LOGIC
+    idempotent = False
+    capabilities = PURE
+    input_schema = WaitUntilInput
+    output_schema = WaitUntilOutput
     required_inputs = ("condition", "poll_interval_s", "timeout_s")
 
     async def execute(self, ctx: RunContext) -> StepResultDTO:

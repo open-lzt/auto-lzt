@@ -19,8 +19,8 @@ import inspect
 import typing
 from dataclasses import dataclass
 
-from pylzt import Client
 from pydantic import BaseModel
+from pylzt import Client
 
 _MAX_DEPTH = 4
 

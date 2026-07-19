@@ -12,6 +12,7 @@ from collections.abc import Mapping
 from pydantic import Field
 
 from app.core.schema import BaseSchema
+from app.domain.catalog.capabilities import PURE, NodeCategory
 from app.domain.catalog.nodes.condition import validate_operands
 from app.domain.catalog.nodes.operators import ComparisonOp, InvalidPattern, evaluate
 from app.domain.flow_engine.base_node import BaseNode, RunContext
@@ -48,6 +49,11 @@ class CompareOutput(BaseSchema):
 
 class CompareNode(BaseNode):
     node_type = "logic.compare"
+    category = NodeCategory.LOGIC
+    idempotent = False
+    capabilities = PURE
+    input_schema = CompareInput
+    output_schema = CompareOutput
     required_inputs = ("op", "a")
 
     @classmethod

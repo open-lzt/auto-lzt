@@ -3,6 +3,13 @@
 The interpreter only knows ``await node.execute(ctx) -> StepResultDTO`` — a node's business logic is
 fully encapsulated in its subclass (Wave 4 adds the catalog). ``required_inputs`` lets the compiler
 validate a node's wiring without knowing its internals.
+
+``category``/``idempotent``/``capabilities``/``input_schema``/``output_schema`` are catalog
+metadata a node states about itself, read by ``registry.registration_for()`` to build its
+``NodeRegistration`` — one source of truth instead of the metadata living a second time in a
+parallel tuple. Schemas stay explicit class attributes on purpose: no inferring them from
+``execute()`` type hints or a naming convention, so a node's wire contract is always what is
+written here, not derived magic.
 """
 
 from __future__ import annotations
@@ -13,7 +20,11 @@ from contextlib import AbstractAsyncContextManager
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar
 
+from pydantic import BaseModel
+
+from app.core.schema import EmptyInput
 from app.domain.account.model import Account, AccountId, TenantId
+from app.domain.catalog.capabilities import NodeCapability, NodeCategory
 from app.domain.egress.transport import HttpTransport
 from app.domain.flow_engine.dtos import StepResultDTO
 from app.domain.flow_engine.idempotency import DedupGuard
@@ -81,6 +92,11 @@ class RunContext:
 
 class BaseNode(ABC):
     node_type: ClassVar[str]
+    category: ClassVar[NodeCategory]
+    idempotent: ClassVar[bool]  # False forces callers to rely on ctx.idempotency_key
+    capabilities: ClassVar[frozenset[NodeCapability]]  # never empty — see capabilities.py
+    input_schema: ClassVar[type[BaseModel]] = EmptyInput
+    output_schema: ClassVar[type[BaseModel]]
     required_inputs: ClassVar[tuple[str, ...]] = ()
     batchable: ClassVar[bool] = False
     """Wave-06: opt-in per node type — whether this node may appear as a batch-container child.

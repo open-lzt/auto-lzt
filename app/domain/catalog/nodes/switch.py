@@ -11,6 +11,7 @@ import json
 from pydantic import Field
 
 from app.core.schema import BaseSchema
+from app.domain.catalog.capabilities import PURE, NodeCategory
 from app.domain.flow_engine.base_node import BaseNode, RunContext
 from app.domain.flow_engine.dtos import StepResultDTO
 from app.domain.flow_engine.errors import NoMatchingCase
@@ -31,6 +32,11 @@ class SwitchOutput(BaseSchema):
 
 class SwitchNode(BaseNode):
     node_type = "logic.switch"
+    category = NodeCategory.LOGIC
+    idempotent = False
+    capabilities = PURE
+    input_schema = SwitchInput
+    output_schema = SwitchOutput
     required_inputs = ("value", "cases")
 
     async def execute(self, ctx: RunContext) -> StepResultDTO:

@@ -8,12 +8,9 @@ registers, compiles, and shows correctly in the catalog — `execute()` raising 
 from __future__ import annotations
 
 from app.core.schema import BaseSchema
+from app.domain.catalog.capabilities import PURE, NodeCategory
 from app.domain.flow_engine.base_node import BaseNode, RunContext
 from app.domain.flow_engine.dtos import StepResultDTO
-
-
-class JoinInput(BaseSchema):
-    pass
 
 
 class JoinOutput(BaseSchema):
@@ -22,7 +19,10 @@ class JoinOutput(BaseSchema):
 
 class JoinNode(BaseNode):
     node_type = "logic.join"
-    required_inputs = ()
+    category = NodeCategory.LOGIC
+    idempotent = False
+    capabilities = PURE
+    output_schema = JoinOutput
 
     async def execute(self, ctx: RunContext) -> StepResultDTO:
         raise AssertionError(

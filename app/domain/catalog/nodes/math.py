@@ -7,6 +7,7 @@ from enum import StrEnum
 from pydantic import Field
 
 from app.core.schema import BaseSchema
+from app.domain.catalog.capabilities import PURE, NodeCategory
 from app.domain.flow_engine.base_node import BaseNode, RunContext
 from app.domain.flow_engine.dtos import StepResultDTO
 from app.domain.flow_engine.errors import MathDomainError, RunFailed
@@ -39,6 +40,11 @@ _OPS = {
 
 class MathNode(BaseNode):
     node_type = "logic.math"
+    category = NodeCategory.LOGIC
+    idempotent = False
+    capabilities = PURE
+    input_schema = MathInput
+    output_schema = MathOutput
     required_inputs = ("op", "a", "b")
 
     async def execute(self, ctx: RunContext) -> StepResultDTO:

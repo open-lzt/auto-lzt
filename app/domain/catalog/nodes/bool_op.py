@@ -7,6 +7,7 @@ from enum import StrEnum
 from pydantic import Field
 
 from app.core.schema import BaseSchema
+from app.domain.catalog.capabilities import PURE, NodeCategory
 from app.domain.flow_engine.base_node import BaseNode, RunContext
 from app.domain.flow_engine.dtos import StepResultDTO
 from app.domain.flow_engine.errors import RunFailed
@@ -35,6 +36,11 @@ class BoolOpOutput(BaseSchema):
 
 class BoolOpNode(BaseNode):
     node_type = "logic.bool_op"
+    category = NodeCategory.LOGIC
+    idempotent = False
+    capabilities = PURE
+    input_schema = BoolOpInput
+    output_schema = BoolOpOutput
     required_inputs = ("op", "a")
 
     async def execute(self, ctx: RunContext) -> StepResultDTO:

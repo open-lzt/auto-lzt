@@ -15,6 +15,7 @@ import json
 from pydantic import Field, field_validator
 
 from app.core.schema import BaseSchema
+from app.domain.catalog.capabilities import PURE, NodeCategory
 from app.domain.flow_engine.base_node import BaseNode, RunContext
 from app.domain.flow_engine.dtos import StepResultDTO
 from app.domain.flow_engine.errors import RunFailed
@@ -44,6 +45,11 @@ class ForEachLotOutput(BaseSchema):
 
 class ForEachLotNode(BaseNode):
     node_type = "logic.for_each_lot"
+    category = NodeCategory.LOGIC
+    idempotent = False
+    capabilities = PURE
+    input_schema = ForEachLotInput
+    output_schema = ForEachLotOutput
     required_inputs = ("item_ids",)
 
     async def execute(self, ctx: RunContext) -> StepResultDTO:

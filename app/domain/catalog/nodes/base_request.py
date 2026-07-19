@@ -26,7 +26,7 @@ from typing import Any, ClassVar
 import httpx
 import structlog
 
-from app.domain.catalog.capabilities import NodeCapability
+from app.domain.catalog.capabilities import EGRESS, NodeCapability
 from app.domain.egress.policy import EgressBlocked
 from app.domain.egress.transport import HttpMethod, RequestSpec
 from app.domain.flow_engine.base_node import BaseNode, RunContext
@@ -40,7 +40,7 @@ log = structlog.get_logger()
 
 class BaseRequestNode(BaseNode, ABC):
     node_type: ClassVar[str]
-    capabilities: ClassVar[frozenset[NodeCapability]] = frozenset({NodeCapability.NETWORK_EGRESS})
+    capabilities: ClassVar[frozenset[NodeCapability]] = EGRESS
     max_attempts: ClassVar[int] = 3
     backoff_base_s: ClassVar[float] = 0.5
     retry_on_status: ClassVar[frozenset[int]] = frozenset({429, 500, 502, 503, 504})

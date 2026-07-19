@@ -15,6 +15,7 @@ import structlog
 from pydantic import Field
 
 from app.core.schema import BaseSchema
+from app.domain.catalog.capabilities import MARKET_MUTATE, NodeCategory
 from app.domain.flow_engine.base_node import BaseNode, RunContext
 from app.domain.flow_engine.dtos import StepResultDTO
 
@@ -38,6 +39,13 @@ class AutoReplyOutput(BaseSchema):
 
 class AutoReplyNode(BaseNode):
     node_type = "forum.auto_reply"
+    category = NodeCategory.ACTION
+    idempotent = True
+    # auto_reply is a documented no-op today (the forum facade exposes no "post into an existing
+    # conversation" method) — MARKET_MUTATE states the node's contract, not its current body.
+    capabilities = MARKET_MUTATE
+    input_schema = AutoReplyInput
+    output_schema = AutoReplyOutput
     required_inputs = ("conversation_id", "message")
 
     async def execute(self, ctx: RunContext) -> StepResultDTO:

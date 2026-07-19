@@ -12,6 +12,7 @@ import json
 from pydantic import Field
 
 from app.core.schema import BaseSchema
+from app.domain.catalog.capabilities import MARKET_READ, NodeCategory
 from app.domain.flow_engine.base_node import BaseNode, RunContext
 from app.domain.flow_engine.dtos import StepResultDTO
 
@@ -42,7 +43,11 @@ class BatchStatusOutput(BaseSchema):
 
 class BatchStatusNode(BaseNode):
     node_type = "logic.batch_status"
-    required_inputs = ()
+    category = NodeCategory.LOGIC
+    idempotent = False
+    capabilities = MARKET_READ
+    input_schema = BatchStatusInput
+    output_schema = BatchStatusOutput
 
     async def execute(self, ctx: RunContext) -> StepResultDTO:
         only_pending = bool(ctx.resolve_optional("only_pending") or False)

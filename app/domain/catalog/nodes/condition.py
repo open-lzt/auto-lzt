@@ -11,6 +11,7 @@ from collections.abc import Mapping
 from pydantic import Field
 
 from app.core.schema import BaseSchema
+from app.domain.catalog.capabilities import PURE, NodeCategory
 from app.domain.catalog.nodes.operators import (
     ComparisonOp,
     InvalidPattern,
@@ -78,6 +79,11 @@ def validate_operands(
 
 class ConditionNode(BaseNode):
     node_type = "logic.condition"
+    category = NodeCategory.LOGIC
+    idempotent = False
+    capabilities = PURE
+    input_schema = ConditionInput
+    output_schema = ConditionOutput
     required_inputs = ("left", "op")
 
     @classmethod

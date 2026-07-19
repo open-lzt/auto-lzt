@@ -18,6 +18,7 @@ from typing import cast
 from pydantic import BaseModel, Field
 
 from app.core.schema import BaseSchema
+from app.domain.catalog.capabilities import REFLECTIVE, NodeCategory
 from app.domain.flow_engine.base_node import BaseNode, RunContext
 from app.domain.flow_engine.dtos import StepResultDTO
 from app.domain.flow_engine.errors import DynamicMethodArgMismatch, UnknownDynamicMethod
@@ -66,6 +67,11 @@ def _flatten(response: object) -> str | int | float | bool | None:
 
 class DynamicMethodNode(BaseNode):
     node_type = "pylzt.dynamic_call"
+    category = NodeCategory.LOGIC
+    idempotent = False
+    capabilities = REFLECTIVE
+    input_schema = DynamicMethodInput
+    output_schema = DynamicMethodOutput
     required_inputs = (_FACADE_PORT, _METHOD_PORT)
 
     async def execute(self, ctx: RunContext) -> StepResultDTO:

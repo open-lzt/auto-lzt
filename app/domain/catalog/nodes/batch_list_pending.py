@@ -8,12 +8,9 @@ from __future__ import annotations
 import json
 
 from app.core.schema import BaseSchema
+from app.domain.catalog.capabilities import MARKET_READ, NodeCategory
 from app.domain.flow_engine.base_node import BaseNode, RunContext
 from app.domain.flow_engine.dtos import StepResultDTO
-
-
-class BatchListPendingInput(BaseSchema):
-    pass
 
 
 class BatchListPendingOutput(BaseSchema):
@@ -22,7 +19,10 @@ class BatchListPendingOutput(BaseSchema):
 
 class BatchListPendingNode(BaseNode):
     node_type = "logic.batch_list_pending"
-    required_inputs = ()
+    category = NodeCategory.LOGIC
+    idempotent = False
+    capabilities = MARKET_READ
+    output_schema = BatchListPendingOutput
 
     async def execute(self, ctx: RunContext) -> StepResultDTO:
         account_ref = ctx.active_account_id or ctx.node.account_ref

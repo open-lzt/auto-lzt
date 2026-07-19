@@ -17,6 +17,7 @@ from typing import Any
 from pydantic import Field
 
 from app.core.schema import BaseSchema
+from app.domain.catalog.capabilities import NodeCategory
 from app.domain.catalog.nodes.base_request import BaseRequestNode, HttpMethod, RequestSpec
 from app.domain.flow_engine.base_node import RunContext
 from app.domain.flow_engine.dtos import StepResultDTO
@@ -50,6 +51,12 @@ def _as_str(value: object, port: str) -> str:
 
 class SendMessageNode(BaseRequestNode):
     node_type = "tg.send_message"
+    category = NodeCategory.ACTION
+    # Sending the same alert twice is noise, not a loss, so it is not MONEY and needs no guard.
+    idempotent = True
+    # capabilities inherited from BaseRequestNode (NETWORK_EGRESS).
+    input_schema = SendMessageInput
+    output_schema = SendMessageOutput
     required_inputs = ("bot_token", "chat_id", "text")
     batchable = True
 

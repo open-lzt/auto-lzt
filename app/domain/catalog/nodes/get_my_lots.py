@@ -14,6 +14,7 @@ import structlog
 
 from app.core.schema import BaseSchema
 from app.domain.account.errors import NoAvailableAccount
+from app.domain.catalog.capabilities import MARKET_READ, NodeCategory
 from app.domain.flow_engine.base_node import BaseNode, RunContext
 from app.domain.flow_engine.dtos import StepResultDTO
 from app.domain.flow_engine.errors import RunFailed
@@ -25,11 +26,6 @@ log = structlog.get_logger()
 _MAX_PAGES = 1000
 
 
-class GetMyLotsInput(BaseSchema):
-    """No wired inputs — the account to list is the pinned owner (``account_ref``/
-    ``active_account_id``), never an explicit parameter."""
-
-
 class GetMyLotsOutput(BaseSchema):
     item_ids: str  # JSON-encoded list[int] — feeds for-each-lot
     count: int
@@ -37,6 +33,12 @@ class GetMyLotsOutput(BaseSchema):
 
 class GetMyLotsNode(BaseNode):
     node_type = "logic.get_my_lots"
+    category = NodeCategory.LOGIC
+    idempotent = False
+    capabilities = MARKET_READ
+    # input_schema defaults to EmptyInput — the account to list is the pinned owner
+    # (account_ref/active_account_id), never an explicit parameter.
+    output_schema = GetMyLotsOutput
 
     async def execute(self, ctx: RunContext) -> StepResultDTO:
         account_ref = ctx.active_account_id or ctx.node.account_ref

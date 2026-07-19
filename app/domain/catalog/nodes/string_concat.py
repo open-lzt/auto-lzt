@@ -6,6 +6,7 @@ from __future__ import annotations
 from pydantic import Field
 
 from app.core.schema import BaseSchema
+from app.domain.catalog.capabilities import PURE, NodeCategory
 from app.domain.flow_engine.base_node import BaseNode, RunContext
 from app.domain.flow_engine.dtos import StepResultDTO
 
@@ -22,6 +23,11 @@ class StringConcatOutput(BaseSchema):
 
 class StringConcatNode(BaseNode):
     node_type = "logic.string_concat"
+    category = NodeCategory.LOGIC
+    idempotent = False
+    capabilities = PURE
+    input_schema = StringConcatInput
+    output_schema = StringConcatOutput
     required_inputs = ("a", "b")
 
     async def execute(self, ctx: RunContext) -> StepResultDTO:

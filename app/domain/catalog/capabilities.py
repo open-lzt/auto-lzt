@@ -18,6 +18,7 @@ first case explicit and checkable.
 from __future__ import annotations
 
 from enum import StrEnum
+from typing import Final
 
 
 class NodeCapability(StrEnum):
@@ -27,3 +28,23 @@ class NodeCapability(StrEnum):
     REFLECTIVE = "reflective"  # pylzt.dynamic_call — arbitrary pylzt surface
     MONEY = "money"  # must call guard.check_and_set() before its effect
     PURE = "pure"  # deviation (see module docstring): no side effects, no I/O
+
+
+class NodeCategory(StrEnum):
+    ACTION = "action"  # bump/reprice/relist/auto_reply — mutating, idempotency-guarded
+    LOGIC = "logic"  # condition/for_each_lot/for_each_account/get_my_lots — read-only or routing
+    TRIGGER = "trigger"  # placeholder, wired in wave-05
+
+
+# Capability sets, named once so a node class states a name instead of a hand-typed frozenset
+# literal. Each is derived from what the node's execute() provably reaches, not from its category.
+PURE: Final = frozenset({NodeCapability.PURE})
+MARKET_READ: Final = frozenset({NodeCapability.MARKET_READ})
+MARKET_MUTATE: Final = frozenset({NodeCapability.MARKET_MUTATE})
+MARKET_MUTATE_MONEY: Final = frozenset({NodeCapability.MARKET_MUTATE, NodeCapability.MONEY})
+# dynamic_call resolves an arbitrary pylzt method by name, so it can reach any surface the token
+# can — including paid ones. The union is the honest over-approximation.
+REFLECTIVE: Final = frozenset(
+    {NodeCapability.REFLECTIVE, NodeCapability.MARKET_MUTATE, NodeCapability.MONEY}
+)
+EGRESS: Final = frozenset({NodeCapability.NETWORK_EGRESS})

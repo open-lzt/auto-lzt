@@ -14,8 +14,8 @@ from fastapi import APIRouter, Depends
 
 from app.api.deps import node_registry_dep
 from app.core.schema import BaseSchema
-from app.domain.catalog.capabilities import NodeCapability
-from app.domain.catalog.registry import NodeCategory, NodeRegistry
+from app.domain.catalog.capabilities import NodeCapability, NodeCategory
+from app.domain.catalog.registry import NodeRegistry
 from app.domain.flow_engine.errors import EntityNotFound
 from app.domain.market.categories import list_categories
 from app.domain.market.introspection import (
