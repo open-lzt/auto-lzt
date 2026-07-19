@@ -80,7 +80,12 @@ async def test_status_reports_running_and_active_account_count(
         flow_ir_id=FlowIrId(uuid4()),
         tenant_id=tenant_id,
         run_key="manual-1",
-        status=RunStatus.COMPLETED,
+        # Was COMPLETED while the test asserted running=True — it encoded the `_LIVE_STATUSES` bug
+        # (a terminal COMPLETED counted as live), so a flow that finished last month reported
+        # running forever. The endpoint now derives liveness from the LATEST run, so a test named
+        # "reports_running" has to seed a run that IS running. The old expectation is kept as an
+        # explicit regression case in test_flow_status_collapse.py.
+        status=RunStatus.RUNNING,
         current_node_id=None,
         version=1,
         claimed_by="worker-1",

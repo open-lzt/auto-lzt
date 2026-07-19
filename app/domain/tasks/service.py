@@ -8,7 +8,7 @@ from functools import lru_cache
 from apscheduler.triggers.cron import CronTrigger
 
 from app.domain.account.model import TenantId
-from app.domain.flow_engine.model import Run, RunStatus
+from app.domain.flow_engine.model import FlowId, Run, RunStatus
 from app.domain.flow_engine.service import RunService
 from app.domain.tasks.dtos import Cursor
 from app.domain.tasks.errors import TaskNotFound, TaskPaused
@@ -74,6 +74,22 @@ class TaskService:
             raise TaskNotFound(task_id)
         now = datetime.now(UTC)
         return _to_task(row, tenant_id, now)
+
+    async def flow_liveness(
+        self, tenant_id: TenantId, flow_id: FlowId
+    ) -> tuple[bool, datetime | None]:
+        """Is this flow running right now, and when did it last run?
+
+        Shares ``_RUNNING_STATUSES`` with ``TaskHealth`` deliberately. Two endpoints answering "is
+        this running" from two different definitions is a duplicate source of truth, and the older
+        one was wrong — it counted COMPLETED as live, so a flow that finished last week reported
+        running forever.
+        """
+        latest = await self._repo.latest_run_for_flow(tenant_id, flow_id)
+        if latest is None:
+            return False, None
+        status, at = latest
+        return status in _RUNNING_STATUSES, at
 
     async def list_tasks(
         self, tenant_id: TenantId, *, cursor: str | None = None, limit: int = 20

@@ -1,5 +1,25 @@
-"""Flow live-status route — powers the canvas LiveBadge ("running 24/7 · N accounts"), polled
-every 5s by the frontend rather than pushed over a socket (MVP-scale tradeoff, wave-06 §Logic)."""
+"""Flow live-status route — powers the canvas LiveBadge ("running 24/7 · N accounts"), polled every
+five seconds by the frontend.
+
+Reimplemented as a thin read over the task projection. Three things were wrong, and all of them
+were ours:
+
+1. **It reported the wrong answer.** ``_LIVE_STATUSES`` was ``{PENDING, RUNNING, COMPLETED}`` and
+   the test was ``any(...)`` over the flow's ENTIRE run history, so a flow whose only run completed
+   successfully last month reported ``running=true`` forever. Its own comment admitted the shortcut.
+   Liveness now comes from the LATEST run and shares ``_RUNNING_STATUSES`` with ``TaskHealth`` — one
+   definition of "is this running", rather than two endpoints answering it differently.
+
+2. **It was N+1 on a five-second poll.** It loaded every run of the flow to answer a yes/no question
+   and every account of the tenant to answer a count. Both are now bounded reads.
+
+3. **``last_run_at`` depended on an unspecified order.** It took ``runs[0]`` from a query with no
+   ``ORDER BY``, so "the last run" was whatever the database happened to return first. The
+   replacement orders explicitly.
+
+The response SHAPE is unchanged, so this is a semantics fix behind a stable contract, not a breaking
+change: LiveBadge and its existing tests keep working untouched.
+"""
 
 from __future__ import annotations
 
@@ -11,17 +31,15 @@ from fastapi import APIRouter, Depends, Request
 from app.core.schema import BaseSchema
 from app.core.tenant import tenant_id_dep
 from app.db.base import session_scope
-from app.domain.account.model import AccountStatus, TenantId
+from app.domain.account.model import TenantId
 from app.domain.account.repo import AccountRepository
 from app.domain.flow_engine.errors import EntityNotFound
-from app.domain.flow_engine.model import FlowId, RunStatus
-from app.domain.flow_engine.repo import FlowRepository, RunRepository
+from app.domain.flow_engine.model import FlowId
+from app.domain.flow_engine.repo import FlowRepository
+from app.domain.tasks.repo import TaskRepository
+from app.domain.tasks.service import TaskService
 
 router = APIRouter(prefix="/flows", tags=["flows"])
-
-# A FAILED-only history reads as "not running"; anything else means the flow is live or has
-# produced at least one non-failed run — good enough for the MVP demo badge (wave-06 §Logic).
-_LIVE_STATUSES = frozenset({RunStatus.PENDING, RunStatus.RUNNING, RunStatus.COMPLETED})
 
 
 class FlowStatusDTO(BaseSchema):
@@ -43,12 +61,10 @@ async def get_flow_status(
     if flow is None:
         raise EntityNotFound("flow", str(flow_id))
 
-    runs = await RunRepository(sessionmaker).list_by_flow(tenant_id, fid)
-    async with session_scope(sessionmaker) as session:
-        accounts = await AccountRepository(session).list(tenant_id)
-
-    return FlowStatusDTO(
-        running=any(run.status in _LIVE_STATUSES for run in runs),
-        active_accounts=sum(1 for a in accounts if a.status is AccountStatus.ACTIVE),
-        last_run_at=runs[0].created_at if runs else None,
+    running, last_run_at = await TaskService(TaskRepository(sessionmaker)).flow_liveness(
+        tenant_id, fid
     )
+    async with session_scope(sessionmaker) as session:
+        active_accounts = await AccountRepository(session).count_active(tenant_id)
+
+    return FlowStatusDTO(running=running, active_accounts=active_accounts, last_run_at=last_run_at)

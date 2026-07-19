@@ -103,6 +103,24 @@ class TaskRepository(BaseSessionmakerRepo[TaskRow, TaskId]):
             )
         )
 
+    async def latest_run_for_flow(
+        self, tenant_id: TenantId, flow_id: FlowId
+    ) -> tuple[RunStatus, datetime] | None:
+        """The flow's most recent run, or None if it has never run.
+
+        One row, not the whole history. ``flow_status_routes`` used to load EVERY run of the flow to
+        answer a yes/no question, on an endpoint the canvas polls every five seconds.
+        """
+        stmt = (
+            select(RunORM.status, RunORM.created_at)
+            .where(RunORM.tenant_id == tenant_id, RunORM.flow_id == flow_id)
+            .order_by(RunORM.created_at.desc(), RunORM.id.desc())
+            .limit(1)
+        )
+        async with session_scope(self._sm) as session:
+            row = (await session.execute(stmt)).first()
+        return (RunStatus(row.status), row.created_at) if row is not None else None
+
     async def get(self, tenant_id: TenantId, task_id: TaskId) -> TaskRow | None:
         stmt = self._projection(tenant_id).where(TriggerORM.id == task_id)
         async with session_scope(self._sm) as session:

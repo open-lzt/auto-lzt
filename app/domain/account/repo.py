@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 
 from app.db.base import BaseRepo
@@ -54,6 +54,15 @@ class AccountRepository(BaseRepo[Account, AccountId]):
         stmt = select(AccountORM).where(AccountORM.tenant_id == tenant_id)
         rows = (await self._session.execute(stmt)).scalars().all()
         return [_to_domain(r) for r in rows]
+
+    async def count_active(self, tenant_id: TenantId) -> int:
+        """Counts in the database rather than loading every account to len() the survivors — the
+        flow-status endpoint asks this every five seconds and only ever needed the number."""
+        stmt = select(func.count()).where(
+            AccountORM.tenant_id == tenant_id,
+            AccountORM.status == AccountStatus.ACTIVE.value,
+        )
+        return (await self._session.execute(stmt)).scalar_one()
 
     async def create(self, tenant_id: TenantId, doc: Account) -> Account:
         orm = AccountORM(
