@@ -11,6 +11,22 @@ one run the holder was already authorized to read, not a standing key to the who
 
 The signing key is derived from ``master_key`` rather than used directly: the same secret already
 encrypts market tokens at rest, and a signing oracle must not share key material with a cipher.
+
+The panel added a second subscription shape — one stream per tenant carrying task lifecycle, rather
+than one per run — so a token now names a ``StreamScope`` alongside its subject. Scope separation is
+done in the KEY DERIVATION, not in the signed payload, for two reasons. It keeps run-scope tokens
+byte-identical to the ones this module minted before the panel existed, so nothing already issued
+stops verifying and the existing tests hold unmodified. And it makes cross-scope confusion
+cryptographically impossible rather than merely checked: a run token and a tenant token for the same
+uuid are signed under different keys, so neither can ever validate as the other even though their
+subject strings match exactly. A payload-level scope tag would be one forgotten comparison away from
+letting a run token open the whole tenant feed.
+
+BLAST RADIUS, stated plainly because it is larger than it looks: ``tenant_id_dep`` returns
+``settings.default_tenant_id`` for every request (``app/core/tenant.py``) — this deployment is ONE
+tenant per installation. A leaked tenant-scope token therefore exposes the whole installation's
+task feed for ``TOKEN_TTL_S`` seconds, not one run's steps. The TTL is what bounds it; there is no
+narrower subject to bind to until multi-tenancy is real.
 """
 
 from __future__ import annotations
@@ -19,9 +35,24 @@ import hashlib
 import hmac
 import re
 import time
+from enum import StrEnum
 from typing import Final
 
-_DERIVE_INFO: Final = b"lzt-flow/sse-stream-token/v1"
+
+class StreamScope(StrEnum):
+    """What a token authorizes. The value is part of the derived signing key, so adding a member
+    creates a fresh key space rather than widening an existing one."""
+
+    RUN = "run"
+    TENANT = "tenant"
+
+
+# One derivation info per scope. RUN's value is frozen: changing it invalidates every run token in
+# flight and rewrites test vectors for no gain.
+_DERIVE_INFO: Final[dict[StreamScope, bytes]] = {
+    StreamScope.RUN: b"lzt-flow/sse-stream-token/v1",
+    StreamScope.TENANT: b"lzt-flow/sse-tenant-stream-token/v1",
+}
 TOKEN_TTL_S: Final = 60
 # The expiry as it must appear on the wire: ONE canonical decimal spelling per number. `int()` is
 # far more generous — it accepts "+60", " 60", "0060", "6_0" and even non-ASCII digits, all of which
@@ -49,25 +80,38 @@ class MasterKeyMissing(Exception):
     """
 
 
-def _signing_key(master_key: str) -> bytes:
+def _signing_key(master_key: str, scope: StreamScope) -> bytes:
     if not master_key:
         raise MasterKeyMissing()
-    return hmac.new(master_key.encode(), _DERIVE_INFO, hashlib.sha256).digest()
+    return hmac.new(master_key.encode(), _DERIVE_INFO[scope], hashlib.sha256).digest()
 
 
-def _signature(master_key: str, run_id: str, expires_at: int) -> str:
-    payload = f"{run_id}:{expires_at}".encode()
-    return hmac.new(_signing_key(master_key), payload, hashlib.sha256).hexdigest()
+def _signature(master_key: str, subject: str, expires_at: int, scope: StreamScope) -> str:
+    payload = f"{subject}:{expires_at}".encode()
+    return hmac.new(_signing_key(master_key, scope), payload, hashlib.sha256).hexdigest()
 
 
-def issue(master_key: str, run_id: str, *, now: int | None = None) -> str:
-    """A token authorizing ``run_id``'s stream for the next ``TOKEN_TTL_S`` seconds."""
+def issue(
+    master_key: str, subject: str, *, scope: StreamScope = StreamScope.RUN, now: int | None = None
+) -> str:
+    """A token authorizing ``subject``'s stream at ``scope`` for the next ``TOKEN_TTL_S`` seconds.
+
+    ``scope`` defaults to RUN so every existing call site keeps its exact previous behaviour and
+    output.
+    """
     expires_at = (now if now is not None else int(time.time())) + TOKEN_TTL_S
-    return f"{expires_at}.{_signature(master_key, run_id, expires_at)}"
+    return f"{expires_at}.{_signature(master_key, subject, expires_at, scope)}"
 
 
-def verify(master_key: str, run_id: str, token: str, *, now: int | None = None) -> None:
-    """Raise ``StreamTokenInvalid`` unless ``token`` currently authorizes ``run_id``'s stream."""
+def verify(
+    master_key: str,
+    subject: str,
+    token: str,
+    *,
+    scope: StreamScope = StreamScope.RUN,
+    now: int | None = None,
+) -> None:
+    """Raise ``StreamTokenInvalid`` unless ``token`` now authorizes ``subject`` at ``scope``."""
     expires_raw, _, signature = token.partition(".")
     if not signature or not _EXPIRES_RE.match(expires_raw):
         raise StreamTokenInvalid()
@@ -76,5 +120,5 @@ def verify(master_key: str, run_id: str, token: str, *, now: int | None = None) 
     # the MAC is still verified below so an attacker cannot forge a far-future expiry.
     if (now if now is not None else int(time.time())) >= expires_at:
         raise StreamTokenInvalid()
-    if not hmac.compare_digest(signature, _signature(master_key, run_id, expires_at)):
+    if not hmac.compare_digest(signature, _signature(master_key, subject, expires_at, scope)):
         raise StreamTokenInvalid()

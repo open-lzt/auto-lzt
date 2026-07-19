@@ -12,6 +12,7 @@ never provides that durability.
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
+from enum import StrEnum
 from typing import TYPE_CHECKING, Annotated, Literal, Protocol
 
 import structlog
@@ -49,7 +50,37 @@ class LogEvent(BaseEvent):
     message: str
 
 
-RunEvent = StepCompletedEvent | LogEvent
+class TaskEventReason(StrEnum):
+    """Why a task card needs redrawing. Deliberately three LIFECYCLE transitions and no more.
+
+    This enum is the reason the panel does not publish per step: a task's card shows what the task
+    is doing, and that changes when a run starts, when it ends, and when the schedule itself is
+    edited — not fifty times during a fifty-step run. Defined here rather than imported from
+    ``app.domain.tasks`` because the dependency runs the other way: the task projection imports
+    flow_engine, so flow_engine importing it back would close a cycle.
+    """
+
+    RUN_STARTED = "run_started"
+    RUN_FINISHED = "run_finished"
+    TASK_CHANGED = "task_changed"
+
+
+class TaskEvent(BaseEvent):
+    """A task's lifecycle moved. Carries ids only — the client refetches the projected row rather
+    than trusting a denormalised copy on the wire, so there is exactly one place task state is
+    computed and the event cannot go stale relative to it."""
+
+    type: Literal["task"] = "task"
+    task_id: str
+    flow_id: str
+    reason: TaskEventReason
+    run_id: str | None = None
+
+
+# The name predates the tenant stream and is now broader than "run" — it is the one wire union every
+# SSE channel decodes, so a subscriber never has to know which channel it is reading. Renaming it
+# would touch every call site to say the same thing; the discriminator is what carries the meaning.
+RunEvent = StepCompletedEvent | LogEvent | TaskEvent
 _RUN_EVENT_ADAPTER: TypeAdapter[RunEvent] = TypeAdapter(
     Annotated[RunEvent, Field(discriminator="type")]
 )
