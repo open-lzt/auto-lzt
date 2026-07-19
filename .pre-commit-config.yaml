@@ -1,0 +1,32 @@
+# Local dev gate — aborts `git commit` / `git push` when checks fail, before anything leaves the
+# machine. CI (GitHub Actions) stays the authoritative server-side gate; this is the fast local one.
+# One-time per clone:  uv run pre-commit install --hook-type pre-commit --hook-type pre-push
+# Bypass in a pinch:    git commit/push --no-verify
+repos:
+  - repo: local
+    hooks:
+      - id: ruff-check
+        name: ruff check
+        entry: uv run ruff check --fix
+        language: system
+        types: [python]
+        require_serial: true
+      - id: ruff-format
+        name: ruff format
+        entry: uv run ruff format
+        language: system
+        types: [python]
+        require_serial: true
+      # mypy + pytest are heavier — run them on push, not on every commit.
+      - id: mypy
+        name: mypy (strict)
+        entry: uv run mypy app
+        language: system
+        pass_filenames: false
+        stages: [pre-push]
+      - id: pytest
+        name: pytest
+        entry: uv run pytest -q
+        language: system
+        pass_filenames: false
+        stages: [pre-push]
