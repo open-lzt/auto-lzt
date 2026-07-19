@@ -25,6 +25,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.core.config import Settings
 from app.domain.catalog.registry import BUILTIN_REGISTRATIONS, NodeRegistration, NodeRegistry
+from app.domain.panel.tabs import PanelTabSpec, stamp_origin
 from app.plugin_runtime.contracts import (
     ENTRY_POINT_GROUP,
     POST_INIT_ATTR,
@@ -63,6 +64,10 @@ def _read_hooks(module: object, attr: str, plugin_name: str) -> tuple[object, ..
         if not callable(hook):
             raise PluginLoadError(plugin_name, f"{attr} member is not callable: {hook!r}")
     return hooks
+
+
+def _keep[T](items: list[T], when: bool) -> tuple[T, ...]:
+    return tuple(items) if when else ()
 
 
 def _discovered(name: str, source: PluginSource, module: object) -> DiscoveredPlugin:
@@ -112,6 +117,7 @@ class PluginManager:
         nodes: list[NodeRegistration] = []
         api_routers: list[object] = []
         bot_routers: list[object] = []
+        panel_tabs: list[PanelTabSpec] = []
         # False (entry-point) sorts before True (folder): entry points claim keys first.
         for plugin in sorted(self._plugins, key=lambda p: p.source is PluginSource.FOLDER):
             loaded = [self._run_pre_init_hook(plugin.name, hook) for hook in plugin.pre_init]
@@ -133,8 +139,9 @@ class PluginManager:
             for lc in loaded:
                 api_routers.extend(lc.api_routers)
                 bot_routers.extend(lc.bot_routers)
+                panel_tabs.extend(stamp_origin(lc.panel_tabs, plugin.name))
         self._active = active
-        return self._filter(nodes, api_routers, bot_routers)
+        return self._filter(nodes, api_routers, bot_routers, panel_tabs)
 
     def _run_pre_init_hook(self, plugin_name: str, hook: PreInitHook) -> PluginLoadedContext:
         ctx = PluginLoadContext(
@@ -156,15 +163,31 @@ class PluginManager:
         return loaded
 
     def _filter(
-        self, nodes: list[NodeRegistration], api_routers: list[object], bot_routers: list[object]
+        self,
+        nodes: list[NodeRegistration],
+        api_routers: list[object],
+        bot_routers: list[object],
+        panel_tabs: list[PanelTabSpec],
     ) -> PluginContributions:
+        """Keep only the surfaces this process actually consumes.
+
+        The ``tuple(x) if keep else ()`` shape was written out three times before panel tabs
+        arrived; adding a fourth field the obvious way would have made it four. ``_keep`` is the
+        smallest fix that stops the repetition growing, and it costs nothing because this method was
+        being edited anyway. Full generalization (iterating ``(field, predicate)`` pairs) would have
+        to touch the three existing fields too — deliberately out of scope here, but see
+        ``_MODULE.md``: a FIFTH surface is the point where the filter itself should be generalized
+        rather than extended again.
+        """
         keep_nodes = self.process in (PluginProcess.API, PluginProcess.WORKER)
         keep_api = self.process is PluginProcess.API
         keep_bot = self.process is PluginProcess.BOT
         return PluginContributions(
-            nodes=tuple(nodes) if keep_nodes else (),
-            api_routers=tuple(api_routers) if keep_api else (),  # type: ignore[arg-type]
-            bot_routers=tuple(bot_routers) if keep_bot else (),  # type: ignore[arg-type]
+            nodes=_keep(nodes, keep_nodes),
+            api_routers=_keep(api_routers, keep_api),  # type: ignore[arg-type]
+            bot_routers=_keep(bot_routers, keep_bot),  # type: ignore[arg-type]
+            # API only: it is the process that serves /panel/tabs to the browser.
+            panel_tabs=_keep(panel_tabs, keep_api),
         )
 
     async def post_init(

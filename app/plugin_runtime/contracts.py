@@ -22,6 +22,7 @@ from structlog.stdlib import BoundLogger
 
 from app.core.config import Settings
 from app.domain.catalog.registry import NodeRegistration, NodeRegistry
+from app.domain.panel.tabs import PanelTabSpec
 
 if TYPE_CHECKING:
     from aiogram import Router as BotRouter
@@ -71,6 +72,7 @@ class PluginLoadedContext:
     nodes: list[NodeRegistration] = field(default_factory=list)
     api_routers: list[APIRouter] = field(default_factory=list)
     bot_routers: list[BotRouter] = field(default_factory=list)
+    panel_tabs: list[PanelTabSpec] = field(default_factory=list)
 
 
 @dataclass(slots=True, frozen=True)
@@ -81,6 +83,7 @@ class PluginContributions:
     nodes: tuple[NodeRegistration, ...]
     api_routers: tuple[APIRouter, ...]
     bot_routers: tuple[BotRouter, ...]
+    panel_tabs: tuple[PanelTabSpec, ...]
 
 
 # spawn(coro, name) — the manager creates the task, tracks it, and cancels it at SHUTDOWN before

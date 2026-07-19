@@ -21,6 +21,7 @@ from app.api import (
     flow_status_routes,
     health_routes,
     module_routes,
+    panel_routes,
     plugin_routes,
     run_routes,
     task_routes,
@@ -36,6 +37,7 @@ from app.domain.account.exclusion import AccountExcluder
 from app.domain.account.pool import TokenPool
 from app.domain.catalog.plugins import build_registry
 from app.domain.modules.registry_client import OfficialRegistryClient
+from app.domain.panel.tabs import build_panel_tabs
 from app.plugin_runtime import PluginManager, PluginProcess
 from app.plugin_runtime.index_client import PluginIndexClient
 from app.plugin_runtime.install_service import PluginInstallService
@@ -72,6 +74,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # surface later as a run failure on a flow that is holding money. Plugin nodes fold in through
     # the same NodeRegistry dedup, so a plugin shadowing a built-in still fails closed here.
     app.state.node_registry = build_registry(extra_registrations=contributions.nodes)
+    # Same shape as the registry above, and for the same reason: built-in tabs go through the SAME
+    # assembly as contributed ones, so a key collision fails the boot rather than resolving by load
+    # order — and so the seam is exercised by the host's own tabs, not just by plugins.
+    app.state.panel_tabs = build_panel_tabs(extra_tabs=contributions.panel_tabs)
     # Plugin API routers mount LAST (after the built-ins in create_app), so a built-in path wins an
     # exact collision; reset the cached schema so the plugin routes show up in OpenAPI.
     for router in contributions.api_routers:
@@ -138,6 +144,7 @@ def create_app() -> FastAPI:
     app.include_router(flow_routes.router)
     app.include_router(flow_status_routes.router)
     app.include_router(module_routes.router)
+    app.include_router(panel_routes.router)
     app.include_router(plugin_routes.router)
     app.include_router(run_routes.router)
     app.include_router(task_routes.router)
