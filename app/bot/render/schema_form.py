@@ -4,10 +4,13 @@ This is success criterion 2 made mechanical: removing a field from a node's Inpu
 bot's form with zero edits here, because there is no per-node knowledge in this file to update. The
 bot does not know what ``market.bump`` is. It knows what a schema is.
 
-The ``ui`` hint chooses the control; the JSON Schema type is the fallback. An unknown ``ui`` — from
-a node newer than this bot, or a plugin's — degrades to a text field rather than crashing. A form
-that renders a field slightly wrong is a bad afternoon; a form that refuses to render because a
-plugin invented a control is a bot that a plugin can switch off.
+The ``x-ui.widget`` hint chooses the control; the JSON Schema type is the fallback. The bare
+``ui: "<value>"`` string is the pre-migration shape — no built-in node emits it any more (see
+``tests/integration/test_catalog_route.py``), but a plugin author's own package may still, so it
+stays readable rather than turning into a silent TEXT downgrade. An unknown hint — from a node
+newer than this bot, or a plugin's — degrades to a text field rather than crashing. A form that
+renders a field slightly wrong is a bad afternoon; a form that refuses to render because a plugin
+invented a control is a bot that a plugin can switch off.
 """
 
 from __future__ import annotations
@@ -85,10 +88,28 @@ def _choices(schema: dict[str, Any]) -> tuple[str, ...]:
     return tuple(str(v) for v in values)
 
 
+def _raw_ui_hint(schema: dict[str, Any]) -> str | None:
+    """``x-ui.widget`` is the canonical hint, shared with the web canvas (``JsonSchemaUi`` in
+    ``flowClient.ts``).
+
+    The bare ``ui`` string is the shape every built-in node emitted before the two renderers were
+    unified on one key. The fallback is PERMANENT by design, not a migration window: node schemas
+    are a public contract that third-party plugins write against, and silently ceasing to
+    understand a shape we shipped would break installed plugins with no error a plugin author
+    could act on. It is a compatibility guarantee, not debt awaiting cleanup.
+    """
+    x_ui = schema.get("x-ui")
+    widget = x_ui.get("widget") if isinstance(x_ui, dict) else None
+    if isinstance(widget, str):
+        return widget
+    legacy = schema.get("ui")
+    return legacy if isinstance(legacy, str) else None
+
+
 def _ui_of(schema: dict[str, Any], resolved: dict[str, Any]) -> UiKind:
     # The hint lives on the field, not on the $ref target: an enum's own definition is shared by
     # every field using it, so it cannot say how this particular field should look.
-    raw = schema.get("ui")
+    raw = _raw_ui_hint(schema)
     if isinstance(raw, str):
         try:
             return UiKind(raw)

@@ -19,21 +19,23 @@ from app.domain.flow_engine.dtos import StepResultDTO
 
 class BatchStatusInput(BaseSchema):
     only_pending: bool = Field(
-        False, title="Только незавершённые", json_schema_extra={"ui": "bool"}
+        False, title="Только незавершённые", json_schema_extra={"x-ui": {"widget": "bool"}}
     )
-    limit: int | None = Field(None, title="Сколько вернуть", json_schema_extra={"ui": "number"})
-    offset: int = Field(0, title="Смещение", json_schema_extra={"ui": "number"})
+    limit: int | None = Field(
+        None, title="Сколько вернуть", json_schema_extra={"x-ui": {"widget": "number"}}
+    )
+    offset: int = Field(0, title="Смещение", json_schema_extra={"x-ui": {"widget": "number"}})
     commit_record_ids: str = Field(
         "",
         title="Подтвердить записи",
         description="JSON-массив record_id; пусто — ничего не подтверждать.",
-        json_schema_extra={"ui": "text"},
+        json_schema_extra={"x-ui": {"widget": "text"}},
     )  # JSON array of record_ids to commit, "" = none
     delete_record_ids: str = Field(
         "",
         title="Удалить записи",
         description="JSON-массив record_id; пусто — ничего не удалять.",
-        json_schema_extra={"ui": "text"},
+        json_schema_extra={"x-ui": {"widget": "text"}},
     )  # JSON array of record_ids to delete, "" = none
 
 

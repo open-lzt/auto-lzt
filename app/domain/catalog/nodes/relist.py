@@ -36,17 +36,23 @@ from app.domain.flow_engine.errors import RunFailed
 
 
 class RelistInput(BaseSchema):
-    price: float = Field(title="Цена", json_schema_extra={"ui": "number"}, gt=0)
-    category_id: int = Field(title="Категория", json_schema_extra={"ui": "select"}, gt=0)
-    currency: str = Field(title="Валюта", json_schema_extra={"ui": "select"})
-    item_origin: str = Field(title="Происхождение аккаунта", json_schema_extra={"ui": "select"})
+    price: float = Field(title="Цена", json_schema_extra={"x-ui": {"widget": "number"}}, gt=0)
+    category_id: int = Field(
+        title="Категория", json_schema_extra={"x-ui": {"widget": "select"}}, gt=0
+    )
+    currency: str = Field(title="Валюта", json_schema_extra={"x-ui": {"widget": "select"}})
+    item_origin: str = Field(
+        title="Происхождение аккаунта", json_schema_extra={"x-ui": {"widget": "select"}}
+    )
     title: str | None = Field(
         None,
         title="Заголовок",
         description="Пусто — берётся заголовок исходного лота.",
-        json_schema_extra={"ui": "text"},
+        json_schema_extra={"x-ui": {"widget": "text"}},
     )
-    description: str | None = Field(None, title="Описание", json_schema_extra={"ui": "text"})
+    description: str | None = Field(
+        None, title="Описание", json_schema_extra={"x-ui": {"widget": "text"}}
+    )
 
 
 class RelistOutput(BaseSchema):

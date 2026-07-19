@@ -25,13 +25,15 @@ from app.domain.flow_engine.ir_node import IRInput, LiteralValue
 
 
 class ConditionInput(BaseSchema):
-    left: str | int | float | bool = Field(title="Что сравниваем", json_schema_extra={"ui": "text"})
-    op: ComparisonOp = Field(title="Операция", json_schema_extra={"ui": "select"})
+    left: str | int | float | bool = Field(
+        title="Что сравниваем", json_schema_extra={"x-ui": {"widget": "text"}}
+    )
+    op: ComparisonOp = Field(title="Операция", json_schema_extra={"x-ui": {"widget": "select"}})
     right: str | int | float | bool | None = Field(
         None,
         title="С чем сравниваем",
         description="Не нужен для is_null.",
-        json_schema_extra={"ui": "text"},
+        json_schema_extra={"x-ui": {"widget": "text"}},
     )
 
 

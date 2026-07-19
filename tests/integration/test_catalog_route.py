@@ -62,12 +62,13 @@ async def test_catalog_carries_the_shapes_and_the_capabilities() -> None:
 
 async def test_ui_hints_ride_inside_the_schema() -> None:
     """The hint lives in the JSON Schema, not beside it — that is what lets the bot and the web
-    render the same form from one source (T1.4/D-10)."""
+    render the same form from one source (T1.4/D-10). ``x-ui.widget`` is the wire shape the web
+    canvas reads (``JsonSchemaUi`` in flowClient.ts); the bot reads the same key."""
     body = await _catalog()
     bump = next(entry for entry in body["nodes"] if entry["key"] == "market.bump")
     item_id = bump["input_schema"]["properties"]["item_id"]
 
-    assert item_id["ui"] == "lot_ref"
+    assert item_id["x-ui"] == {"widget": "lot_ref"}
     assert item_id["title"] == "Лот"
 
 

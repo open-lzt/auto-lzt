@@ -15,7 +15,7 @@ from app.domain.flow_engine.dtos import StepResultDTO
 
 
 class BumpInput(BaseSchema):
-    item_id: int = Field(title="Лот", json_schema_extra={"ui": "lot_ref"}, gt=0)
+    item_id: int = Field(title="Лот", json_schema_extra={"x-ui": {"widget": "lot_ref"}}, gt=0)
 
 
 class BumpOutput(BaseSchema):

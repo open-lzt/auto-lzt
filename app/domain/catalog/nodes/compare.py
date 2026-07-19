@@ -33,13 +33,13 @@ def _coerce_numeric(value: _Scalar) -> _Scalar:
 
 
 class CompareInput(BaseSchema):
-    op: ComparisonOp = Field(title="Операция", json_schema_extra={"ui": "select"})
-    a: _Scalar = Field(title="Первый операнд", json_schema_extra={"ui": "text"})
+    op: ComparisonOp = Field(title="Операция", json_schema_extra={"x-ui": {"widget": "select"}})
+    a: _Scalar = Field(title="Первый операнд", json_schema_extra={"x-ui": {"widget": "text"}})
     b: _Scalar | None = Field(
         None,
         title="Второй операнд",
         description="Не нужен для is_null.",
-        json_schema_extra={"ui": "text"},
+        json_schema_extra={"x-ui": {"widget": "text"}},
     )
 
 

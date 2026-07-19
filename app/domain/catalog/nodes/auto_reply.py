@@ -26,10 +26,12 @@ class AutoReplyInput(BaseSchema):
     conversation_id: int = Field(
         title="Диалог",
         description="Идентификатор диалога, в который отправляется ответ.",
-        json_schema_extra={"ui": "number"},
+        json_schema_extra={"x-ui": {"widget": "number"}},
         gt=0,
     )
-    message: str = Field(title="Текст ответа", json_schema_extra={"ui": "text"}, min_length=1)
+    message: str = Field(
+        title="Текст ответа", json_schema_extra={"x-ui": {"widget": "text"}}, min_length=1
+    )
 
 
 class AutoReplyOutput(BaseSchema):

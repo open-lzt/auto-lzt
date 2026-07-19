@@ -12,9 +12,9 @@ from app.domain.flow_engine.dtos import StepResultDTO
 
 
 class StringConcatInput(BaseSchema):
-    a: str = Field(title="Первая часть", json_schema_extra={"ui": "text"})
-    b: str = Field(title="Вторая часть", json_schema_extra={"ui": "text"})
-    c: str = Field("", title="Третья часть", json_schema_extra={"ui": "text"})
+    a: str = Field(title="Первая часть", json_schema_extra={"x-ui": {"widget": "text"}})
+    b: str = Field(title="Вторая часть", json_schema_extra={"x-ui": {"widget": "text"}})
+    c: str = Field("", title="Третья часть", json_schema_extra={"x-ui": {"widget": "text"}})
 
 
 class StringConcatOutput(BaseSchema):

@@ -22,9 +22,9 @@ class MathOp(StrEnum):
 
 
 class MathInput(BaseSchema):
-    op: MathOp = Field(title="Операция", json_schema_extra={"ui": "select"})
-    a: float = Field(title="Первый операнд", json_schema_extra={"ui": "number"})
-    b: float = Field(title="Второй операнд", json_schema_extra={"ui": "number"})
+    op: MathOp = Field(title="Операция", json_schema_extra={"x-ui": {"widget": "select"}})
+    a: float = Field(title="Первый операнд", json_schema_extra={"x-ui": {"widget": "number"}})
+    b: float = Field(title="Второй операнд", json_schema_extra={"x-ui": {"widget": "number"}})
 
 
 class MathOutput(BaseSchema):

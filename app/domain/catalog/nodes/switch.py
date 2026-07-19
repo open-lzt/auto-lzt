@@ -18,11 +18,11 @@ from app.domain.flow_engine.errors import NoMatchingCase
 
 
 class SwitchInput(BaseSchema):
-    value: str = Field(title="Значение", json_schema_extra={"ui": "text"})
+    value: str = Field(title="Значение", json_schema_extra={"x-ui": {"widget": "text"}})
     cases: str = Field(
         title="Ветки",
         description="JSON-объект {метка_ребра: ожидаемое_значение}.",
-        json_schema_extra={"ui": "text"},
+        json_schema_extra={"x-ui": {"widget": "text"}},
     )  # JSON-encoded dict[str, str] — {edge_label: expected_value}
 
 

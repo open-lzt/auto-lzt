@@ -12,8 +12,38 @@ import type { ParamSpec } from "../canvas/paramTypes";
 
 export type NodeCategory = "action" | "logic" | "trigger";
 
+/**
+ * The ONE ui-hint vocabulary, shared by every renderer of a node schema.
+ *
+ * Both halves of this union are emitted by the backend today, and it is worth knowing why they look
+ * like two lists. `text`/`number`/`bool`/`select`/`lot_ref`/`secret`/`account_ref` say what a field
+ * IS — that vocabulary predates the canvas and is what the Telegram bot's form renderer parses chat
+ * input with (`UiKind` in `app/bot/render/schema_form.py`). `slider`/`textarea`/`radio`/
+ * `multiselect`/`datetime` say which CONTROL to draw when the JSON-schema type alone is too weak.
+ *
+ * They live in one union because they travel in one field. Listing only the canvas's half would be
+ * a type that lies: `lot_ref` reaches this code at runtime, and an exhaustive `switch` written
+ * against a narrower union would be wrong the first time it ran.
+ *
+ * Neither consumer implements the whole vocabulary, and neither has to — an unrecognised widget
+ * falls through to the default control on both sides rather than throwing.
+ */
+export type UiWidget =
+  | "slider"
+  | "textarea"
+  | "radio"
+  | "multiselect"
+  | "datetime"
+  | "text"
+  | "number"
+  | "bool"
+  | "select"
+  | "lot_ref"
+  | "secret"
+  | "account_ref";
+
 export interface JsonSchemaUi {
-  widget?: "slider" | "textarea" | "radio" | "multiselect" | "datetime";
+  widget?: UiWidget;
   step?: number;
   unit?: string;
 }

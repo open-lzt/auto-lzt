@@ -32,10 +32,10 @@ class SendMessageInput(BaseSchema):
     bot_token: str = Field(
         title="Токен бота",
         description="Токен бота, от имени которого уйдёт уведомление.",
-        json_schema_extra={"ui": "secret"},
+        json_schema_extra={"x-ui": {"widget": "secret"}},
     )
-    chat_id: str = Field(title="Чат", json_schema_extra={"ui": "text"})
-    text: str = Field(title="Текст", min_length=1, json_schema_extra={"ui": "text"})
+    chat_id: str = Field(title="Чат", json_schema_extra={"x-ui": {"widget": "text"}})
+    text: str = Field(title="Текст", min_length=1, json_schema_extra={"x-ui": {"widget": "text"}})
 
 
 class SendMessageOutput(BaseSchema):

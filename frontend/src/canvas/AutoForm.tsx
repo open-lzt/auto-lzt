@@ -1,5 +1,15 @@
-import type { JsonSchema } from "../api/flowClient";
-import { Checkbox, Field, SelectField, Slider, TextField } from "./ui/controls";
+import type { JsonSchema, JsonSchemaUi } from "../api/flowClient";
+import {
+  Checkbox,
+  DateTimePicker,
+  Field,
+  MultiSelect,
+  RadioGroup,
+  SelectField,
+  Slider,
+  TextArea,
+  TextField,
+} from "./ui/controls";
 import "./autoform.css";
 
 type FieldValue = string | number | boolean;
@@ -13,7 +23,9 @@ interface FieldSpec {
   required: boolean;
   kind: "string" | "number" | "boolean" | "enum" | "unknown";
   enumValues?: (string | number)[];
-  // x-ui.widget === "slider" on a numeric field renders a range control instead of a text input.
+  // x-ui.widget picks the control within a kind: radio/multiselect for enum, textarea/datetime
+  // for string. "slider" is number-only, so it carries its own config below instead of here.
+  widget?: JsonSchemaUi["widget"];
   slider?: { min: number; max: number; step: number; unit?: string };
 }
 
@@ -32,9 +44,11 @@ function toFieldSpec(key: string, schema: JsonSchema, required: Set<string>): Fi
   const { type, enumValues } = resolveType(schema);
   const title = schema.title ?? key;
   const isRequired = required.has(key);
-  if (enumValues) return { key, title, required: isRequired, kind: "enum", enumValues };
+  const ui = schema["x-ui"];
+  if (enumValues) {
+    return { key, title, required: isRequired, kind: "enum", enumValues, widget: ui?.widget };
+  }
   if (type === "integer" || type === "number") {
-    const ui = schema["x-ui"];
     const slider =
       ui?.widget === "slider"
         ? {
@@ -47,7 +61,7 @@ function toFieldSpec(key: string, schema: JsonSchema, required: Set<string>): Fi
     return { key, title, required: isRequired, kind: "number", slider };
   }
   if (type === "boolean") return { key, title, required: isRequired, kind: "boolean" };
-  if (type === "string") return { key, title, required: isRequired, kind: "string" };
+  if (type === "string") return { key, title, required: isRequired, kind: "string", widget: ui?.widget };
   return { key, title, required: isRequired, kind: "unknown" };
 }
 
@@ -58,7 +72,8 @@ interface AutoFormProps {
 }
 
 /** Renders one input per JSON-Schema property — the node's `input_schema` fetched from GET
- * /catalog. Supports string/number/boolean/enum (the wave-06 floor); anything more exotic falls
+ * /catalog. Supports string/number/boolean/enum, with `x-ui.widget` upgrading string to
+ * textarea/datetime, enum to radio/multiselect, and number to slider; anything more exotic falls
  * back to a plain text field rather than silently dropping the parameter. */
 export function AutoForm({ schema, values, onChange }: AutoFormProps) {
   const properties = schema.properties ?? {};
@@ -86,7 +101,20 @@ export function AutoForm({ schema, values, onChange }: AutoFormProps) {
         }
         return (
           <Field key={field.key} label={field.title} required={field.required}>
-            {field.kind === "enum" ? (
+            {field.kind === "enum" && field.widget === "radio" ? (
+              <RadioGroup
+                name={field.key}
+                value={String(values[field.key] ?? "")}
+                onChange={(v) => onChange(field.key, v)}
+                options={(field.enumValues ?? []).map((opt) => ({ value: String(opt), label: String(opt) }))}
+              />
+            ) : field.kind === "enum" && field.widget === "multiselect" ? (
+              <MultiSelect
+                value={raw}
+                onChange={(v) => onChange(field.key, v)}
+                options={(field.enumValues ?? []).map((opt) => ({ value: String(opt), label: String(opt) }))}
+              />
+            ) : field.kind === "enum" ? (
               <SelectField value={String(values[field.key] ?? "")} onChange={(v) => onChange(field.key, v)}>
                 <option value="" disabled>
                   выберите…
@@ -119,6 +147,10 @@ export function AutoForm({ schema, values, onChange }: AutoFormProps) {
                   if (v === "" || NUMBER_OR_PARAM_REF.test(v)) onChange(field.key, v);
                 }}
               />
+            ) : field.kind === "string" && field.widget === "textarea" ? (
+              <TextArea value={raw} onChange={(v) => onChange(field.key, v)} />
+            ) : field.kind === "string" && field.widget === "datetime" ? (
+              <DateTimePicker value={raw} onChange={(v) => onChange(field.key, v)} />
             ) : (
               <TextField value={raw} onChange={(v) => onChange(field.key, v)} />
             )}

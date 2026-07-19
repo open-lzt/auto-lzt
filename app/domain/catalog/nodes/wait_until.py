@@ -24,9 +24,11 @@ _DONE_EDGE = "done"
 
 
 class WaitUntilInput(BaseSchema):
-    condition: bool = Field(title="Условие", json_schema_extra={"ui": "bool"})
-    poll_interval_s: int = Field(title="Интервал опроса, с", json_schema_extra={"ui": "number"})
-    timeout_s: int = Field(title="Таймаут, с", json_schema_extra={"ui": "number"})
+    condition: bool = Field(title="Условие", json_schema_extra={"x-ui": {"widget": "bool"}})
+    poll_interval_s: int = Field(
+        title="Интервал опроса, с", json_schema_extra={"x-ui": {"widget": "number"}}
+    )
+    timeout_s: int = Field(title="Таймаут, с", json_schema_extra={"x-ui": {"widget": "number"}})
 
 
 class WaitUntilOutput(BaseSchema):

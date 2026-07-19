@@ -37,8 +37,12 @@ class DynamicMethodInput(BaseSchema):
     """AutoForm's facade+method picker — every other wired port is a dynamic kwarg, validated at
     execute time against the resolved method's real signature, not against this schema."""
 
-    facade: str = Field(title="Раздел API", json_schema_extra={"ui": "select"}, alias="_facade")
-    method: str = Field(title="Метод", json_schema_extra={"ui": "select"}, alias="_method")
+    facade: str = Field(
+        title="Раздел API", json_schema_extra={"x-ui": {"widget": "select"}}, alias="_facade"
+    )
+    method: str = Field(
+        title="Метод", json_schema_extra={"x-ui": {"widget": "select"}}, alias="_method"
+    )
 
     model_config = {"populate_by_name": True}
 

@@ -19,22 +19,26 @@ from app.domain.flow_engine.errors import RunFailed
 
 
 class RepriceInput(BaseSchema):
-    item_id: int = Field(title="Лот", json_schema_extra={"ui": "lot_ref"}, gt=0)
-    currency: str = Field(title="Валюта", json_schema_extra={"ui": "select"})
+    item_id: int = Field(title="Лот", json_schema_extra={"x-ui": {"widget": "lot_ref"}}, gt=0)
+    currency: str = Field(title="Валюта", json_schema_extra={"x-ui": {"widget": "select"}})
     price: int | None = Field(
         title="Новая цена",
         description="Задайте либо цену, либо процент скидки.",
-        json_schema_extra={"ui": "number"},
+        json_schema_extra={"x-ui": {"widget": "number"}},
         default=None,
         gt=0,
     )
     decay_pct: float | None = Field(
-        title="Скидка, %", json_schema_extra={"ui": "number"}, default=None, gt=0, lt=100
+        title="Скидка, %",
+        json_schema_extra={"x-ui": {"widget": "number"}},
+        default=None,
+        gt=0,
+        lt=100,
     )
     current_price: int | None = Field(
         title="Текущая цена",
         description="Нужна только для расчёта скидки.",
-        json_schema_extra={"ui": "number"},
+        json_schema_extra={"x-ui": {"widget": "number"}},
         default=None,
         gt=0,
     )

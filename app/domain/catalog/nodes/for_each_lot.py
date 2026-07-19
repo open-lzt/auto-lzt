@@ -27,7 +27,7 @@ class ForEachLotInput(BaseSchema):
     item_ids: str = Field(
         title="Лоты",
         description="JSON-массив id — обычно выход get_my_lots.",
-        json_schema_extra={"ui": "text"},
+        json_schema_extra={"x-ui": {"widget": "text"}},
     )  # JSON-encoded list[int] — see get-my-lots' output
 
     @field_validator("item_ids")

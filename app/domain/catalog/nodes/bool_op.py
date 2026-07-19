@@ -20,13 +20,13 @@ class BoolOp(StrEnum):
 
 
 class BoolOpInput(BaseSchema):
-    op: BoolOp = Field(title="Операция", json_schema_extra={"ui": "select"})
-    a: bool = Field(title="Первый операнд", json_schema_extra={"ui": "bool"})
+    op: BoolOp = Field(title="Операция", json_schema_extra={"x-ui": {"widget": "select"}})
+    a: bool = Field(title="Первый операнд", json_schema_extra={"x-ui": {"widget": "bool"}})
     b: bool | None = Field(
         None,
         title="Второй операнд",
         description="Не нужен для NOT.",
-        json_schema_extra={"ui": "bool"},
+        json_schema_extra={"x-ui": {"widget": "bool"}},
     )
 
 
