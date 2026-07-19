@@ -88,8 +88,7 @@ An unvalidated FlowSpec isn't a result. Two gates:
 | Buy by filter | `trigger(new lot) → compare(price < {{vars.max}}) → buy` |
 | Reprice by threshold | `get_my_lots → for_each_lot → reprice` |
 
-More ready-made scenarios — in the template library (`seeds/templates/`, wave 3) and in
-`.plans/_research/lolz-capabilities.md` (a catalog of operations and 46 "quirks").
+More ready-made scenarios — in the template library `seeds/templates/`.
 
 See also: the `flow-from-text` skill (`.claude/skills/flow-from-text/SKILL.md`) and its examples
 `examples/*.json`.

@@ -109,6 +109,6 @@ calls land.
 Types on boundaries · DTOs between layers · idempotency on mutate endpoints (`fast-buy` is not
 natively idempotent → the node carries its own key) · envelope token encryption per tenant ·
 structured logging with `request_id` · fail-loud on invariant violations. These are correctness,
-not scale — they hold regardless of the CUT-list (see `.plans/lzt-flow/00-overview.md`).
+not scale — they hold regardless of the feature scope.
 
 See also: [README.md](./README.md) for quickstart and the demo.

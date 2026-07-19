@@ -88,8 +88,7 @@ FlowSpec без проверки — не результат. Два гейта:
 | Купить по фильтру | `триггер(новый лот) → compare(цена < {{vars.max}}) → buy` |
 | Переоценить по порогу | `get_my_lots → for_each_lot → reprice` |
 
-Больше готовых сценариев — в библиотеке шаблонов (`seeds/templates/`, волна 3) и в
-`.plans/_research/lolz-capabilities.md` (каталог операций и 46 «приколюх»).
+Больше готовых сценариев — в библиотеке шаблонов `seeds/templates/`.
 
 См. также: скилл `.claude/skills/flow-from-text/SKILL.md` и его примеры `examples/*.json`.
 
