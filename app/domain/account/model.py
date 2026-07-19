@@ -32,3 +32,5 @@ class Account:
     status: AccountStatus = AccountStatus.ACTIVE
     # HMAC fingerprint of the token (see EnvelopeCipher.fingerprint_token); None for legacy rows.
     token_hash: str | None = None
+    label: str | None = None
+    last_seen_at: datetime | None = None

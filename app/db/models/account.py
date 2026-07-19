@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import Index, LargeBinary, String, UniqueConstraint, Uuid
+from sqlalchemy import DateTime, Index, LargeBinary, String, UniqueConstraint, Uuid
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -24,8 +24,11 @@ class AccountORM(Base):
     )
     # HMAC fingerprint of the token; NULL for legacy rows (NULLs never collide in a unique index).
     token_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    label: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     __table_args__ = (
         Index("ix_accounts_tenant_id", "tenant_id"),
         UniqueConstraint("tenant_id", "token_hash", name="uq_accounts_tenant_token_hash"),
+        UniqueConstraint("tenant_id", "label", name="uq_accounts_tenant_label"),
     )

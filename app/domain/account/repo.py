@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+from typing import Any
+
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
 from app.db.base import BaseRepo
-from app.db.models import AccountORM
+from app.db.models import AccountORM, FlowORM, TriggerORM
 from app.domain.account.errors import DuplicateAccountToken
 from app.domain.account.model import Account, AccountId, AccountStatus, TenantId
 
@@ -19,7 +22,26 @@ def _to_domain(orm: AccountORM) -> Account:
         created_at=orm.created_at,
         status=AccountStatus(orm.status),
         token_hash=orm.token_hash,
+        label=orm.label,
+        last_seen_at=orm.last_seen_at,
     )
+
+
+def _spec_references(spec: Mapping[str, Any], account_id: AccountId) -> bool:
+    """Walk a FlowSpec's ``nodes`` recursively — a batch/loop node's ``children`` can nest more
+    nodes with their own ``account_ref``, so a flat top-level scan would miss it."""
+    target = str(account_id)
+
+    def _walk(nodes: list[Mapping[str, Any]]) -> bool:
+        for node in nodes:
+            if node.get("account_ref") == target:
+                return True
+            children = node.get("children")
+            if children and _walk(children):
+                return True
+        return False
+
+    return _walk(spec.get("nodes", []))
 
 
 class AccountRepository(BaseRepo[Account, AccountId]):
@@ -68,3 +90,46 @@ class AccountRepository(BaseRepo[Account, AccountId]):
             raise KeyError(f"account {account_id} not found for tenant {tenant_id}")
         orm.status = status.value
         await self._session.flush()
+
+    async def set_label(
+        self, tenant_id: TenantId, account_id: AccountId, label: str | None
+    ) -> Account:
+        """Raises KeyError if absent. A duplicate label raises IntegrityError from the flush —
+        left uncaught here, the caller (service) maps it to the domain Conflict error."""
+        orm = await self._session.get(AccountORM, account_id)
+        if orm is None or orm.tenant_id != tenant_id:
+            raise KeyError(f"account {account_id} not found for tenant {tenant_id}")
+        orm.label = label
+        await self._session.flush()
+        return _to_domain(orm)
+
+    async def delete(self, tenant_id: TenantId, account_id: AccountId) -> bool:
+        """Returns False (not raise) when absent — the service decides whether that's an error."""
+        orm = await self._session.get(AccountORM, account_id)
+        if orm is None or orm.tenant_id != tenant_id:
+            return False
+        await self._session.delete(orm)
+        await self._session.flush()
+        return True
+
+    async def flows_referencing(
+        self, tenant_id: TenantId, account_id: AccountId
+    ) -> tuple[str, ...]:
+        """Names of flows with a LIVE schedule trigger that still pin this account in their spec.
+
+        The trigger join runs in SQL; the JSONB spec is then walked in Python rather than with a
+        dialect-specific JSON operator, because Postgres (prod) and SQLite (this test suite) don't
+        share one JSON-path syntax — a Python walk is the only version testable on both.
+        """
+        stmt = (
+            select(FlowORM.name, FlowORM.spec)
+            .distinct()
+            .join(TriggerORM, TriggerORM.flow_id == FlowORM.id)
+            .where(
+                FlowORM.tenant_id == tenant_id,
+                TriggerORM.tenant_id == tenant_id,
+                TriggerORM.active.is_(True),
+            )
+        )
+        rows = (await self._session.execute(stmt)).all()
+        return tuple(name for name, spec in rows if _spec_references(spec, account_id))
