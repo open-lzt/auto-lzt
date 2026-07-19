@@ -1,0 +1,66 @@
+.status-dot-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: var(--lzt-r-pill);
+  flex: none;
+  background: var(--lzt-text-dim);
+}
+
+.status-dot--idle {
+  background: var(--lzt-text-muted);
+}
+
+.status-dot--running {
+  background: var(--lzt-brand);
+  animation: status-dot-pulse 1.6s ease-in-out infinite;
+}
+
+.status-dot--failing {
+  background: var(--lzt-danger);
+}
+
+.status-dot--paused {
+  background: var(--lzt-text-dim);
+}
+
+.status-dot__label {
+  font-size: 13px;
+  color: var(--lzt-text-soft);
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@keyframes status-dot-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 var(--lzt-brand-a35);
+  }
+  50% {
+    box-shadow: 0 0 0 5px transparent;
+  }
+}
+
+/* The animation goes; the colour stays. Suppressing motion must not also remove the distinction
+   the motion was decorating. */
+@media (prefers-reduced-motion: reduce) {
+  .status-dot--running {
+    animation: none;
+    box-shadow: 0 0 0 3px var(--lzt-brand-a20);
+  }
+}

@@ -1,0 +1,19 @@
+.countdown {
+  /* Tabular figures are the whole point: without them every digit change reflows the string and
+     the countdown visibly twitches once a second. */
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+  letter-spacing: -0.02em;
+  font-weight: 600;
+  color: var(--lzt-text);
+  transition: color 200ms ease-out;
+}
+
+.countdown--urgent {
+  color: var(--lzt-brand);
+}
+
+.countdown--idle {
+  color: var(--lzt-text-dim);
+  font-weight: 500;
+}

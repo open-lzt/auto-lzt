@@ -13,7 +13,7 @@ importers:
         version: 5.2.8
       '@open-lzt/ui':
         specifier: github:open-lzt/lzt-ui#main
-        version: https://codeload.github.com/open-lzt/lzt-ui/tar.gz/1b07284acb6ee0b676551c2513e8a29379042291(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+        version: https://codeload.github.com/open-lzt/lzt-ui/tar.gz/6a02bfd639ef392109d2068a2feb75f203613dd2(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@xyflow/react':
         specifier: ^12.3.5
         version: 12.11.2(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
@@ -488,8 +488,8 @@ packages:
   '@jridgewell/trace-mapping@0.3.31':
     resolution: {integrity: sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw==}
 
-  '@open-lzt/ui@https://codeload.github.com/open-lzt/lzt-ui/tar.gz/1b07284acb6ee0b676551c2513e8a29379042291':
-    resolution: {tarball: https://codeload.github.com/open-lzt/lzt-ui/tar.gz/1b07284acb6ee0b676551c2513e8a29379042291}
+  '@open-lzt/ui@https://codeload.github.com/open-lzt/lzt-ui/tar.gz/6a02bfd639ef392109d2068a2feb75f203613dd2':
+    resolution: {tarball: https://codeload.github.com/open-lzt/lzt-ui/tar.gz/6a02bfd639ef392109d2068a2feb75f203613dd2}
     version: 0.1.0
     peerDependencies:
       react: '>=18'
@@ -1712,7 +1712,7 @@ snapshots:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.5.5
 
-  '@open-lzt/ui@https://codeload.github.com/open-lzt/lzt-ui/tar.gz/1b07284acb6ee0b676551c2513e8a29379042291(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
+  '@open-lzt/ui@https://codeload.github.com/open-lzt/lzt-ui/tar.gz/6a02bfd639ef392109d2068a2feb75f203613dd2(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
     dependencies:
       react: 18.3.1
       react-dom: 18.3.1(react@18.3.1)
