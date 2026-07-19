@@ -1,31 +1,33 @@
-# Architecture — lzt-flow
+<p align="right"><a href="ARCHITECTURE.en.md">English</a> · <b>Русский</b></p>
 
-lzt-flow is a **server-side, no-code automation engine** for the lzt.market marketplace. You
-describe a flow ("bump my lots on a schedule"), press Deploy, and close the tab — the flow keeps
-running 24/7 without your machine. This document contrasts that design with a typical
-client-side no-code builder, then places lzt-flow inside the wider `lzt-*` platform.
+# Архитектура — lzt-flow
+
+lzt-flow — это **серверный no-code движок автоматизации** для маркетплейса lzt.market. Вы
+описываете флоу («поднимать мои лоты по расписанию»), жмёте Deploy и закрываете вкладку — флоу
+продолжает работать 24/7 без вашей машины. Этот документ сравнивает такой дизайн с типичным
+клиентским no-code билдером, а затем помещает lzt-flow внутрь более широкой платформы `lzt-*`.
 
 ---
 
-## 1. Contrast — client-side builder vs lzt-flow
+## 1. Сравнение — клиентский билдер vs lzt-flow
 
-| Dimension | Typical client-side no-code builder | **lzt-flow** |
+| Измерение | Типичный клиентский no-code билдер | **lzt-flow** |
 |---|---|---|
-| **I/O** | Runs in the browser tab; the automation dies when the tab closes or the laptop sleeps | Server-side worker; the flow runs unattended 24/7, survives tab close and host restart |
-| **Data between layers** | Untyped JSON blobs / `dict` passed hand-to-hand between steps | Typed DTOs at every boundary; the flow compiles to an immutable, validated **FlowIR** before it can run |
-| **Errors** | Silent failure or a toast that vanishes; no record of what broke | Typed error hierarchy carrying args, structured logs with `request_id`, fail-loud at the trust boundary |
-| **Storage** | Browser `localStorage` / ephemeral memory | Durable Postgres (flows, runs, per-step state) + Redis (queues, locks, rate budgets) |
-| **Tokens** | Marketplace token held in the browser or stored in plaintext | Envelope-encrypted per tenant at rest (Fernet/AES-GCM); the DB only ever holds ciphertext |
-| **Execution** | Ephemeral; a crash loses all progress and restarts from zero | Stateful runtime with **idempotent steps** and **resume-after-restart** — a re-picked run continues from its last committed step, never double-acts |
-| **Model / catalog** | Wide generic block catalog (16+ blocks) that still needs the user to wire raw HTTP | Focused domain nodes wrapping the typed `pylzt` SDK (bump, reprice, get-my-lots, for-each-account …) — the value is depth, not width |
-| **Layers** | Monolithic frontend, no server contract | `Handler → Service → Repository → Model`, DTOs on boundaries, standing on the reusable `lzt-*` ecosystem |
+| **I/O** | Работает во вкладке браузера; автоматизация умирает при закрытии вкладки или засыпании ноутбука | Серверный воркер; флоу работает без присмотра 24/7, переживает закрытие вкладки и рестарт хоста |
+| **Данные между слоями** | Нетипизированные JSON-блобы / `dict`, передаваемые из рук в руки между шагами | Типизированные DTO на каждой границе; флоу компилируется в неизменяемый, провалидированный **FlowIR**, прежде чем сможет запуститься |
+| **Ошибки** | Тихий отказ или всплывающее уведомление, которое исчезает; никаких записей о том, что сломалось | Типизированная иерархия ошибок с аргументами, структурированные логи с `request_id`, fail-loud на границе доверия |
+| **Хранилище** | Браузерный `localStorage` / эфемерная память | Долговечный Postgres (флоу, раны, состояние по шагам) + Redis (очереди, локи, rate-бюджеты) |
+| **Токены** | Токен маркетплейса хранится в браузере или в открытом виде | Envelope-шифрование на каждого арендатора в состоянии покоя (Fernet/AES-GCM); в БД всегда только шифротекст |
+| **Выполнение** | Эфемерное; крэш теряет весь прогресс, запуск с нуля | Stateful-рантайм с **идемпотентными шагами** и **resume-after-restart** — переподхваченный ран продолжается с последнего закоммиченного шага, никогда не выполняя действие дважды |
+| **Модель / каталог** | Широкий каталог generic-блоков (16+ блоков), где пользователю всё равно приходится вручную собирать сырой HTTP | Сфокусированные доменные узлы, оборачивающие типизированный `pylzt` SDK (bump, reprice, get-my-lots, for-each-account …) — ценность в глубине, а не в ширине |
+| **Слои** | Монолитный фронтенд, никакого серверного контракта | `Handler → Service → Repository → Model`, DTO на границах, опирается на переиспользуемую экосистему `lzt-*` |
 
-The single proof this design exists to deliver: **a seller trusts a *server* flow with their
-account and gets a 24/7 autopilot that runs without their PC.**
+Единственное доказательство, ради которого существует этот дизайн: **продавец доверяет свой
+аккаунт *серверному* флоу и получает 24/7-автопилот, который работает без его ПК.**
 
 ---
 
-## 2. Runtime shape (this repo)
+## 2. Форма рантайма (этот репозиторий)
 
 ```
                         ┌──────────────┐
@@ -45,68 +47,74 @@ account and gets a 24/7 autopilot that runs without their PC.**
                                                      └──────────────────┘
 ```
 
-- **One worker process** supervises the arq run-executor, the APScheduler `on-schedule` leader,
-  and the embedded `lzt-eventus` `on-event` engine under a single graceful SIGTERM (Decision #16 —
-  no second daemon, no extra network seam). Run only one replica: the scheduler is a single leader
-  guarded by a Postgres advisory lock.
-- **Two isolated config surfaces** (Decision #24): lzt-flow's own settings use the `LZT_FLOW_*`
-  prefix and hold action-token encryption (`LZT_FLOW_MASTER_KEY`); the embedded event engine uses
-  the `LZT_*` prefix with its **own** poll-token key (`LZT_TOKEN_ENC_KEY`). They never merge.
-- **Two schema chains**: lzt-flow's own tables via Alembic (`alembic upgrade head`); lzt-eventus's
-  tables via `ensure_eventus_schema()` (create_all, checkfirst) at worker startup.
+- **Один процесс воркера** руководит arq run-executor'ом, APScheduler-лидером `on-schedule`
+  и встроенным движком `lzt-eventus` `on-event` под единым graceful SIGTERM (Решение №16 —
+  никакого второго демона, никакого лишнего сетевого шва). Запускайте только одну реплику:
+  планировщик — единственный лидер, охраняемый Postgres advisory lock'ом.
+- **Две изолированные поверхности конфига** (Решение №24): собственные настройки lzt-flow
+  используют префикс `LZT_FLOW_*` и хранят шифрование action-токенов (`LZT_FLOW_MASTER_KEY`);
+  встроенный событийный движок использует префикс `LZT_*` со **своим** ключом для poll-токенов
+  (`LZT_TOKEN_ENC_KEY`). Они никогда не смешиваются.
+- **Две цепочки схем**: собственные таблицы lzt-flow — через Alembic (`alembic upgrade head`);
+  таблицы lzt-eventus — через `ensure_eventus_schema()` (create_all, checkfirst) при старте
+  воркера.
 
 ---
 
-## 3. Platform layers — lzt-flow as one consumer of the `lzt-*` ecosystem
+## 3. Слои платформы — lzt-flow как один из потребителей экосистемы `lzt-*`
 
-lzt-flow is not a monolith vibe-coded in ten days — it **stands on reusable ecosystem
-infrastructure**. The layered view below is also the reframing statement: `open-lzt` → `open-market`,
-where lzt-flow is *one of many* consumers of the platform rather than its apex.
+lzt-flow — это не монолит, наваяленный за десять дней «на вайбе» — он **опирается на
+переиспользуемую инфраструктуру экосистемы**. Слоистое представление ниже — это ещё и
+переформулировка позиционирования: `open-lzt` → `open-market`, где lzt-flow — *один из многих*
+потребителей платформы, а не её вершина.
 
-| Layer | Name | Responsibility | State in this plan |
+| Слой | Название | Ответственность | Состояние в этом плане |
 |---|---|---|---|
-| **L0** | **Transport** — `pylzt` | Typed async SDK over lzt.market/lolzteam: OpenAPI codegen (202 methods, 230 models), token pool + per-RateClass limiter, proxy pool with circuit breaker, cursor pagination, typed error hierarchy | ✅ **built** (reused, not rewritten) |
-| **L1** | **Credential Custodian** | Per-tenant token vault + envelope encryption; scoped delegation ("act as account X" without exposing the raw token) | 🔶 **seam now** (envelope + `tenant_id` in place; vault-as-a-service is Phase 2) |
-| **L2** | **Data Fabric** | Durable Postgres model (flows, runs, IR, per-step state) + Redis (queues/locks/budgets) | ✅ **built** |
-| **L3** | **Event Fabric** — `lzt-eventus` | Self-hosted event engine over `pylzt`: polls the catalog, diffs into 38 typed `DomainEvent`s, durable Postgres log, catch-up bus with per-consumer cursor, webhook delivery (HMAC + retry + DLQ), **embeddable in-process** | ✅ **built** (reused, embedded in the worker) |
-| **L4** | **Action Gateway** | Idempotent single entry point for mutations, mirroring the event fabric | ⏳ **Phase 2** (no second consumer today — deferred, not seamed, to avoid premature indirection) |
-| **L5** | **Runtime** | IR compiler + stateful step interpreter: idempotent steps, resume-after-restart, optimistic locking; triggers `on-schedule` / `on-event` / `manual` | ✅ **built** (lzt-flow's own domain) |
-| **L6** | **Consumers** | lzt-flow's no-code canvas **plus** bots / plugins / third-party scripts that attach to the same layers | ✅ flow built; other consumers are the `open-market` vector |
+| **L0** | **Транспорт** — `pylzt` | Типизированный async SDK поверх lzt.market/lolzteam: OpenAPI-кодоген (202 метода, 230 моделей), пул токенов + лимитер по RateClass, пул прокси с circuit breaker'ом, курсорная пагинация, типизированная иерархия ошибок | ✅ **построено** (переиспользуется, а не переписывается) |
+| **L1** | **Хранитель учётных данных** | Хранилище токенов на арендатора + envelope-шифрование; scoped-делегирование («действовать от имени аккаунта X» без раскрытия сырого токена) | 🔶 **шов заложен сейчас** (envelope + `tenant_id` на месте; vault-as-a-service — Фаза 2) |
+| **L2** | **Слой данных** | Долговечная модель в Postgres (флоу, раны, IR, состояние по шагам) + Redis (очереди/локи/бюджеты) | ✅ **построено** |
+| **L3** | **Событийный слой** — `lzt-eventus` | Self-hosted событийный движок поверх `pylzt`: поллит каталог, диффит в 38 типизированных `DomainEvent`, долговечный лог в Postgres, catch-up-шина с курсором на потребителя, доставка вебхуков (HMAC + retry + DLQ), **встраивается in-process** | ✅ **построено** (переиспользуется, встроен в воркер) |
+| **L4** | **Шлюз действий** | Идемпотентная единая точка входа для мутаций, зеркально событийному слою | ⏳ **Фаза 2** (сегодня нет второго потребителя — отложено, а не заложено швом, чтобы избежать преждевременной косвенности) |
+| **L5** | **Рантайм** | Компилятор IR + stateful-интерпретатор шагов: идемпотентные шаги, resume-after-restart, оптимистичные локи; триггеры `on-schedule` / `on-event` / `manual` | ✅ **построено** (собственный домен lzt-flow) |
+| **L6** | **Потребители** | No-code канвас lzt-flow **плюс** боты / плагины / сторонние скрипты, подключающиеся к тем же слоям | ✅ флоу построен; остальные потребители — это вектор `open-market` |
 
-**Legend:** ✅ built · 🔶 seam cut now (clean internal contract, service extraction is Phase 2)
-· ⏳ deferred to Phase 2 (second consumer does not exist yet).
+**Легенда:** ✅ построено · 🔶 шов заложен сейчас (чистый внутренний контракт, выделение в сервис —
+Фаза 2) · ⏳ отложено на Фазу 2 (второго потребителя пока не существует).
 
-The reuse story matters twice: (1) it shows the flow engine sits on shared, already-built
-ecosystem infrastructure (`pylzt` L0 transport, `lzt-eventus` L3 event fabric), so the ten-day
-build is a *thin domain layer over mature plumbing*, not a from-scratch monolith; (2) it names
-`open-lzt → open-market` — a unifying layer over marketplace SDKs (lolz as the reference
-implementation, with `starvell-sdk` / playerok / FunPay as future adapters behind the same
-`BaseMarketplace` seam) — as a deliberate architectural vector, not an accident.
+История переиспользования важна дважды: (1) она показывает, что движок флоу стоит на общей,
+уже построенной инфраструктуре экосистемы (`pylzt` L0-транспорт, `lzt-eventus` L3 событийный
+слой), поэтому десятидневная сборка — это *тонкий доменный слой поверх зрелой сантехники*, а не
+монолит с нуля; (2) она называет `open-lzt → open-market` — объединяющий слой поверх SDK
+маркетплейсов (lolz как референсная реализация, с `starvell-sdk` / playerok / FunPay как будущими
+адаптерами за тем же швом `BaseMarketplace`) — осознанным архитектурным вектором, а не
+случайностью.
 
 ---
 
-## 3a. Sandbox-run vs. the existing dry-run gate
+## 3a. Sandbox-run против существующего dry-run-гейта
 
-Two different safety mechanisms exist side by side, and they are **not** the same thing:
+Рядом друг с другом существуют два разных механизма безопасности, и это **не** одно и то же:
 
-- **Sandbox-run** (`LZT_FLOW_MARKET_BASE_URL`, see [README.md](./README.md#sandbox-testing-against-a-fake-market-backend)):
-  real code executes for real, but against a fake backend (`lzt-testnet`) instead of
-  `prod-api.lzt.market`. Use case: local dev / manual end-to-end testing with a safe fake API
-  that still exercises the real HTTP call path.
-- **Dry-run gate** (`app/domain/flow_engine/dryrun.py`, unchanged by this plan): the real backend
-  is never touched at all — no HTTP call happens, only structural flow validation runs. Use case:
-  CI / pre-flight checks before a flow is allowed to run for real.
+- **Sandbox-run** (`LZT_FLOW_MARKET_BASE_URL`, см. [README.md](./README.md#sandbox-testing-against-a-fake-market-backend)):
+  реальный код по-настоящему выполняется, но против фейкового бэкенда (`lzt-testnet`) вместо
+  `prod-api.lzt.market`. Кейс использования: локальная разработка / ручное end-to-end тестирование
+  с безопасным фейковым API, который всё же прогоняет реальный путь HTTP-вызова.
+- **Dry-run-гейт** (`app/domain/flow_engine/dryrun.py`, не меняется этим планом): реальный
+  бэкенд вообще не трогается — никакого HTTP-вызова не происходит, выполняется только структурная
+  валидация флоу. Кейс использования: CI / pre-flight-проверки перед тем, как флоу разрешат
+  запуститься по-настоящему.
 
-They compose rather than overlap: a sandboxed flow (pointed at `lzt-testnet`) can still be passed
-through the existing dry-run structural gate first, unchanged — this plan does not replace or
-interact with that gate's logic, it only adds a second, independent way to redirect where real
-calls land.
+Они складываются, а не перекрываются: флоу в песочнице (направленный на `lzt-testnet`) всё так же
+может быть сначала пропущен через существующий структурный dry-run-гейт, без изменений — этот план
+не заменяет логику этого гейта и не взаимодействует с ней, он лишь добавляет второй, независимый
+способ перенаправить, куда попадают реальные вызовы.
 
-## 4. Security & correctness floor (never cut)
+## 4. Пол безопасности и корректности (никогда не срезается)
 
-Types on boundaries · DTOs between layers · idempotency on mutate endpoints (`fast-buy` is not
-natively idempotent → the node carries its own key) · envelope token encryption per tenant ·
-structured logging with `request_id` · fail-loud on invariant violations. These are correctness,
-not scale — they hold regardless of the CUT-list (see `.plans/lzt-flow/00-overview.md`).
+Типы на границах · DTO между слоями · идемпотентность на мутирующих эндпойнтах (`fast-buy` не
+идемпотентен от природы → узел несёт собственный ключ) · envelope-шифрование токенов на
+арендатора · структурированное логирование с `request_id` · fail-loud при нарушении инвариантов.
+Это про корректность, а не про масштаб — они действуют независимо от CUT-листа (см.
+`.plans/lzt-flow/00-overview.md`).
 
-See also: [README.md](./README.md) for quickstart and the demo.
+См. также: [README.md](./README.md) — быстрый старт и демо.
