@@ -164,6 +164,8 @@ async def test_a_published_task_event_reaches_the_tenant_feed(sqlite_app) -> Non
         )
 
         frames = _task_frames(TENANT, None, transport, 0.05)
+        # The opening frame is the proxy-flush byte, not data — the published event is behind it.
+        assert await frames.__anext__() == ": open\n\n"
         first = await frames.__anext__()
         await frames.aclose()
 

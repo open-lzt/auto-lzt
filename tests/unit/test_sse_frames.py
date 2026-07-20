@@ -43,10 +43,25 @@ class _OneEventThenSilence:
         await asyncio.Event().wait()
 
 
+_OPEN_FRAME = ": open\n\n"
+
+
 async def _take(frames: AsyncGenerator[str, None], count: int) -> list[str]:
     out = [frame async for frame in _limited(frames, count)]
     await frames.aclose()
     return out
+
+
+async def _take_after_open(frames: AsyncGenerator[str, None], count: int) -> list[str]:
+    """Consume the opening frame, assert it, then take ``count`` more.
+
+    Every stream now leads with ``: open`` so a buffering proxy releases the response at once
+    instead of holding it until the first heartbeat. Checking it here rather than in each test
+    keeps every test's own assertions about the frames it actually cares about — while still
+    failing all of them if that first frame ever stops arriving first.
+    """
+    assert await frames.__anext__() == _OPEN_FRAME
+    return await _take(frames, count)
 
 
 async def _limited(frames: AsyncGenerator[str, None], count: int) -> AsyncGenerator[str, None]:
@@ -69,9 +84,29 @@ async def test_an_idle_stream_keeps_beating_instead_of_ending_after_one_beat() -
     """
     frames = sse_frames("c", None, _SilentTransport(), heartbeat_s=_BEAT_S)
 
-    beats = await _take(frames, 3)
+    beats = await _take_after_open(frames, 3)
 
     assert beats == [": heartbeat\n\n"] * 3
+
+
+async def test_a_stream_writes_a_body_byte_before_it_waits_for_anything() -> None:
+    """The first frame must not depend on the channel producing something.
+
+    Response headers alone do not get a stream past a buffering proxy — vite's dev proxy and nginx
+    without ``proxy_buffering off`` both hold the whole response until a byte of the BODY arrives.
+    With nothing sent up front that byte was the first heartbeat, so "connected" silently became
+    "connected within `heartbeat_s` seconds" and the panel sat on «подключение…» for 13 of them.
+
+    The heartbeat here is long enough that any implementation waiting for it would time out instead
+    of passing — the assertion is specifically that the frame arrives WITHOUT one.
+    """
+    frames = sse_frames("c", None, _SilentTransport(), heartbeat_s=30.0)
+
+    async with asyncio.timeout(1.0):
+        first = await frames.__anext__()
+    await frames.aclose()
+
+    assert first == _OPEN_FRAME
 
 
 async def test_a_stream_delivers_an_event_and_then_stays_open() -> None:
@@ -79,7 +114,7 @@ async def test_a_stream_delivers_an_event_and_then_stays_open() -> None:
     serving heartbeats afterwards, which is what distinguishes a live feed from a one-shot read."""
     frames = sse_frames("c", None, _OneEventThenSilence(), heartbeat_s=_BEAT_S)
 
-    first, second = await _take(frames, 2)
+    first, second = await _take_after_open(frames, 2)
 
     assert first.startswith("id: e1\ndata: ")
     assert second == ": heartbeat\n\n"
@@ -95,7 +130,9 @@ async def test_closing_the_stream_releases_the_subscription() -> None:
     transport = _SilentTransport()
     frames = sse_frames("c", None, transport, heartbeat_s=_BEAT_S)
 
-    await _take(frames, 1)
+    # Past the opening frame on purpose: that frame is yielded before the subscription is ever
+    # awaited, so closing on it would prove nothing — there would be no subscription to release.
+    await _take_after_open(frames, 1)
 
     assert transport.closed
 
@@ -115,7 +152,8 @@ async def test_the_termination_rule_is_consulted_only_when_idle() -> None:
 
     collected = [frame async for frame in frames]
 
-    assert collected[0].startswith("id: e1\n"), "the buffered event was cut off by the check"
+    assert collected[0] == _OPEN_FRAME
+    assert collected[1].startswith("id: e1\n"), "the buffered event was cut off by the check"
     assert checks == 1
 
 
@@ -126,7 +164,7 @@ async def test_the_heartbeat_interval_is_honoured(heartbeat_s: float) -> None:
     frames = sse_frames("c", None, _SilentTransport(), heartbeat_s=heartbeat_s)
 
     start = asyncio.get_running_loop().time()
-    await _take(frames, 2)
+    await _take_after_open(frames, 2)
     elapsed = asyncio.get_running_loop().time() - start
 
     assert elapsed >= heartbeat_s * 2

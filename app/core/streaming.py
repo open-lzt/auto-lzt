@@ -105,6 +105,13 @@ async def sse_frames(
     per-heartbeat check it has no use for.
     """
     events = transport.subscribe(channel, last_event_id)
+    # Sent before anything is awaited, so the response has a body byte the instant it is opened.
+    # Headers alone are not enough: a proxy that buffers (vite's dev proxy does, and so does nginx
+    # until `proxy_buffering off` is set) holds the whole response back until the first byte of the
+    # BODY arrives — which, on an idle channel, is the first heartbeat. That turned "connected" into
+    # "connected in up to `heartbeat_s` seconds", and the panel sat on «подключение…» for 13s.
+    # A comment frame is inert by spec: EventSource fires `open` and never surfaces it as a message.
+    yield ": open\n\n"
     # The pending __anext__ is held across heartbeats instead of being re-awaited each pass, and
     # that is the whole reason this is a task rather than `asyncio.wait_for`. wait_for CANCELS its
     # awaitable on timeout; cancelling __anext__ throws into the generator at its suspension point
