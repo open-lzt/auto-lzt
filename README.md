@@ -32,7 +32,7 @@
 Переживает закрытую вкладку. Переживает рестарт воркера: возобновляется с последнего
 закоммиченного шага и **никогда не делает одно действие дважды**.
 
-[Архитектура](ARCHITECTURE.md) · [Плагины](docs/plugins.md) · [Модули](docs/modules.md) · [Флоу](docs/flow-design-guide.md) · [Доки для AI-агентов](docs/for_ai/) · [Issues](../../issues)
+[Архитектура](ARCHITECTURE.md) · [Плагины](docs/plugins.md) · [Модули](docs/modules.md) · [Флоу](docs/flow-design-guide.md) · [Грабли](docs/runbooks/README.md) · [Доки для AI-агентов](docs/for_ai/) · [Issues](../../issues)
 
 > Здесь должна быть GIF-демка канваса — как её записать, см. [docs/DEMO.md](docs/DEMO.md).
 

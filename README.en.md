@@ -32,7 +32,7 @@ A seller wires it once, hits Deploy — and their lots get bumped from the serve
 It survives a closed browser tab. It survives a worker restart: it resumes from the last committed
 step and **never performs an action twice**.
 
-[Architecture](ARCHITECTURE.en.md) · [Plugins](docs/plugins.en.md) · [Modules](docs/modules.en.md) · [Flows](docs/flow-design-guide.en.md) · [AI-agent docs](docs/for_ai/) · [Issues](../../issues)
+[Architecture](ARCHITECTURE.en.md) · [Plugins](docs/plugins.en.md) · [Modules](docs/modules.en.md) · [Flows](docs/flow-design-guide.en.md) · [Runbooks](docs/runbooks/README.en.md) · [AI-agent docs](docs/for_ai/) · [Issues](../../issues)
 
 > A canvas demo GIF belongs here — see [docs/DEMO.en.md](docs/DEMO.en.md) for how to capture one.
 
