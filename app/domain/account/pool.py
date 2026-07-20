@@ -28,7 +28,7 @@ from app.domain.account.crypto import EnvelopeCipher
 from app.domain.account.errors import NoAvailableAccount
 from app.domain.account.model import AccountId, AccountStatus, TenantId
 from app.domain.account.repo import AccountRepository
-from app.domain.market.adapter import MarketAdapter
+from app.domain.market.adapter import PURCHASE_TIMEOUT_S, MarketAdapter
 
 log = structlog.get_logger()
 
@@ -114,16 +114,21 @@ class TokenPool:
             if account.status is AccountStatus.EXCLUDED:
                 pool.quarantine(token_ids[account.id])
 
+        # This Client is shared and built once, so a caller cannot widen its timeout for a single
+        # call — it has to be born able to survive the slowest thing it will ever do. That is
+        # `fast-buy` at 28-31s against prod, and a purchase that times out is not a failed purchase:
+        # it is a purchase whose outcome nobody knows, on money that may already have moved. A read
+        # now waits longer before giving up, which is the cheaper of the two mistakes.
+        overrides: dict[str, object] = {"request_timeout": PURCHASE_TIMEOUT_S}
         # Testnet override must reach the POOLED worker path too — otherwise a run scheduled with
         # LZT_FLOW_MARKET_BASE_URL set still hits real prod-api.lzt.market. Both market and forum
         # hosts are redirected so forum-scoped methods don't leak past the mock either.
         if self._market_base_url is not None:
-            config = ClientConfig(
-                base_url=self._market_base_url, forum_base_url=self._market_base_url
-            )
-            client = Client(token_pool=pool, config=config)
-        else:
-            client = Client(token_pool=pool)
+            overrides |= {
+                "base_url": self._market_base_url,
+                "forum_base_url": self._market_base_url,
+            }
+        client = Client(token_pool=pool, config=ClientConfig(**overrides))
         log.info(
             "token_pool_built",
             tenant_id=str(tenant_id),

@@ -14,11 +14,13 @@ from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
 import pytest
+from pylzt import ClientConfig
 
 import app.domain.account.pool as pool_mod
 from app.domain.account.errors import NoAvailableAccount
 from app.domain.account.model import Account, AccountId, AccountStatus, TenantId
 from app.domain.account.pool import TokenPool
+from app.domain.market.adapter import PURCHASE_TIMEOUT_S
 
 
 class _FakeSession:
@@ -184,10 +186,16 @@ async def test_market_base_url_reaches_pooled_client_config(
     assert config.forum_base_url == testnet
 
 
-async def test_no_market_base_url_leaves_pooled_client_default(
+async def test_no_market_base_url_still_widens_the_purchase_timeout(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Without an override the pooled Client is built with no config (real prod hosts)."""
+    """Without a testnet override the pooled Client keeps the real prod hosts — but it is still
+    built with a config, because the timeout is not negotiable.
+
+    A shared Client cannot be widened for one call, so it has to be born able to outlast the
+    slowest thing it does: ``fast-buy`` takes 28-31s against prod and the SDK default is 30s. That
+    edge already cost a purchase that completed while the client reported failure.
+    """
     captured: list[dict[str, object]] = []
     monkeypatch.setattr(pool_mod, "RoundRobinTokenPool", lambda tokens, **kw: _FakePool(tokens))
     monkeypatch.setattr(pool_mod, "Client", lambda **kwargs: captured.append(kwargs) or MagicMock())
@@ -202,4 +210,7 @@ async def test_no_market_base_url_leaves_pooled_client_default(
     pool = TokenPool(_fake_sessionmaker, cipher)  # type: ignore[arg-type]
     await pool.acquire(tenant_id)
 
-    assert captured and "config" not in captured[-1]
+    config = captured[-1].get("config")
+    assert config is not None, "pooled Client built without a config — purchase timeout lost"
+    assert config.request_timeout == PURCHASE_TIMEOUT_S
+    assert config.base_url == ClientConfig().base_url, "prod hosts must be untouched"
