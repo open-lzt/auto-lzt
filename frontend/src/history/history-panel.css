@@ -36,14 +36,14 @@
 
 .history__heading {
   margin: 0;
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 600;
   color: var(--text-faint);
   letter-spacing: 0.02em;
 }
 
 .history__trace-meta {
-  font-size: 13px;
+  font-size: 14px;
   color: var(--text-muted);
   font-variant-numeric: tabular-nums;
 }
@@ -52,7 +52,7 @@
   border: none;
   background: transparent;
   color: var(--accent);
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 600;
   padding: 2px 6px;
   border-radius: var(--radius-sm);
@@ -70,7 +70,7 @@
 
 .history__error {
   margin: 0;
-  font-size: 13px;
+  font-size: 14px;
   color: var(--danger);
 }
 
@@ -110,7 +110,7 @@
 
 .history__status {
   flex-shrink: 0;
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 600;
   padding: 3px 8px;
   border-radius: var(--radius-sm);

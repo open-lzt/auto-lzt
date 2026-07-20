@@ -14,6 +14,10 @@ import "@xyflow/react/dist/style.css";
 // Order is load-bearing: the design system's tokens must land BEFORE index.css, which aliases this
 // app's own token names onto them. Reversed, the aliases resolve against nothing.
 import "@open-lzt/ui/lzt-ui.css";
+// The icon sprite injects the <symbol id="i-*"> set into the document on import. Without it
+// every <Icon name="…"> renders an empty <svg><use href="#i-…"> — no error, no glyph, just a
+// gap. A side-effect import: it exports nothing, so it must never be tree-shaken away.
+import "@open-lzt/ui/lzt-icons.js";
 import "./index.css";
 
 const rootEl = document.getElementById("root");

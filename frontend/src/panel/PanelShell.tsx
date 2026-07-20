@@ -1,5 +1,6 @@
-import { Container, Shell, Tabs, ThemeToggle, Topbar } from "@open-lzt/ui";
+import { Container, Icon, Shell, Tabs, Topbar } from "@open-lzt/ui";
 import { useEffect, useState, type ReactNode } from "react";
+import { ThemeToggle } from "../components/ThemeToggle";
 import { fetchPanelTabs, type PanelTab } from "./tabs";
 import "./panel-shell.css";
 
@@ -46,7 +47,17 @@ export function PanelShell({ renderTab, supported, headerRight }: PanelShellProp
           </span>
           {tabs && tabs.length > 0 && active ? (
             <Tabs
-              items={tabs.map((tab) => ({ value: tab.key, label: tab.title }))}
+              // The backend has always named an icon per tab; nothing rendered it, so the whole
+              // strip read as bare text. A tab without one still renders — just its title.
+              items={tabs.map((tab) => ({
+                value: tab.key,
+                label: (
+                  <span className="panel-shell__tab-label">
+                    {tab.icon ? <Icon name={tab.icon} size={15} /> : null}
+                    {tab.title}
+                  </span>
+                ),
+              }))}
               value={active}
               onChange={setActive}
               className="panel-shell__tabs"

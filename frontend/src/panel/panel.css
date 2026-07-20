@@ -27,7 +27,7 @@
 }
 
 .panel-live {
-  font-size: 12px;
+  font-size: 14px;
   color: var(--lzt-text-dim);
   display: inline-flex;
   align-items: center;
@@ -152,7 +152,7 @@
 }
 
 .task-card__countdown-label {
-  font-size: 12px;
+  font-size: 14px;
   color: var(--lzt-text-dim);
 }
 
@@ -161,7 +161,7 @@
   flex-direction: column;
   gap: 8px;
   margin: 0;
-  font-size: 12px;
+  font-size: 14px;
 }
 
 .task-card__meta-row {
@@ -189,7 +189,7 @@
 
 .task-card__cron {
   font-family: var(--lzt-font-mono, ui-monospace, monospace);
-  font-size: 11px;
+  font-size: 14px;
   color: var(--lzt-text-dim);
   background: var(--lzt-surface-2);
   border-radius: 6px;

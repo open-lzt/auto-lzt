@@ -104,7 +104,7 @@ button {
 
 .empty-prompt__hint {
   margin: 0;
-  font-size: 13px;
+  font-size: 14px;
   color: var(--text-muted);
   line-height: 1.5;
 }
@@ -117,7 +117,7 @@ button {
   border-radius: var(--radius-sm);
   background: var(--surface-2);
   color: var(--text);
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
   transition: background 140ms ease-out, border-color 140ms ease-out;
 }

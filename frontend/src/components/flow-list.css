@@ -17,7 +17,7 @@
 }
 
 .flow-list__heading {
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 600;
   color: var(--text-faint);
   letter-spacing: 0.02em;
@@ -39,7 +39,7 @@
   border: none;
   background: transparent;
   color: var(--accent);
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 600;
   padding: 4px 6px;
   border-radius: var(--radius-sm);
@@ -59,7 +59,7 @@
 .flow-list__loading,
 .flow-list__empty,
 .flow-list__error {
-  font-size: 12px;
+  font-size: 14px;
   color: var(--text-faint);
   padding: 0 6px;
 }
@@ -121,7 +121,7 @@
   border: 1px solid var(--border-strong);
   background: var(--surface-2);
   color: var(--text);
-  font-size: 13px;
+  font-size: 14px;
 }
 
 .flow-list__actions {
@@ -140,7 +140,7 @@
   background: transparent;
   color: var(--text-faint);
   border-radius: var(--radius-sm);
-  font-size: 12px;
+  font-size: 14px;
   transition: background 140ms ease-out, color 140ms ease-out;
 }
 

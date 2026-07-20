@@ -6,7 +6,7 @@
   border-radius: 999px;
   background: var(--surface-2);
   border: 1px solid var(--border);
-  font-size: 12px;
+  font-size: 14px;
   color: var(--text-muted);
   font-variant-numeric: tabular-nums;
   transition: background 200ms ease-out, border-color 200ms ease-out;

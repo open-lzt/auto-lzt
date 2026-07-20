@@ -40,12 +40,17 @@ export type UiWidget =
   | "select"
   | "lot_ref"
   | "secret"
-  | "account_ref";
+  | "account_ref"
+  | "category_picker";
 
 export interface JsonSchemaUi {
   widget?: UiWidget;
   step?: number;
   unit?: string;
+  /** Human captions for an enum's values. JSON Schema has nowhere to put them, so a cron-valued
+   * enum would render its raw expression instead of «Каждые 30 минут». This is the ONE way a
+   * choice gets a label — do not grow a second. */
+  options?: { value: string; label: string }[];
 }
 
 export interface JsonSchema {

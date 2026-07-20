@@ -14,7 +14,7 @@
 
 .run-trace-view__empty,
 .run-trace-view__error {
-  font-size: 13px;
+  font-size: 14px;
   color: var(--text-faint);
 }
 
@@ -34,7 +34,7 @@
 
 .run-trace-view__branch-label {
   display: block;
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 600;
   color: var(--accent);
   letter-spacing: 0.02em;
@@ -83,7 +83,7 @@
 }
 
 .run-trace-view__step-live-badge {
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 600;
   color: var(--accent);
   letter-spacing: 0.04em;
@@ -101,7 +101,7 @@
 
 .run-trace-view__step-block-title {
   display: block;
-  font-size: 12px;
+  font-size: 14px;
   color: var(--text-faint);
   margin-bottom: 2px;
 }
@@ -112,7 +112,7 @@
   border-radius: var(--radius-sm);
   background: var(--surface-2);
   color: var(--text-muted);
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.5;
   overflow-x: auto;
   white-space: pre;

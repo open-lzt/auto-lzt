@@ -12,7 +12,7 @@
   background: var(--accent);
   color: var(--accent-ink);
   font-weight: 600;
-  font-size: 13px;
+  font-size: 14px;
   transition:
     background 140ms ease-out,
     transform 140ms ease-out,
@@ -33,7 +33,7 @@
 }
 
 .deploy__error {
-  font-size: 12px;
+  font-size: 14px;
   color: var(--danger);
   max-width: 360px;
 }

@@ -27,7 +27,7 @@
 
 .auth-gate__subtitle {
   margin: -8px 0 4px;
-  font-size: 13px;
+  font-size: 14px;
   color: var(--text-faint);
 }
 
@@ -52,7 +52,7 @@
 
 .auth-gate__error {
   margin: 0;
-  font-size: 12px;
+  font-size: 14px;
   color: var(--danger);
 }
 
@@ -63,7 +63,7 @@
   background: var(--accent);
   color: var(--accent-ink);
   font-weight: 600;
-  font-size: 13px;
+  font-size: 14px;
   transition: background 140ms ease-out, opacity 140ms ease-out;
 }
 

@@ -17,7 +17,7 @@
 }
 
 .sidebar__heading {
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 600;
   color: var(--text-faint);
   letter-spacing: 0.02em;
@@ -33,7 +33,7 @@
   background: transparent;
   color: var(--text);
   border-radius: var(--radius-sm);
-  font-size: 13px;
+  font-size: 14px;
   text-align: left;
   transition: background 140ms ease-out;
 }
@@ -67,7 +67,7 @@
 
 .sidebar__loading,
 .sidebar__error {
-  font-size: 12px;
+  font-size: 14px;
   color: var(--text-faint);
   padding: 0 6px;
 }
