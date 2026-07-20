@@ -21,7 +21,7 @@ from typing import Any, Final
 from uuid import UUID
 
 import structlog
-from pylzt import AuthFailed, Client, ClientConfig, RateLimited, TransportError
+from pylzt import AuthFailed, Client, ClientConfig, Forbidden, RateLimited, TransportError
 from pylzt.types import Currency, ItemOrigin, OrderBy
 
 from app.domain.account.model import AccountId
@@ -35,7 +35,7 @@ from app.domain.market.dtos import (
     SearchHit,
     SearchResult,
 )
-from app.domain.market.errors import MarketApiError, TokenInvalid
+from app.domain.market.errors import LotUnavailable, MarketApiError, TokenInvalid
 
 logger = structlog.get_logger()
 
@@ -173,10 +173,17 @@ class MarketAdapter:
         """
         if dry_run:
             return FastBuyResult(item_id=item_id, price=0, purchased=False)
-        response = await self._call(
-            lambda client: client.market.purchasing_fast_buy(item_id=item_id),
-            timeout_s=_PURCHASE_TIMEOUT_S,
-        )
+        try:
+            response = await self._call(
+                lambda client: client.market.purchasing_fast_buy(item_id=item_id),
+                timeout_s=_PURCHASE_TIMEOUT_S,
+            )
+        except Forbidden as exc:
+            # 403 here is the marketplace declining THIS lot, not rejecting us: already queued by
+            # another buyer, already sold, or not purchasable by this account. Surfacing it as a
+            # transport error made a sniper abort its whole run on the first contested lot — and on
+            # cheap lots that is the normal case, not the exception.
+            raise LotUnavailable(item_id, exc.reason or "") from exc
         return FastBuyResult(
             item_id=response.item.item_id, price=response.item.price, purchased=True
         )

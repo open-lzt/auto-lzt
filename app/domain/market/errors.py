@@ -22,6 +22,28 @@ class MarketApiError(AppError):
         return "Upstream marketplace error"
 
 
+class LotUnavailable(AppError):
+    """This lot cannot be bought right now, but the marketplace is fine and so is the token.
+
+    The common case is a race the marketplace answers with 403: "Аккаунт находится в очереди на
+    автоматическую покупку" — someone else's sniper already queued it. Cheap lots are contested, so
+    on any real sniper run most candidates come back like this. It is a fact about one lot, not a
+    failure of the run, which is why it is a separate error from ``MarketApiError``.
+    """
+
+    status_code = 409
+    code = ErrorCode.MARKET_API_ERROR
+
+    def __init__(self, item_id: int, reason: str = "") -> None:
+        super().__init__(f"lot {item_id} unavailable")
+        self.item_id = item_id
+        self.reason = reason
+
+    @property
+    def client_message(self) -> str:
+        return "Lot is not available for purchase"
+
+
 class TokenInvalid(AppError):
     """An account's token was rejected as invalid/banned by the marketplace."""
 

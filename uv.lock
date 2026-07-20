@@ -1016,6 +1016,7 @@ dependencies = [
     { name = "fastapi" },
     { name = "httpx" },
     { name = "lzt-eventus", extra = ["engine"] },
+    { name = "packaging" },
     { name = "psycopg", extra = ["binary"] },
     { name = "pydantic" },
     { name = "pydantic-settings" },
@@ -1062,6 +1063,7 @@ requires-dist = [
     { name = "lzt-flow-demo-plugin", marker = "extra == 'dev'", editable = "tests/fixtures/plugin_pkg" },
     { name = "lzt-flow-demo-runtime", marker = "extra == 'dev'", editable = "tests/fixtures/plugin_runtime_pkg" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.10" },
+    { name = "packaging", specifier = ">=24.0" },
     { name = "psycopg", extras = ["binary"], specifier = ">=3.1" },
     { name = "pydantic", specifier = ">=2.7" },
     { name = "pydantic-settings", specifier = ">=2.3" },
@@ -1648,8 +1650,8 @@ wheels = [
 
 [[package]]
 name = "pylzt"
-version = "0.1.0"
-source = { git = "https://github.com/open-lzt/pylzt.git?branch=main#b04347319f818a1a550e79edaef289896e3be010" }
+version = "0.1.2"
+source = { git = "https://github.com/open-lzt/pylzt.git?branch=main#189461f81e7cb4d2dca29f8fe1730e88bc7c32c7" }
 dependencies = [
     { name = "httpx", extra = ["socks"] },
     { name = "pydantic" },

@@ -13,12 +13,16 @@ buys the same lot twice.
 
 from __future__ import annotations
 
+import structlog
 from pydantic import Field
 
 from app.core.schema import BaseSchema
 from app.domain.catalog.capabilities import MARKET_MUTATE_MONEY, NodeCategory
 from app.domain.flow_engine.base_node import BaseNode, RunContext
 from app.domain.flow_engine.dtos import StepResultDTO
+from app.domain.market.errors import LotUnavailable
+
+logger = structlog.get_logger()
 
 
 class FastBuyInput(BaseSchema):
@@ -35,6 +39,12 @@ class FastBuyOutput(BaseSchema):
     item_id: int
     price: int
     purchased: bool
+    unavailable_reason: str = Field(
+        default="",
+        title="Почему не куплен",
+        description="Заполняется, когда маркет отказал именно по этому лоту — например он уже в "
+        "очереди на покупку у другого снайпера. Прогон при этом продолжается.",
+    )
 
 
 def _as_int(value: str | int | float | bool | None, port: str) -> int:
@@ -76,12 +86,32 @@ class FastBuyNode(BaseNode):
             )
 
         account_ref = ctx.active_account_id or ctx.node.account_ref
-        if account_ref is not None:
-            account = await ctx.deps.load_account(ctx.tenant_id, account_ref)
-            result = await ctx.deps.market.fast_buy(item_id, account, dry_run=dry_run)
-        else:
-            result = await ctx.deps.market.fast_buy_via_pool(
-                ctx.tenant_id, item_id, dry_run=dry_run
+        try:
+            if account_ref is not None:
+                account = await ctx.deps.load_account(ctx.tenant_id, account_ref)
+                result = await ctx.deps.market.fast_buy(item_id, account, dry_run=dry_run)
+            else:
+                result = await ctx.deps.market.fast_buy_via_pool(
+                    ctx.tenant_id, item_id, dry_run=dry_run
+                )
+        except LotUnavailable as exc:
+            # Not a failure of the run: this one lot cannot be bought right now, usually because a
+            # competing sniper queued it first. Cheap lots are contested, so aborting here meant a
+            # sniper died on its first candidate and never reached the second.
+            logger.info(
+                "fast_buy_lot_unavailable",
+                item_id=item_id,
+                reason=exc.reason,
+                node_id=ctx.node.id,
+            )
+            return StepResultDTO(
+                node_id=ctx.node.id,
+                output={
+                    "item_id": item_id,
+                    "price": 0,
+                    "purchased": False,
+                    "unavailable_reason": exc.reason or "маркет отказал по этому лоту",
+                },
             )
 
         return StepResultDTO(
@@ -90,5 +120,6 @@ class FastBuyNode(BaseNode):
                 "item_id": result.item_id,
                 "price": result.price,
                 "purchased": result.purchased,
+                "unavailable_reason": "",
             },
         )
