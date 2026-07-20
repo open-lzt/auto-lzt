@@ -11,6 +11,7 @@ import {
   type Node,
   type OnConnect,
 } from "@xyflow/react";
+import { useDocumentTheme } from "../ui/useDocumentTheme";
 import { useCallback, useEffect, useMemo, useState, type MouseEvent } from "react";
 import { fetchCatalog, type CatalogNode, type TriggerKind } from "../api/flowClient";
 import { Loader } from "../components/Loader";
@@ -76,6 +77,7 @@ export function FlowCanvas({
   emptyHint = "Соберите флоу: начните с триггера слева, затем добавьте действия.",
   readOnly = false,
 }: FlowCanvasProps) {
+  const theme = useDocumentTheme();
   const [catalog, setCatalog] = useState<CatalogNode[] | null>(null);
   const [catalogError, setCatalogError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -278,7 +280,11 @@ export function FlowCanvas({
           // Selection stays on in preview: clicking a node opens the inspector, which is how the
           // graph is read. Only the edits are withheld.
           deleteKeyCode={readOnly ? null : ["Backspace", "Delete"]}
-          colorMode="dark"
+          // React Flow paints its own chrome (background dots, controls, minimap, edge defaults)
+          // from an internal palette this app's tokens cannot reach, so it needs telling the theme
+          // separately. Left hardcoded to "dark" it stayed dark inside a light page — the one place
+          // the token migration could not fix by aliasing.
+          colorMode={theme}
           fitView
           proOptions={{ hideAttribution: true }}
         >

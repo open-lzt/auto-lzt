@@ -22,22 +22,22 @@
 
 .live-badge--live {
   color: var(--text);
-  border-color: rgba(74, 222, 128, 0.3);
+  border-color: color-mix(in srgb, var(--success) 30%, transparent);
 }
 
 .live-badge--live .live-badge__dot {
   background: var(--success);
-  box-shadow: 0 0 0 3px rgba(74, 222, 128, 0.18);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--success) 18%, transparent);
   animation: live-pulse 2s ease-in-out infinite;
 }
 
 @keyframes live-pulse {
   0%,
   100% {
-    box-shadow: 0 0 0 3px rgba(74, 222, 128, 0.18);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--success) 18%, transparent);
   }
   50% {
-    box-shadow: 0 0 0 5px rgba(74, 222, 128, 0.1);
+    box-shadow: 0 0 0 5px color-mix(in srgb, var(--success) 10%, transparent);
   }
 }
 

@@ -21,7 +21,7 @@
 
 .flow-node.has-error {
   border-color: var(--danger);
-  box-shadow: 0 0 0 3px rgba(248, 113, 113, 0.18);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--danger) 18%, transparent);
 }
 
 .flow-node__head {
@@ -82,7 +82,7 @@
   margin: 0 12px 10px;
   padding: 6px 8px;
   border-radius: var(--radius-sm);
-  background: rgba(248, 113, 113, 0.12);
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
   color: var(--danger);
   font-size: 12px;
   line-height: 1.4;

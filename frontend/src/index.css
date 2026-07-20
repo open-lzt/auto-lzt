@@ -1,23 +1,24 @@
 :root {
-  --bg: #0a0a0b;
-  --surface-1: #101012;
-  --surface-2: #17171a;
-  --surface-3: #202024;
-  --border: rgba(255, 255, 255, 0.08);
-  --border-strong: rgba(255, 255, 255, 0.14);
-  --text: #e8e8e8;
-  --text-muted: #9a9aa1;
-  --text-faint: #6b6b72;
-  /* Lolzteam ("zelenka") brand accent — grass green. Single source of truth: every accented
-     surface (Deploy, focus ring, loader, handles, selected edges) reads --accent. */
-  --accent: #7cc142;
-  --accent-hover: #8bd04f;
-  --accent-dim: rgba(124, 193, 66, 0.16);
-  --accent-ink: #0a0a0b;
-  --success: #4ade80;
-  --danger: #f87171;
+  /* Alias layer onto @open-lzt/ui's --lzt-* tokens (loaded before this file, see main.tsx) —
+     every canvas/*.css rule keeps saying var(--bg) etc. unchanged; only this block moved. */
+  --bg: var(--lzt-bg);
+  --surface-1: var(--lzt-surface);
+  --surface-2: var(--lzt-raised);
+  --surface-3: var(--lzt-overlay);
+  --border: var(--lzt-border);
+  --border-strong: var(--lzt-border-mid);
+  --text: var(--lzt-text);
+  --text-muted: var(--lzt-text-muted);
+  --text-faint: var(--lzt-text-dim);
+  --accent: var(--lzt-brand);
+  --accent-hover: var(--lzt-brand-hi);
+  --accent-dim: var(--lzt-brand-a20);
+  --accent-ink: var(--lzt-text-on-brand);
+  --success: var(--lzt-success);
+  --danger: var(--lzt-danger);
 
-  /* trigger = the flow's origin, painted in the brand accent; action/logic stay distinct hues */
+  /* trigger = the flow's origin, painted in the brand accent (inherits the --accent alias
+     above); action/logic have no kit equivalent, so they stay hand-picked literals. */
   --cat-trigger: var(--accent);
   --cat-trigger-dim: var(--accent-dim);
   --cat-action: #6e8bff;
@@ -25,11 +26,17 @@
   --cat-logic: #f0b429;
   --cat-logic-dim: rgba(240, 180, 41, 0.16);
 
-  --radius-sm: 8px;
-  --radius-md: 12px;
-  --radius-lg: 16px;
+  --radius-sm: var(--lzt-r-sm);
+  --radius-md: var(--lzt-r-md);
+  --radius-lg: var(--lzt-r-lg);
 
   color-scheme: dark;
+}
+
+/* ThemeProvider (main.tsx) stamps data-theme on <html> — color-scheme must follow it or the
+   browser paints native scrollbars/form chrome for the wrong theme. */
+:root[data-theme="light"] {
+  color-scheme: light;
 }
 
 * {

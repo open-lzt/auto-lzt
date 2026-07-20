@@ -30,7 +30,7 @@
 
 .autoform__error {
   font-size: 11px;
-  color: #e5484d;
+  color: var(--danger);
 }
 
 /* Slider control: range track + live numeric readout. */
