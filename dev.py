@@ -188,8 +188,30 @@ def _maybe_mock_market(enabled: bool):  # type: ignore[no-untyped-def]
         return
     import respx
     from httpx import Response
+    from pylzt.models.market import ListUserItem, ListUserResponse
+
+    from tests.fixtures.mock_lzt_server import minimal_instance
+
+    # `get-my-lots` decodes into ListUserResponse, whose ~30 required fields the flat status payload
+    # does not satisfy — so against the catch-all alone the autobump preset died at its first step
+    # with a validation error, and the panel's headline flow could not complete in the one
+    # environment someone cloning this repo actually runs. Built from the models' own fields rather
+    # than hand-typing ~80 of them, reusing the test double's builder so there is one copy.
+    item = minimal_instance(ListUserItem).model_dump(mode="json")
+    lots = minimal_instance(ListUserResponse).model_dump(mode="json")
+    lots["items"] = [
+        {**item, "item_id": item_id, "title": f"Демо-лот {n}"}
+        for n, item_id in enumerate((1010101, 1010102, 1010103), start=1)
+    ]
+    lots["totalItems"] = len(lots["items"])
+    lots["hasNextPage"] = False
 
     with respx.mock(assert_all_called=False) as router:
+        # Registered before the catch-all: respx takes the first matching route, so the specific
+        # path has to come first or the generic one swallows it.
+        router.route(host="prod-api.lzt.market", method="GET", path="/user/items").mock(
+            return_value=Response(200, json=lots)
+        )
         router.route(host="prod-api.lzt.market").mock(
             return_value=Response(200, json={"status": "ok", "message": "done"})
         )
