@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from functools import lru_cache
 from pathlib import Path
+from typing import Annotated
 
 from pydantic import Field, field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -83,11 +84,26 @@ class Settings(BaseSettings):
     # means production pylzt behavior is unchanged; set to opt into testnet mode.
     market_base_url: str | None = Field(default=None)
 
+    @field_validator("market_base_url", mode="before")
+    @classmethod
+    def _blank_is_unset(cls, value: object) -> object:
+        """An empty env var means "not configured", not "configure me with an empty URL".
+
+        Rendered config files write `LZT_FLOW_MARKET_BASE_URL=` when there is no testnet to point
+        at, and pydantic read that as the string `""` — a value, so the default never applied. The
+        SDK then built requests against an empty base and failed with "Request URL is missing an
+        'http://' or 'https://' protocol", which names the symptom three layers away from the cause.
+        """
+        return None if isinstance(value, str) and not value.strip() else value
+
     # The complete set of hosts a request node may reach. EMPTY BY DEFAULT: an unconfigured
     # deployment must reach nothing, so that forgetting to configure the fence fails closed rather
     # than silently opening this host's private network to third-party flow modules. Bootstrap adds
     # api.telegram.org. Comma-separated in the environment.
-    egress_allowed_hosts: frozenset[str] = Field(default=frozenset())
+    # NoDecode: pydantic-settings JSON-decodes a complex type (frozenset) inside the env source,
+    # BEFORE any validator runs — so without it `api.telegram.org` dies as invalid JSON and the
+    # validator below never sees the string it exists to split.
+    egress_allowed_hosts: Annotated[frozenset[str], NoDecode] = Field(default=frozenset())
 
     @field_validator("egress_allowed_hosts", mode="before")
     @classmethod

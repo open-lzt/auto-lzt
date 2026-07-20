@@ -79,13 +79,13 @@ async def _check_redis(redis: Redis | None) -> bool:
 @router.get("/health")
 async def health(request: Request, response: Response) -> HealthResponse:
     state = request.app.state
-    db_ok = await _check_db(getattr(state, "sessionmaker", None))
-    redis_ok = await _check_redis(getattr(state, "redis", None))
+    db_ok = await _check_db(state.sessionmaker)
+    redis_ok = await _check_redis(state.redis)
     ready = db_ok and redis_ok
     if not ready:
         response.status_code = http_status.HTTP_503_SERVICE_UNAVAILABLE
     return HealthResponse(
         status="ok" if ready else "degraded",
-        eventus=_eventus_health(getattr(state, "eventus_engine", None)),
+        eventus=_eventus_health(state.eventus_engine),
         dependencies=DependencyHealth(database=db_ok, redis=redis_ok),
     )

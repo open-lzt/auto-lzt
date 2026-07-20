@@ -739,7 +739,11 @@ async def _run_node(
             result = await instance.execute(ctx)
     except Exception as exc:  # noqa: BLE001 — node.execute() boundary: any node failure (typed
         # or not) must become one typed RunFailed here; this is the single documented catch-all.
-        raise RunFailed(run.id, node.id, str(exc)) from exc
+        # `repr`, not `str`: this project's own convention is that exceptions carry ARGS rather
+        # than pre-formatted text, so `str(MarketApiError(status=403))` is the empty string. A real
+        # prod purchase failure surfaced as "failed at step buy:" with nothing after the colon —
+        # the one place the cause had to survive is the one place it was thrown away.
+        raise RunFailed(run.id, node.id, repr(exc)) from exc
     await steps.complete_step(run.id, node.id, iteration_key, result)
     return result
 

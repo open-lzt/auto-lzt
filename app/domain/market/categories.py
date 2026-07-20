@@ -11,6 +11,7 @@ to know what the marketplace sells, and the API layer's job to serialize the ans
 
 from __future__ import annotations
 
+from enum import StrEnum
 from typing import NamedTuple
 
 import pylzt
@@ -19,6 +20,42 @@ import pylzt
 class MarketCategory(NamedTuple):
     slug: str
     label: str
+
+
+class SearchableCategory(StrEnum):
+    """The categories ``market.search`` can actually query.
+
+    Narrower than ``MARKET_CATEGORIES`` on purpose: the label map covers everything the market
+    sells, but the pylzt facade only exposes a ``category_*`` method for these. ``mihoyo``, ``wot``,
+    ``wotblitz``, ``vkontakte`` and ``other`` are labelled and unsearchable — listing them here
+    would surface a picker entry that fails at call time.
+
+    Being an enum is what makes it one source of truth: the JSON schema emits the choices for the
+    picker, ``MarketAdapter._CATEGORY_METHODS`` is keyed by it, and ``SearchableCategory(raw)``
+    rejects an unknown slug in the node — no parallel frozenset to drift.
+    """
+
+    STEAM = "steam"
+    FORTNITE = "fortnite"
+    RIOT = "riot"
+    TELEGRAM = "telegram"
+    DISCORD = "discord"
+    ROBLOX = "roblox"
+    EPICGAMES = "epicgames"
+    BATTLENET = "battlenet"
+    EA = "ea"
+    ESCAPEFROMTARKOV = "escapefromtarkov"
+    GIFTS = "gifts"
+    INSTAGRAM = "instagram"
+    MINECRAFT = "minecraft"
+    SOCIALCLUB = "socialclub"
+    SUPERCELL = "supercell"
+    TIKTOK = "tiktok"
+    UPLAY = "uplay"
+    VPN = "vpn"
+    WARFACE = "warface"
+    HYTALE = "hytale"
+    LLM = "llm"
 
 
 # Keyed by the pylzt Category value (slug). Order is display order in the picker.

@@ -64,6 +64,7 @@ class FlowInvokeResponse(BaseSchema):
 class FlowSummary(BaseSchema):
     flow_id: str
     name: str
+    compiled: bool
 
 
 class FlowDetailResponse(BaseSchema):
@@ -160,7 +161,13 @@ async def list_flows(
     svc: FlowService = Depends(_flow_service),
 ) -> list[FlowSummary]:
     flows = await svc.list(tenant_id)
-    return [FlowSummary(flow_id=str(flow.id), name=flow.name) for flow in flows]
+    # ponytail: one is_compiled query per flow — fine at self-host scale (a handful of flows per
+    # tenant); batch via a single IN-query on FlowIrRepository if a tenant's flow count grows.
+    summaries = []
+    for flow in flows:
+        compiled = await svc.is_compiled(tenant_id, flow.id)
+        summaries.append(FlowSummary(flow_id=str(flow.id), name=flow.name, compiled=compiled))
+    return summaries
 
 
 @router.get("/{flow_id}/get", dependencies=protect())

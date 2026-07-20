@@ -311,7 +311,7 @@ def _compile_batch_children(
         child_cls = registry.get(child.type)
         if child_cls is None:
             raise CompileError(f"unknown node type '{child.type}'", child.id)
-        if not getattr(child_cls, "batchable", False):
+        if not child_cls.batchable:
             raise CompileError(
                 f"node type '{child.type}' (child '{child.id}') is not batchable", node.id
             )

@@ -9,7 +9,15 @@ from app.domain.account.exclusion import AccountExcluder
 from app.domain.account.model import Account, TenantId
 from app.domain.account.pool import TokenPool
 from app.domain.market.adapter import MarketAdapter
-from app.domain.market.dtos import BumpResult, LotsPage, RelistResult, RepriceResult
+from app.domain.market.categories import SearchableCategory
+from app.domain.market.dtos import (
+    BumpResult,
+    FastBuyResult,
+    LotsPage,
+    RelistResult,
+    RepriceResult,
+    SearchResult,
+)
 from app.domain.market.errors import TokenInvalid
 
 
@@ -93,6 +101,48 @@ class MarketService:
             title=title,
             description=description,
         )
+
+    async def search_category(
+        self, account: Account, *, category: SearchableCategory, pmax: float
+    ) -> SearchResult:
+        """Search one market category on behalf of one explicit account."""
+        token = self._cipher.decrypt(account.encrypted_token, account.tenant_id)
+        adapter = MarketAdapter(token=token, account_id=account.id, base_url=self._market_base_url)
+        return await adapter.search_category(category=category, pmax=pmax)
+
+    async def search_category_via_pool(
+        self, tenant_id: TenantId, *, category: SearchableCategory, pmax: float
+    ) -> SearchResult:
+        """Search using the tenant's pooled Client — a read, so any token in the pool will do."""
+        if self._pool is None:
+            raise RuntimeError("MarketService.search_category_via_pool requires a TokenPool")
+        adapter = await self._pool.acquire(tenant_id)
+        try:
+            return await adapter.search_category(category=category, pmax=pmax)
+        except TokenInvalid as exc:
+            if self._excluder is not None:
+                await self._excluder.exclude_account(tenant_id, exc.account_id)
+            raise
+
+    async def fast_buy(self, item_id: int, account: Account, *, dry_run: bool) -> FastBuyResult:
+        """Buy one lot on behalf of one explicit account — the money path is always pinned."""
+        token = self._cipher.decrypt(account.encrypted_token, account.tenant_id)
+        adapter = MarketAdapter(token=token, account_id=account.id, base_url=self._market_base_url)
+        return await adapter.fast_buy(item_id, dry_run=dry_run)
+
+    async def fast_buy_via_pool(
+        self, tenant_id: TenantId, item_id: int, *, dry_run: bool
+    ) -> FastBuyResult:
+        """Buy using the tenant's pooled Client — whichever token pays, pays."""
+        if self._pool is None:
+            raise RuntimeError("MarketService.fast_buy_via_pool requires a TokenPool")
+        adapter = await self._pool.acquire(tenant_id)
+        try:
+            return await adapter.fast_buy(item_id, dry_run=dry_run)
+        except TokenInvalid as exc:
+            if self._excluder is not None:
+                await self._excluder.exclude_account(tenant_id, exc.account_id)
+            raise
 
     async def list_my_lots_page(self, account: Account, *, page: int) -> LotsPage:
         """One page of the given account's own lots (Wave 4, ``get-my-lots``). Always pinned —

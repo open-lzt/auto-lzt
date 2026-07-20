@@ -24,7 +24,7 @@ def dialect_insert(sessionmaker: async_sessionmaker[AsyncSession]) -> Any:
     """The right INSERT construct for the bound engine — both Postgres (prod) and SQLite (dev)
     expose ``.on_conflict_do_nothing(index_elements=...)`` with the same API."""
     bind = sessionmaker.kw.get("bind")
-    name = getattr(getattr(bind, "dialect", None), "name", "postgresql")
+    name = bind.dialect.name if bind is not None else "postgresql"
     return _sqlite_insert if name == "sqlite" else _pg_insert
 
 

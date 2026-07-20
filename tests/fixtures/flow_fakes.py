@@ -38,7 +38,15 @@ from app.domain.flow_engine.model import (
     RunStep,
     RunTrace,
 )
-from app.domain.market.dtos import BumpResult, LotsPage, RelistResult, RepriceResult
+from app.domain.market.categories import SearchableCategory
+from app.domain.market.dtos import (
+    BumpResult,
+    LotsPage,
+    RelistResult,
+    RepriceResult,
+    SearchHit,
+    SearchResult,
+)
 
 TENANT = TenantId(uuid4())
 
@@ -323,6 +331,8 @@ class FakeMarket:
         self.reprice_pinned_calls: list[tuple[AccountId, int, int, Currency]] = []
         self.relist_calls: list[tuple[float, int, Currency, ItemOrigin]] = []
         self.pages: dict[tuple[AccountId, int], LotsPage] = {}
+        self.search_calls: list[tuple[SearchableCategory, float]] = []
+        self.search_hits: tuple[SearchHit, ...] = ()
 
     async def bump_via_pool(self, tenant_id: TenantId, item_id: int) -> BumpResult:
         self.bump_calls.append(item_id)
@@ -360,6 +370,18 @@ class FakeMarket:
 
     async def list_my_lots_page(self, account: Account, *, page: int) -> LotsPage:
         return self.pages.get((account.id, page), LotsPage(item_ids=(), has_next_page=False))
+
+    async def search_category_via_pool(
+        self, tenant_id: TenantId, *, category: SearchableCategory, pmax: float
+    ) -> SearchResult:
+        self.search_calls.append((category, pmax))
+        return SearchResult(hits=self.search_hits)
+
+    async def search_category(
+        self, account: Account, *, category: SearchableCategory, pmax: float
+    ) -> SearchResult:
+        self.search_calls.append((category, pmax))
+        return SearchResult(hits=self.search_hits)
 
 
 def build_node(

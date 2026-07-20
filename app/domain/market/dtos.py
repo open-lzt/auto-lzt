@@ -35,6 +35,28 @@ class RelistResult:
 
 
 @dataclass(slots=True, frozen=True)
+class SearchHit:
+    """One lot from a category search — only what a buyer-side node needs."""
+
+    item_id: int
+    price: int
+    title: str
+
+
+@dataclass(slots=True, frozen=True)
+class SearchResult:
+    hits: tuple[SearchHit, ...]
+
+
+@dataclass(slots=True, frozen=True)
+class FastBuyResult:
+    item_id: int
+    price: int
+    # False when the node ran with dry_run — nothing was bought and no money moved.
+    purchased: bool
+
+
+@dataclass(slots=True, frozen=True)
 class LotsPage:
     """One page of ``list_user`` — thin shim over ``pylzt.models.market.ListUserResponse``,
     keeping only what ``GetMyLotsNode`` needs (Wave 4)."""

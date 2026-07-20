@@ -35,6 +35,7 @@ from app.domain.catalog.nodes.bump import BumpNode
 from app.domain.catalog.nodes.compare import CompareNode
 from app.domain.catalog.nodes.condition import ConditionNode
 from app.domain.catalog.nodes.dynamic_method import DynamicMethodNode
+from app.domain.catalog.nodes.fast_buy import FastBuyNode
 from app.domain.catalog.nodes.for_each_account import ForEachAccountNode
 from app.domain.catalog.nodes.for_each_lot import ForEachLotNode
 from app.domain.catalog.nodes.fork import ForkNode
@@ -43,6 +44,7 @@ from app.domain.catalog.nodes.join import JoinNode
 from app.domain.catalog.nodes.math import MathNode
 from app.domain.catalog.nodes.relist import RelistNode
 from app.domain.catalog.nodes.reprice import RepriceNode
+from app.domain.catalog.nodes.search import SearchNode
 from app.domain.catalog.nodes.string_concat import StringConcatNode
 from app.domain.catalog.nodes.switch import SwitchNode
 from app.domain.catalog.nodes.take import TakeNode
@@ -181,5 +183,7 @@ BUILTIN_REGISTRATIONS: tuple[NodeRegistration, ...] = tuple(
         BatchStatusNode,
         SendMessageNode,
         BatchListPendingNode,
+        SearchNode,
+        FastBuyNode,
     )
 )

@@ -34,7 +34,7 @@ class AdminGuard(BaseMiddleware):
     ) -> Any:
         user: User | None = data.get("event_from_user")
         if user is None or user.id not in self._admin_ids:
-            log.warning("bot_unauthorized", user_id=getattr(user, "id", None))
+            log.warning("bot_unauthorized", user_id=user.id if user is not None else None)
             await self._refuse(event)
             return None
         return await handler(event, data)

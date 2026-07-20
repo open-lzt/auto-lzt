@@ -18,7 +18,7 @@ class AccountORM(Base):
     id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
     tenant_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
     encrypted_token: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     status: Mapped[str] = mapped_column(
         String(16), nullable=False, server_default=AccountStatus.ACTIVE.value
     )

@@ -1,0 +1,10 @@
+# pnpm 11 refuses to run a dependency's build scripts unless it is named here, and the panel build
+# died on two of them. Both entries are deliberate allow-list decisions, not noise:
+#
+#   @open-lzt/ui — our own UI kit, a git dependency that builds itself before the panel imports it.
+#     The key must be the FULL spec including the commit sha; a bare package name is rejected. The
+#     sha moves with pnpm-lock.yaml, so the two are updated together or not at all.
+#   esbuild — vite's bundler; it compiles a platform binary on install and cannot build without it.
+allowBuilds:
+  '@open-lzt/ui@https://codeload.github.com/open-lzt/lzt-ui/tar.gz/6a02bfd639ef392109d2068a2feb75f203613dd2': true
+  esbuild: true

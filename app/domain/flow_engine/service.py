@@ -44,6 +44,11 @@ class FlowService:
     async def list(self, tenant_id: TenantId) -> list[Flow]:
         return await self._flows.list(tenant_id)
 
+    async def is_compiled(self, tenant_id: TenantId, flow_id: FlowId) -> bool:
+        """Whether this flow has a compiled IR yet — a flow authored but never sent through
+        `/compile` cannot be run (`POST /runs/create` needs an IR to enqueue against)."""
+        return await self._irs.get_latest_for_flow(tenant_id, flow_id) is not None
+
     async def get(self, tenant_id: TenantId, flow_id: FlowId) -> Flow:
         flow = await self._flows.get(tenant_id, flow_id)
         if flow is None:

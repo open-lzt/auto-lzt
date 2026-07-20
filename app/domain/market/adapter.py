@@ -17,17 +17,61 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
+from typing import Any, Final
 from uuid import UUID
 
 import structlog
 from pylzt import AuthFailed, Client, ClientConfig, RateLimited, TransportError
-from pylzt.types import Currency, ItemOrigin
+from pylzt.types import Currency, ItemOrigin, OrderBy
 
 from app.domain.account.model import AccountId
-from app.domain.market.dtos import BumpResult, LotsPage, RelistResult, RepriceResult
+from app.domain.market.categories import SearchableCategory
+from app.domain.market.dtos import (
+    BumpResult,
+    FastBuyResult,
+    LotsPage,
+    RelistResult,
+    RepriceResult,
+    SearchHit,
+    SearchResult,
+)
 from app.domain.market.errors import MarketApiError, TokenInvalid
 
 logger = structlog.get_logger()
+
+# `fast-buy` takes 28-31s against prod — the SDK's 30s default sat exactly on that edge, so the
+# client gave up on a purchase the marketplace was still completing. The retry then hit a lot that
+# was already ours and came back Forbidden, and the run reported failure for money that had moved.
+# A timeout shorter than the operation is worse than no timeout on a non-idempotent POST.
+_PURCHASE_TIMEOUT_S = 120.0
+
+# Slug -> the facade method that searches it. Spelled out because the slug is NOT the method name
+# (`epicgames` -> `category_epic_games`, `tiktok` -> `category_tik_tok`), so a built name would be
+# wrong for five of these; and because a getattr here would let any string reach the facade.
+# `test_search_category` pins this to SearchableCategory in both directions.
+_CATEGORY_METHODS: Final[dict[SearchableCategory, Callable[[Client], Any]]] = {
+    SearchableCategory.STEAM: lambda c: c.market.category_steam,
+    SearchableCategory.FORTNITE: lambda c: c.market.category_fortnite,
+    SearchableCategory.RIOT: lambda c: c.market.category_riot,
+    SearchableCategory.TELEGRAM: lambda c: c.market.category_telegram,
+    SearchableCategory.DISCORD: lambda c: c.market.category_discord,
+    SearchableCategory.ROBLOX: lambda c: c.market.category_roblox,
+    SearchableCategory.EPICGAMES: lambda c: c.market.category_epic_games,
+    SearchableCategory.BATTLENET: lambda c: c.market.category_battle_net,
+    SearchableCategory.EA: lambda c: c.market.category_ea,
+    SearchableCategory.ESCAPEFROMTARKOV: lambda c: c.market.category_escape_from_tarkov,
+    SearchableCategory.GIFTS: lambda c: c.market.category_gifts,
+    SearchableCategory.INSTAGRAM: lambda c: c.market.category_instagram,
+    SearchableCategory.MINECRAFT: lambda c: c.market.category_minecraft,
+    SearchableCategory.SOCIALCLUB: lambda c: c.market.category_social_club,
+    SearchableCategory.SUPERCELL: lambda c: c.market.category_supercell,
+    SearchableCategory.TIKTOK: lambda c: c.market.category_tik_tok,
+    SearchableCategory.UPLAY: lambda c: c.market.category_uplay,
+    SearchableCategory.VPN: lambda c: c.market.category_vpn,
+    SearchableCategory.WARFACE: lambda c: c.market.category_warface,
+    SearchableCategory.HYTALE: lambda c: c.market.category_hytale,
+    SearchableCategory.LLM: lambda c: c.market.category_llm,
+}
 
 
 class MarketAdapter:
@@ -90,6 +134,53 @@ class MarketAdapter:
         )
         return RelistResult(item_id=response.item.item_id)
 
+    async def search_category(
+        self,
+        *,
+        category: SearchableCategory,
+        pmax: float,
+        page: int = 1,
+        order_by: OrderBy = OrderBy.PRICE_ASC,
+    ) -> SearchResult:
+        """Wraps the per-category ``category_*`` search — the buyer-side counterpart of
+        ``list_lots_page``.
+
+        ``pmax`` is the only price control: the marketplace filters server-side, so a lot above the
+        ceiling never reaches the buy node. That is where the ceiling is enforced — ``fast_buy``
+        gets an id, not a price, once ``for-each-lot`` has fanned the list out.
+
+        Only ``pmax``/``page``/``order_by`` are passed, and always by keyword. Those three sit in
+        the argument head every ``category_*`` method shares; the per-category tails diverge (steam
+        takes 126 arguments, ``vpn`` 25) and ``category_steam``/``category_fortnite`` even order the
+        ``email_*`` arguments differently from the rest — so nothing here may be positional.
+        """
+        method = _CATEGORY_METHODS[category]
+        response = await self._call(
+            lambda client: method(client)(pmax=pmax, page=page, order_by=order_by)
+        )
+        return SearchResult(
+            hits=tuple(
+                SearchHit(item_id=item.item_id, price=item.price, title=item.title)
+                for item in response.items
+            )
+        )
+
+    async def fast_buy(self, item_id: int, *, dry_run: bool) -> FastBuyResult:
+        """Wraps ``purchasing_fast_buy`` — checks and buys one lot.
+
+        ``dry_run`` short-circuits before the call: the node still runs, still consumes its
+        idempotency key, and reports what it would have bought. Money only moves on the false path.
+        """
+        if dry_run:
+            return FastBuyResult(item_id=item_id, price=0, purchased=False)
+        response = await self._call(
+            lambda client: client.market.purchasing_fast_buy(item_id=item_id),
+            timeout_s=_PURCHASE_TIMEOUT_S,
+        )
+        return FastBuyResult(
+            item_id=response.item.item_id, price=response.item.price, purchased=True
+        )
+
     async def list_lots_page(self, *, page: int) -> LotsPage:
         """Wraps ``list_user`` (Wave 4) — one page of the pinned account's own lots.
         ``user_id=None`` means "self" and requires this adapter to be on the pinned single-token
@@ -100,13 +191,17 @@ class MarketAdapter:
             has_next_page=response.hasNextPage,
         )
 
-    async def _call[T](self, op: Callable[[Client], Awaitable[T]]) -> T:
+    async def _call[T](
+        self, op: Callable[[Client], Awaitable[T]], *, timeout_s: float | None = None
+    ) -> T:
         if self._token is not None:
+            overrides: dict[str, object] = {}
             if self._base_url is not None:
-                config = ClientConfig(base_url=self._base_url, forum_base_url=self._base_url)
-                async with Client([self._token], config=config) as client:
-                    return await self._call_with(client, op)
-            async with Client([self._token]) as client:
+                overrides |= {"base_url": self._base_url, "forum_base_url": self._base_url}
+            if timeout_s is not None:
+                overrides["request_timeout"] = timeout_s
+            config = ClientConfig(**overrides) if overrides else None
+            async with Client([self._token], config=config) as client:
                 return await self._call_with(client, op)
         assert self._client is not None  # guaranteed by __init__
         return await self._call_with(self._client, op)
@@ -115,15 +210,29 @@ class MarketAdapter:
         try:
             return await op(client)
         except AuthFailed as exc:
-            raise TokenInvalid(self._resolve_account(exc)) from exc
+            account_id = self._resolve_account(exc)
+            if account_id is None:
+                # Nothing to quarantine — surface it as what it is, an upstream 401.
+                raise MarketApiError(status=401) from exc
+            raise TokenInvalid(account_id) from exc
         except RateLimited as exc:
             # Normally absorbed inside pylzt's pool; map defensively if it ever surfaces.
             raise MarketApiError(status=429) from exc
         except TransportError as exc:
             raise MarketApiError(status=exc.status) from exc
 
-    def _resolve_account(self, exc: AuthFailed) -> AccountId:
+    def _resolve_account(self, exc: AuthFailed) -> AccountId | None:
+        """Which account owned the rejected token, or None when that cannot be known.
+
+        The pooled path assumes `token_id` is `str(account_id)` because TokenPool builds it that
+        way — but any other Client (a pinned adapter, a hand-built one) puts something else there,
+        and `UUID()` then raised a bare ValueError *from inside the AuthFailed handler*. The auth
+        failure was replaced by "badly formed hexadecimal UUID string" and the real cause vanished
+        three layers up. Failing to identify the account is not itself an error worth throwing.
+        """
         if self._account_id is not None:
             return self._account_id
-        # Pooled path: pylzt picked the token; its token_id is str(account_id).
-        return AccountId(UUID(exc.token_id))
+        try:
+            return AccountId(UUID(exc.token_id))
+        except ValueError:
+            return None
