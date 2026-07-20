@@ -64,6 +64,23 @@ import from there, not from a single `db/repos` module. One module = one job.
 - `docker-compose.yml` has `postgres` + `redis` + `api`. A process that needs its own service
   (worker, scheduler, frontend) extends it. Ports bound to `127.0.0.1` for infra.
 
+## Documentation style (README, docs/, any human-facing .md)
+Docs are read by jumping, not top to bottom. Write for that reader.
+- **Short. No filler, no essayism.** Every sentence carries a fact or gets deleted. A paragraph
+  that paraphrases the code below it is a net negative — the reader pays for both.
+- **One idea, one line**, blank line between them. Not six-line paragraphs.
+- **No undefined terms, ever.** A term appears → the next line cracks it open. If it can't be
+  opened without derailing, name it as a deferred black box explicitly.
+- **Name the trap before explaining**, not after: "this is **not** a dry run", "this is **not**
+  a signature". Otherwise the reader keeps both models.
+- **Bold only load-bearing words** (terms, anchors). Never whole sentences.
+- Each section ends on the question the next one answers. Arrows and fragments over
+  explanatory prose.
+- Arbitrary facts (numbers, exact names, constants) get marked as memorisable — they don't
+  follow from the logic.
+- No traces of internal process: private tooling command names, plans, sprints, submission
+  deadlines, repo-privacy notes, local paths from a work machine.
+
 ## Definition of done per change
 All of: ruff clean, ruff format clean, mypy app clean, pytest green (non-live), any new
 migration applies offline (`alembic upgrade head --sql`). Then commit.
