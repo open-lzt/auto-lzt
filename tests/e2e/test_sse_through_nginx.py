@@ -28,10 +28,19 @@ import pytest
 
 from tests.e2e.conftest import HEARTBEAT_S
 
-pytestmark = pytest.mark.e2e
-
 _REPO_ROOT = Path(__file__).resolve().parents[2]
+# The deployed nginx config belongs to the installer, which lives one repo up — this repo is a
+# submodule of it. Checked out standalone (which is how CI clones it) there is no superproject and
+# no config to test, so the whole module skips rather than erroring on a missing file.
 _PANEL_CONF = _REPO_ROOT.parent.parent / "deploy" / "nginx" / "panel.conf"
+
+pytestmark = [
+    pytest.mark.e2e,
+    pytest.mark.skipif(
+        not _PANEL_CONF.is_file(),
+        reason=f"{_PANEL_CONF} not present — repo checked out without its superproject",
+    ),
+]
 
 # nginx needs a complete config, not just the location blocks the deployed site includes.
 _WRAPPER = Template("""

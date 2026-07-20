@@ -5,6 +5,11 @@
 #     The key must be the FULL spec including the commit sha; a bare package name is rejected. The
 #     sha moves with pnpm-lock.yaml, so the two are updated together or not at all.
 #   esbuild — vite's bundler; it compiles a platform binary on install and cannot build without it.
+# This file's other job is declaring a workspace, and pnpm refuses to install without a non-empty
+# `packages` — "packages field missing or empty". There is only one package here: this directory.
+packages:
+  - '.'
+
 allowBuilds:
   '@open-lzt/ui@https://codeload.github.com/open-lzt/lzt-ui/tar.gz/6a02bfd639ef392109d2068a2feb75f203613dd2': true
   esbuild: true
