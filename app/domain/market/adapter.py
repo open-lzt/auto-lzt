@@ -20,6 +20,7 @@ from datetime import UTC, datetime
 from typing import Any, Final
 from uuid import UUID
 
+import httpx
 import structlog
 from pylzt import AuthFailed, Client, ClientConfig, Forbidden, RateLimited, TransportError
 from pylzt.types import Currency, ItemOrigin, OrderBy
@@ -35,7 +36,12 @@ from app.domain.market.dtos import (
     SearchHit,
     SearchResult,
 )
-from app.domain.market.errors import LotUnavailable, MarketApiError, TokenInvalid
+from app.domain.market.errors import (
+    LotUnavailable,
+    MarketApiError,
+    PurchaseOutcomeUnknown,
+    TokenInvalid,
+)
 
 logger = structlog.get_logger()
 
@@ -178,6 +184,11 @@ class MarketAdapter:
                 lambda client: client.market.purchasing_fast_buy(item_id=item_id),
                 timeout_s=_PURCHASE_TIMEOUT_S,
             )
+        except httpx.TimeoutException as exc:
+            # httpx errors are not part of pylzt's typed tree, so this one escaped every handler
+            # below and reached the worker as a bare ReadTimeout(''). On a non-idempotent POST that
+            # is the worst thing to be vague about: the purchase may well have completed.
+            raise PurchaseOutcomeUnknown(item_id, _PURCHASE_TIMEOUT_S) from exc
         except Forbidden as exc:
             # 403 here is the marketplace declining THIS lot, not rejecting us: already queued by
             # another buyer, already sold, or not purchasable by this account. Surfacing it as a
@@ -211,6 +222,15 @@ class MarketAdapter:
             async with Client([self._token], config=config) as client:
                 return await self._call_with(client, op)
         assert self._client is not None  # guaranteed by __init__
+        if timeout_s is not None:
+            # A pooled Client is shared and already constructed, so its timeout cannot be widened
+            # for one call. Silence here would repeat the bug this timeout exists to prevent, so
+            # say it: the purchase runs on the pool's own (shorter) timeout.
+            logger.warning(
+                "market_adapter_timeout_not_applied",
+                requested_s=timeout_s,
+                reason="pooled client is shared; its timeout was fixed at construction",
+            )
         return await self._call_with(self._client, op)
 
     async def _call_with[T](self, client: Client, op: Callable[[Client], Awaitable[T]]) -> T:

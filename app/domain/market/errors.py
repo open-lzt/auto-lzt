@@ -22,6 +22,29 @@ class MarketApiError(AppError):
         return "Upstream marketplace error"
 
 
+class PurchaseOutcomeUnknown(AppError):
+    """A purchase timed out. It may have gone through — treat it as money possibly spent.
+
+    ``fast-buy`` is a non-idempotent POST that takes 28-31s against prod, so a timeout says
+    nothing about whether the marketplace completed it. This has already happened once here: the
+    client gave up, the run reported failure, and the account had been bought. Reporting a plain
+    error invites a retry that buys a second one, so this is its own type and the caller must
+    reconcile against the marketplace rather than assume nothing happened.
+    """
+
+    status_code = 504
+    code = ErrorCode.MARKET_API_ERROR
+
+    def __init__(self, item_id: int, timeout_s: float) -> None:
+        super().__init__(f"purchase of lot {item_id} timed out after {timeout_s}s")
+        self.item_id = item_id
+        self.timeout_s = timeout_s
+
+    @property
+    def client_message(self) -> str:
+        return "Purchase timed out — check the marketplace before retrying"
+
+
 class LotUnavailable(AppError):
     """This lot cannot be bought right now, but the marketplace is fine and so is the token.
 
