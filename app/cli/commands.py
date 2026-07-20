@@ -145,6 +145,11 @@ def cmd_install(
             applied.append(_apply_account(spec, account_id))
         client.post_json(f"/flows/{imported.flow_id}/update", spec)
 
+    # Import leaves the flow with no compiled version, and `run` refuses one ("ERR-1008 Flow has no
+    # compiled version"). Compiling here is what makes `install` -> `run` work as one sitting; an
+    # `update` above invalidates the previous compile, so this must come last.
+    client.post_json(f"/flows/{imported.flow_id}/compile")
+
     print(f"flow_id={imported.flow_id} name={imported.name}")
     for line in applied:
         print(f"  param {line}")
@@ -228,9 +233,10 @@ def cmd_run(
             print("LIVE RUN: --no-dry-run given, dry_run is NOT forced. This can spend money.")
         else:
             if params.get(_DRY_RUN_KEY) not in (None, True):
-                print(
-                    "dry_run forced to true (money-safety default); pass --no-dry-run to run live."
-                )
+                print(f"ignoring --param {_DRY_RUN_KEY}={params[_DRY_RUN_KEY]!r}.")
+            # Said on every run, not only when something was overridden: whether the run about to
+            # start spends real money is the one thing an operator must never have to infer.
+            print("dry run: no money moves. Pass --no-dry-run to buy for real.")
             params[_DRY_RUN_KEY] = True
 
     try:
