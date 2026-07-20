@@ -2,11 +2,14 @@
 
 # docs/demo.gif — manual capture
 
-`docs/demo.gif` is **captured manually before contest submission**; it is not produced by a
-headless CI step. The gif must visibly show the killer flow running unattended — the canvas
-LiveBadge reading **"24/7 · N accounts"** while the browser tab is closed and a lot bump lands on
-schedule. That "works without your PC" moment is the whole proof, so it is recorded from a real
-running canvas by a human operator.
+`docs/demo.gif` is **captured manually**, not by a headless CI step.
+
+Why by hand: the gif has to show the flow running **unattended** — the canvas LiveBadge
+reading **"24/7 · N accounts"** while the browser tab is closed and a lot bump lands on
+schedule.
+
+That "works without your PC" moment is the whole proof. So it is recorded from a real
+running canvas, by a human operator.
 
 Run `scripts/record_demo_gif.sh` for the step-by-step capture procedure. Target: **≤15 s**, ~800×500,
 ≤8 MB (optimise with `gifsicle -O3` if needed). Commit the result to `docs/demo.gif`; it is

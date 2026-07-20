@@ -27,8 +27,7 @@ dependencies = [
     # Sync driver for APScheduler's SQLAlchemyJobStore (jobstore is sync-only; SQLite dev mode
     # uses its stdlib sqlite3 driver instead, no extra dependency needed there).
     "psycopg[binary]>=3.1",
-    # Marketplace transport SDK + event engine — local path sources during dev (see the sources
-    # table below); published to github.com/open-lzt before contest submission.
+    # Marketplace transport SDK + event engine — git sources, see [tool.uv.sources] below.
     "pylzt",
     "lzt-eventus[engine]",
 ]
@@ -58,9 +57,8 @@ dev = [
 ]
 
 [tool.uv.sources]
-# Private repos (org open-lzt), published before contest submission. Git access is configured
-# via the shell's git credentials. Pinned to a SHA per R-10 (no drift mid-sprint); bump deliberately.
-# Local clones for reading/reference: ../aiolzt (lztforge), ../lzt-open-source (lzt-eventus).
+# First-party packages from the open-lzt org, resolved straight from git — `uv sync` fetches them,
+# no separate clone or credential needed.
 pylzt = { git = "https://github.com/open-lzt/pylzt.git", branch = "main" }
 lzt-flow-demo-plugin = { path = "tests/fixtures/plugin_pkg", editable = true }
 lzt-flow-demo-runtime = { path = "tests/fixtures/plugin_runtime_pkg", editable = true }

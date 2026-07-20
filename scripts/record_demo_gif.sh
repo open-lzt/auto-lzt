@@ -22,7 +22,7 @@ the LiveBadge reads "24/7 · N accounts" and a lot bump lands while the tab is c
    badge still live and the run count incremented — the "works without your PC" proof.
 5. Export to docs/demo.gif (<=15s, <=8 MB). Optimise with gifsicle -O3 if large.
 
-${YELLOW}This gif is captured manually before contest submission and committed to docs/demo.gif.${NC}
+${YELLOW}This gif is captured by hand and committed to docs/demo.gif.${NC}
 EOF
 
 if [[ -f docs/demo.gif ]]; then

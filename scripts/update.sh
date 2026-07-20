@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Single-host update: pull, rebuild, migrate, restart. No blue-green — the contest demo is one
-# host (deliberate CUT-8; managed Phase-2 hosting gets zero-downtime in a separate plan).
+# Single-host update: pull, rebuild, migrate, restart. No blue-green — this deploy shape is one
+# host, deliberately; zero-downtime belongs with managed multi-host hosting (Phase 2).
 set -euo pipefail
 
 RED=$'\033[0;31m'; GREEN=$'\033[0;32m'; BLUE=$'\033[0;34m'; NC=$'\033[0m'

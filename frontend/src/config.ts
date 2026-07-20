@@ -2,9 +2,9 @@
  *
  * The canvas builder is DEFERRED, not deleted (D-5). Text is the authoring surface now — the bot
  * and the module registry — and the builder is behind this flag until it is worth the maintenance
- * it costs. The code stays in the tree deliberately: see README's "Deferred, not dead" note before
- * concluding that AuthoringMode and the deploy path are dead code, because a /cleanup pass that
- * reaches that conclusion will delete a working feature (R-16).
+ * it costs. The code stays in the tree deliberately: read README's "Deferred, not dead" note before
+ * concluding that AuthoringMode and the deploy path are dead code — cutting them on that conclusion
+ * deletes a working feature (R-16).
  *
  * Default OFF. Set `VITE_BUILDER_ENABLED=1` to build with authoring on.
  *
