@@ -26,10 +26,27 @@ const OUTCOME_LABEL = {
   pending: "В очереди",
 } as const;
 
-function formatLastRun(iso: string | null): string {
+/**
+ * The card column is ~280px and already carries an outcome badge, so the full
+ * «20.07.2026, 16:02:07» ellipsised to «20.07.2026…» — the date survived and the CLOCK was what got
+ * cut, which is the half that answers "how long ago did this break". Today's runs show the time
+ * only; older ones keep a short date.
+ *
+ * `now` comes from the server, never `Date.now()`: a browser clock a day out would file today's
+ * failure under yesterday and quietly show the wrong thing.
+ */
+function formatLastRun(iso: string | null, now: string): string {
   if (iso === null) return "ещё не запускалась";
   const at = new Date(iso);
-  return Number.isNaN(at.getTime()) ? "—" : at.toLocaleString("ru-RU");
+  if (Number.isNaN(at.getTime())) return "—";
+  const time = at.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
+  const today = new Date(now);
+  const sameDay =
+    at.getFullYear() === today.getFullYear() &&
+    at.getMonth() === today.getMonth() &&
+    at.getDate() === today.getDate();
+  if (sameDay) return time;
+  return `${at.toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit" })}, ${time}`;
 }
 
 export function TaskCard({ task, serverTime, onRunNow, busy = false, index = 0 }: TaskCardProps) {
@@ -73,7 +90,9 @@ export function TaskCard({ task, serverTime, onRunNow, busy = false, index = 0 }
                 {OUTCOME_LABEL[task.last_run_status]}
               </Badge>
             ) : null}
-            <span className="task-card__last-run">{formatLastRun(task.last_run_at)}</span>
+            <span className="task-card__last-run">
+              {formatLastRun(task.last_run_at, serverTime)}
+            </span>
           </dd>
         </div>
       </dl>

@@ -2,10 +2,25 @@ import { Alert, Button, Empty, Skeleton, useToast } from "@open-lzt/ui";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { fetchTasks, runTaskNow, type Task, type TaskEvent, type TaskPage } from "../api/tasksClient";
 import { TaskCard } from "./TaskCard";
-import { useTaskStream } from "./useTaskStream";
+import { useTaskStream, type StreamState } from "./useTaskStream";
 import "./panel.css";
 
 const SKELETON_COUNT = 6;
+
+// Three states, three labels. Collapsing "connecting" into "offline" made a panel that had simply
+// not finished its first handshake announce that the connection was LOST — alarming, and wrong:
+// nothing had been lost, it had never been open. The first seconds of every page load hit this.
+const LIVE_LABEL: Record<StreamState, string> = {
+  connecting: "подключение…",
+  live: "в реальном времени",
+  offline: "нет связи",
+};
+
+const LIVE_HINT: Record<StreamState, string> = {
+  connecting: "Устанавливаем соединение для живых обновлений",
+  live: "Обновления приходят в реальном времени",
+  offline: "Соединение с сервером потеряно — данные могут устареть",
+};
 
 export interface TaskMonitorProps {
   /** Offered by the empty state — the panel cannot create a flow itself. */
@@ -138,15 +153,8 @@ export function TaskMonitor({ onGoToBuilder }: TaskMonitorProps) {
     <div className="panel-view">
       <div className="panel-view__head">
         <h2 className="panel-view__title">Задачи</h2>
-        <span
-          className={`panel-live panel-live--${streamState}`}
-          title={
-            streamState === "live"
-              ? "Обновления приходят в реальном времени"
-              : "Соединение с сервером потеряно — данные могут устареть"
-          }
-        >
-          {streamState === "live" ? "в реальном времени" : "нет связи"}
+        <span className={`panel-live panel-live--${streamState}`} title={LIVE_HINT[streamState]}>
+          {LIVE_LABEL[streamState]}
         </span>
       </div>
 
