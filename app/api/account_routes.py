@@ -70,7 +70,7 @@ async def get_account_service(
     lifetime, per /backend's Depends-injection rule (never build a service inline in a handler)."""
     cipher = EnvelopeCipher(master_key=settings.master_key)
     async with session_scope(request.app.state.sessionmaker) as session:
-        yield AccountService(AccountRepository(session), cipher, pool)
+        yield AccountService(AccountRepository(session), cipher, pool, settings.market_base_url)
 
 
 @router.post("/create", status_code=201, dependencies=protect())

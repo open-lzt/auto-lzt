@@ -24,6 +24,12 @@ from app.domain.flow_engine.model import TriggerKind
 from app.main import create_app
 
 
+@pytest.fixture(autouse=True)
+def _market_double(mock_lzt: object) -> None:
+    """Registering an account now verifies its token against the marketplace, so every test here
+    needs the double — without it the call leaves the process and comes back 401."""
+
+
 @pytest.fixture
 async def sqlite_app(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):  # type: ignore[no-untyped-def]
     db_url = f"sqlite+aiosqlite:///{tmp_path / 'account_delete.db'}"

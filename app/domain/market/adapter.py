@@ -202,6 +202,15 @@ class MarketAdapter:
             item_id=response.item.item_id, price=response.item.price, purchased=True
         )
 
+    async def verify_token(self) -> None:
+        """Raise if the marketplace does not accept this token.
+
+        `list_user` is the cheapest authenticated call there is — it asks for the token's own lots,
+        so it needs no ids and touches nothing. Errors are already mapped by `_call_with`:
+        TokenInvalid / MarketApiError(401) for a bad token, MarketApiError for anything upstream.
+        """
+        await self._call(lambda client: client.market.list_user(user_id=None, page=1))
+
     async def list_lots_page(self, *, page: int) -> LotsPage:
         """Wraps ``list_user`` (Wave 4) — one page of the pinned account's own lots.
         ``user_id=None`` means "self" and requires this adapter to be on the pinned single-token

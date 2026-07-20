@@ -21,6 +21,12 @@ from app.db.base import Base, make_engine
 from app.main import create_app
 
 
+@pytest.fixture(autouse=True)
+def _market_double(mock_lzt: object) -> None:
+    """Registering an account now verifies its token against the marketplace, so every test here
+    needs the double — without it the call leaves the process and comes back 401."""
+
+
 class _RecordingPool:
     """Stand-in for the app's arq pool — records enqueued jobs instead of hitting Redis."""
 

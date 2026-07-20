@@ -74,7 +74,11 @@ def _value_for_class(annotation: Any, depth: int) -> Any:
 
 @pytest.fixture
 def mock_lzt() -> Iterator[respx.MockRouter]:
-    """Intercept all lzt.market / lolz.live traffic with canned API-shaped responses."""
+    """Intercept all lzt.market / lolz.live traffic with canned API-shaped responses.
+
+    NOT autouse: respx intercepts every httpx call in the process, including a test's own
+    localhost server and any routes a test declares itself. A test that talks to the
+    marketplace asks for this explicitly."""
     with respx.mock(assert_all_called=False) as router:
         router.route(host=MARKET_HOST).mock(return_value=Response(200, json=_STATUS_OK))
         router.route(host=FORUM_HOST).mock(return_value=Response(200, json=_STATUS_OK))

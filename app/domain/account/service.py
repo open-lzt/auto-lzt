@@ -13,15 +13,30 @@ from app.domain.account.errors import AccountInUse, AccountNotFound
 from app.domain.account.model import Account, AccountId, AccountStatus, TenantId
 from app.domain.account.pool import TokenPool
 from app.domain.account.repo import AccountRepository
+from app.domain.market.adapter import MarketAdapter
 
 
 class AccountService:
-    def __init__(self, repo: AccountRepository, cipher: EnvelopeCipher, pool: TokenPool) -> None:
+    def __init__(
+        self,
+        repo: AccountRepository,
+        cipher: EnvelopeCipher,
+        pool: TokenPool,
+        market_base_url: str | None = None,
+    ) -> None:
         self._repo = repo
         self._cipher = cipher
         self._pool = pool
+        self._market_base_url = market_base_url
 
     async def add_account(self, tenant_id: TenantId, token: str) -> Account:
+        # Ask the marketplace before storing it ACTIVE. A token that is never checked joins the
+        # rotation pool anyway and fails at the first call that matters — which is how a
+        # throwaway token silently became the account an autobuy run picked, then died on
+        # TokenInvalid mid-run. Refusing here costs one request and moves the failure to the
+        # moment a human is watching.
+        await MarketAdapter(token=token, base_url=self._market_base_url).verify_token()
+
         account = Account(
             id=AccountId(uuid4()),
             tenant_id=tenant_id,
