@@ -13,7 +13,7 @@ importers:
         version: 5.2.8
       '@open-lzt/ui':
         specifier: github:open-lzt/lzt-ui#main
-        version: https://codeload.github.com/open-lzt/lzt-ui/tar.gz/0975a6e99dfd36c3b544ead211addff948263e17(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+        version: https://codeload.github.com/open-lzt/lzt-ui/tar.gz/ab016e629931694f3a78c49bfae65ff95a3ecf39(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@xyflow/react':
         specifier: ^12.3.5
         version: 12.11.2(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
@@ -488,8 +488,8 @@ packages:
   '@jridgewell/trace-mapping@0.3.31':
     resolution: {integrity: sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw==}
 
-  '@open-lzt/ui@https://codeload.github.com/open-lzt/lzt-ui/tar.gz/0975a6e99dfd36c3b544ead211addff948263e17':
-    resolution: {gitHosted: true, integrity: sha512-Xxf3PzuCPktVHO50H8TmJhAKU8/hy/dOiLoLXM/zhuHX3xCVdeY00PkMM/62C5ltaBCTECVs8nKbHXNsuPgzVA==, tarball: https://codeload.github.com/open-lzt/lzt-ui/tar.gz/0975a6e99dfd36c3b544ead211addff948263e17}
+  '@open-lzt/ui@https://codeload.github.com/open-lzt/lzt-ui/tar.gz/ab016e629931694f3a78c49bfae65ff95a3ecf39':
+    resolution: {gitHosted: true, integrity: sha512-xlu3UL4KBpv6lgOpi/kthmzAWwamiSQDNQVcZ8SnZJ25XES64y5kWvPI6TLZ2adNuVy/Tc9sf0Ng/eFqXtHWsg==, tarball: https://codeload.github.com/open-lzt/lzt-ui/tar.gz/ab016e629931694f3a78c49bfae65ff95a3ecf39}
     version: 0.1.0
     peerDependencies:
       react: '>=18'
@@ -1725,7 +1725,7 @@ snapshots:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.5.5
 
-  '@open-lzt/ui@https://codeload.github.com/open-lzt/lzt-ui/tar.gz/0975a6e99dfd36c3b544ead211addff948263e17(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
+  '@open-lzt/ui@https://codeload.github.com/open-lzt/lzt-ui/tar.gz/ab016e629931694f3a78c49bfae65ff95a3ecf39(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
     dependencies:
       react: 18.3.1
       react-dom: 18.3.1(react@18.3.1)

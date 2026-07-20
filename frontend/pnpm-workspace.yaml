@@ -1,11 +1,11 @@
-# pnpm 11 refuses to run a dependency's build scripts unless it is named here.
+# pnpm 11 refuses to run a dependency's build script unless it is named here, and errors out on
+# any it was never told about — so this list is a decision record, not an optimisation.
 #
 #   esbuild — vite's bundler; it compiles a platform binary on install and cannot build without it.
 #
-#   @open-lzt/ui — our own UI kit. It now ships its own dist/ (a git dependency arrives as a tarball
-#     and its build script never runs, so the build output had to be committed), but pnpm still
-#     ERRORS on any dependency that merely *declares* a build script it has not been told about.
-#     The key is the full spec including the commit sha, so it moves with pnpm-lock.yaml.
+# @open-lzt/ui is deliberately absent: it ships its own dist/ and no longer declares a build script.
+# It used to, and that was the bug — the build re-ran on every install, wiped the shipped output and
+# regenerated a stub .d.ts, so consumers typechecked against a package with no exported members.
 
 # This file's other job is declaring a workspace, and pnpm refuses to install without a non-empty
 # `packages` — "packages field missing or empty". There is only one package here: this directory.
@@ -13,5 +13,4 @@ packages:
   - '.'
 
 allowBuilds:
-  '@open-lzt/ui@https://codeload.github.com/open-lzt/lzt-ui/tar.gz/0975a6e99dfd36c3b544ead211addff948263e17': true
   esbuild: true
