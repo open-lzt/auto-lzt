@@ -37,7 +37,12 @@ jobs:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
         with:
-          version: 9
+          # 11, not 9: the UI kit is a git dependency that builds itself on install, and pnpm 10+
+          # will not run a dependency's build script unless it is allow-listed. That allow-list
+          # (`allowBuilds` in pnpm-workspace.yaml) is a pnpm 11 key — pnpm 9 ignored it silently,
+          # left the kit unbuilt, and every import from it failed typecheck with "no exported
+          # member". The installer provisions pnpm 11, so CI matching it is the point.
+          version: 11
       - uses: actions/setup-node@v4
         with:
           node-version: 20
