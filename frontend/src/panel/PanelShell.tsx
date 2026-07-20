@@ -1,4 +1,4 @@
-import { Container, Main, Shell, Tabs, ThemeToggle, Topbar } from "@open-lzt/ui";
+import { Container, Shell, Tabs, ThemeToggle, Topbar } from "@open-lzt/ui";
 import { useEffect, useState, type ReactNode } from "react";
 import { fetchPanelTabs, type PanelTab } from "./tabs";
 import "./panel-shell.css";
@@ -58,7 +58,10 @@ export function PanelShell({ renderTab, supported, headerRight }: PanelShellProp
           </div>
         </Container>
       </Topbar>
-      <Main className="panel-shell__main">
+      {/* A plain <main>, not the kit's Main: that one is a sidebar grid
+          (`grid-template-columns: var(--lzt-sidebar) 1fr`) and the panel has no sidebar, so its
+          single child landed in the 240px sidebar track with the content track left empty. */}
+      <main className="panel-shell__main">
         {/* Keyed by tab so switching remounts and replays the entrance animation instead of
             swapping content in place, which reads as a jump cut. */}
         {active ? (
@@ -66,7 +69,7 @@ export function PanelShell({ renderTab, supported, headerRight }: PanelShellProp
             {renderTab(active, setActive)}
           </div>
         ) : null}
-      </Main>
+      </main>
     </Shell>
   );
 }

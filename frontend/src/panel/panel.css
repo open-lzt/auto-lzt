@@ -3,6 +3,12 @@
   max-width: 1240px;
   margin: 0 auto;
   width: 100%;
+
+  /* One measure for the settings-shaped tabs (bump, accounts). They used to pick their own — 620
+     for the bump form, 560 for the token card, none at all for the account list — so a form and the
+     list directly under it ended on different right edges, and switching tabs moved the column.
+     The task grid ignores this and spans the full width. */
+  --panel-column: 720px;
 }
 
 .panel-view__head {
@@ -39,6 +45,21 @@
 
 .panel-live--live {
   color: var(--lzt-brand);
+}
+
+/* Pulses so a stalled handshake reads as "still trying" rather than a frozen label. */
+.panel-live--connecting {
+  color: var(--lzt-text-dim);
+}
+
+.panel-live--connecting::before {
+  animation: panel-live-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes panel-live-pulse {
+  50% {
+    opacity: 0.25;
+  }
 }
 
 .panel-live--offline {
@@ -150,8 +171,11 @@
   gap: 12px;
 }
 
+/* nowrap so a card whose value side is crowded (an outcome badge next to a timestamp) wraps the
+   LABEL onto two lines and grows taller than the cards beside it — which broke the grid's baseline. */
 .task-card__meta-row dt {
   color: var(--lzt-text-dim);
+  white-space: nowrap;
 }
 
 .task-card__meta-row dd {
@@ -181,6 +205,10 @@
 
 @media (prefers-reduced-motion: reduce) {
   .task-card {
+    animation: none;
+  }
+
+  .panel-live--connecting::before {
     animation: none;
   }
 }
