@@ -49,15 +49,23 @@ class DuplicatePanelTabKey(Exception):
         self.incoming_origin = incoming_origin
 
 
+# Every ``icon`` here must name a symbol that actually exists in @open-lzt/ui's sprite
+# (``window.lztIcons`` lists them). Three of these used to be `workflow`/`history`/`blocks`,
+# which the sprite has never shipped — `<use href="#i-workflow">` renders nothing at all, so
+# those tabs were silently icon-less. Prefer an existing symbol over inventing a name: the
+# sprite lives in a separate package, and the panel consumes its BUILT copy.
 BUILTIN_PANEL_TABS: Final[tuple[PanelTabSpec, ...]] = (
     PanelTabSpec(key="tasks", title="Задачи", order=10, icon="clock"),
     PanelTabSpec(key="autobump", title="Поднятие", order=20, icon="zap"),
-    PanelTabSpec(key="accounts", title="Аккаунты", order=30, icon="bot"),
-    PanelTabSpec(key="flows", title="Флоу", order=40, icon="workflow"),
-    PanelTabSpec(key="history", title="История", order=50, icon="history"),
+    PanelTabSpec(key="threadbump", title="Поднятие тем", order=25, icon="message"),
+    PanelTabSpec(key="autobuy", title="Автобай", order=28, icon="wallet"),
+    PanelTabSpec(key="accounts", title="Аккаунты", order=30, icon="user"),
+    PanelTabSpec(key="flows", title="Флоу", order=40, icon="share"),
+    PanelTabSpec(key="registry", title="Реестр", order=45, icon="package"),
+    PanelTabSpec(key="history", title="История", order=50, icon="list"),
     # Authoring-only. The backend advertises it because the capability exists server-side; a build
     # with the builder switched off filters it out client-side rather than showing it broken.
-    PanelTabSpec(key="composites", title="Составные блоки", order=60, icon="blocks"),
+    PanelTabSpec(key="composites", title="Составные блоки", order=60, icon="grid"),
 )
 
 

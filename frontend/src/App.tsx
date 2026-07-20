@@ -16,7 +16,8 @@ import { HistoryPanel } from "./history/HistoryPanel";
 import { PanelShell } from "./panel/PanelShell";
 import { TaskMonitor } from "./panel/TaskMonitor";
 import { AccountsView } from "./panel/features/accounts/AccountsView";
-import { AutobumpView } from "./panel/features/autobump/AutobumpView";
+import { PresetView } from "./panel/features/preset/PresetView";
+import { RegistryView } from "./panel/features/registry/RegistryView";
 import "./app.css";
 
 const DEFAULT_FLOW_NAME = "Мой флоу";
@@ -24,11 +25,24 @@ const DEFAULT_FLOW_NAME = "Мой флоу";
 // The backend advertises every tab the installation has; this is the subset THIS build can render.
 // Authoring is filtered out rather than hidden behind a disabled tab: a tab that exists and does
 // nothing is worse than one that was never offered.
+// Tabs whose whole content is a preset form. They need no entry here beyond the key, because
+// PresetView renders whatever the server declares for it — adding a preset is a backend change.
+const PRESET_TABS: ReadonlySet<string> = new Set(["autobump", "threadbump", "autobuy"]);
+
 const supportedTabs: ReadonlySet<string> = new Set(
   BUILDER_ENABLED
-    ? ["tasks", "autobump", "accounts", "flows", "history", "composites"]
-    : ["tasks", "autobump", "accounts", "flows", "history"],
+    ? [...PRESET_TABS, "tasks", "accounts", "flows", "registry", "history", "composites"]
+    : [...PRESET_TABS, "tasks", "accounts", "flows", "registry", "history"],
 );
+
+/** Tab key -> preset key. They match everywhere except the two tabs whose key predates the
+ * preset registry; keeping the mapping explicit beats renaming a tab an operator may have
+ * bookmarked. */
+const PRESET_KEY_BY_TAB: Record<string, string> = {
+  autobump: "autobump",
+  threadbump: "thread-bump",
+  autobuy: "autobuy",
+};
 
 /** Rebuilds canvas nodes/edges from a saved FlowSpec (GET .../export). The spec is the domain
  * graph only — it carries neither canvas layout (positions) nor the trigger's kind, since
@@ -300,8 +314,17 @@ export default function App() {
         supported={supportedTabs}
         renderTab={(key, goTo) => {
           if (key === "tasks") return <TaskMonitor onGoToBuilder={() => goTo("flows")} />;
-          if (key === "autobump") return <AutobumpView onDeployed={() => goTo("tasks")} />;
+          if (PRESET_TABS.has(key)) {
+            return (
+              <PresetView
+                key={key}
+                presetKey={PRESET_KEY_BY_TAB[key] ?? key}
+                onDeployed={() => goTo("tasks")}
+              />
+            );
+          }
           if (key === "accounts") return <AccountsView />;
+          if (key === "registry") return <RegistryView />;
           if (key === "flows") return renderFlowsTab();
           if (key === "history") return renderHistoryTab(goTo);
           if (key === "composites") return renderCompositesTab();

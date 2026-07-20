@@ -6,7 +6,7 @@
 
 .autoform__empty {
   color: var(--text-faint);
-  font-size: 12px;
+  font-size: 14px;
   margin: 0;
 }
 
@@ -24,12 +24,12 @@
 }
 
 .autoform__description {
-  font-size: 11px;
+  font-size: 14px;
   color: var(--text-faint);
 }
 
 .autoform__error {
-  font-size: 11px;
+  font-size: 14px;
   color: var(--danger);
 }
 
@@ -49,7 +49,7 @@
 .ctl-slider__readout {
   min-width: 44px;
   text-align: right;
-  font-size: 13px;
+  font-size: 14px;
   font-variant-numeric: tabular-nums;
   color: var(--text);
 }
@@ -78,7 +78,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 13px;
+  font-size: 14px;
   color: var(--text);
   cursor: pointer;
 }
@@ -96,7 +96,7 @@
 
 .param-surface__group-title {
   margin: 8px 0 0;
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 600;
   letter-spacing: 0.02em;
   color: var(--text-muted);
@@ -117,7 +117,7 @@
 }
 
 .autoform__label {
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 500;
   color: var(--text-muted);
 }
@@ -135,7 +135,7 @@
   background: var(--surface-3);
   border: 1px solid var(--border);
   color: var(--text);
-  font-size: 13px;
+  font-size: 14px;
   transition:
     border-color 140ms ease-out,
     background 140ms ease-out;

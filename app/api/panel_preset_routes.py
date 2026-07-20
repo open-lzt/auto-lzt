@@ -1,49 +1,78 @@
-"""POST /panel/presets/autobump — deploy the «Поднятие» form as a real, editable flow.
+"""The panel's preset surface: what forms exist, and one endpoint that deploys any of them.
 
-One endpoint rather than three: compiling a graph, saving it and attaching its schedule are a single
-user intent («включить поднятие»), and leaving the client to sequence them would let a browser that
-dies between calls strand a flow with no trigger — a flow that exists, looks deployed, and never
-fires.
+Two routes rather than one per preset. A preset already states its own fields
+(``domain/panel/preset_registry.py``), so a handler per preset would only re-type that statement
+as a request DTO — which is exactly what it used to do, once per preset, in two languages.
 
-The output is an ordinary flow. It opens in the canvas, and editing it there is the supported way to
-go beyond what the form offers; the preset is an author, not a runtime.
+Deploy is ONE endpoint because compiling a graph, saving it and attaching its schedule are a
+single user intent («включить поднятие»). Leaving the client to sequence them would let a browser
+that dies between calls strand a flow with no trigger — a flow that exists, looks deployed, and
+never fires.
+
+The output is an ordinary flow. It opens in the canvas, and editing it there is the supported way
+to go beyond what a form offers; a preset is an author, not a runtime.
 """
 
 from __future__ import annotations
 
-from uuid import UUID
+from typing import Any
 
 from fastapi import APIRouter, Depends, Request
-from pydantic import Field
+from pydantic import ValidationError
 
 from app.api.deps import node_registry_dep
 from app.core.auth import protect
+from app.core.exceptions import AppError, ErrorCode
 from app.core.schema import BaseSchema
 from app.core.tenant import tenant_id_dep
 from app.domain.account.model import TenantId
 from app.domain.flow_engine.model import TriggerKind
 from app.domain.flow_engine.repo import FlowIrRepository, FlowRepository
 from app.domain.flow_engine.service import FlowService
-from app.domain.panel.presets import AutobumpSettings, build_autobump_flow
+from app.domain.panel.preset_registry import BUILTIN_PRESETS, PresetParams, get_preset
 from app.domain.triggers.repo import TriggerRepository
 from app.domain.triggers.service import TriggerService
 
 router = APIRouter(prefix="/panel/presets", tags=["panel"])
 
-_DEFAULT_NAME = "Поднятие"
+
+class PresetParamsInvalid(AppError):
+    """The submitted parameters failed the preset's own model.
+
+    Mapped explicitly rather than letting Pydantic's error escape: the body is
+    ``{"params": {...}}``, so FastAPI validates the envelope while the preset validates its
+    contents — without this the second failure would surface as a 500.
+    """
+
+    status_code = 422
+    code = ErrorCode.VALIDATION_ERROR
+
+    def __init__(self, key: str, detail: str) -> None:
+        super().__init__(f"preset {key!r} rejected its parameters: {detail}")
+        self.key = key
+        self.detail = detail
+
+    @property
+    def client_message(self) -> str:
+        return "Проверьте заполненные поля"
 
 
-class AutobumpRequest(BaseSchema):
-    accounts: list[UUID] = Field(min_length=1)
-    schedule_cron: str = Field(min_length=1)
-    max_bumps: int = Field(ge=1, le=1000)
-    reprice: bool = False
-    reprice_currency: str = "rub"
-    reprice_price: float | None = None
-    name: str = _DEFAULT_NAME
+class PresetSummary(BaseSchema):
+    key: str
+    title: str
+    icon: str
+    default_name: str
+    # The JSON Schema of the preset's parameter model — what AutoForm renders. Sent whole rather
+    # than reduced to a field list, so the client needs no second vocabulary for types.
+    params_schema: dict[str, Any]
 
 
-class AutobumpResponse(BaseSchema):
+class DeployPresetRequest(BaseSchema):
+    params: dict[str, Any] = {}
+    name: str | None = None
+
+
+class DeployPresetResponse(BaseSchema):
     flow_id: str
     trigger_id: str
 
@@ -58,36 +87,49 @@ def _trigger_service(request: Request) -> TriggerService:
     return TriggerService(FlowRepository(sm), TriggerRepository(sm))
 
 
-@router.post("/autobump", status_code=201, dependencies=protect())
-async def deploy_autobump(
-    body: AutobumpRequest,
+@router.get("/list", dependencies=protect())
+async def list_presets() -> list[PresetSummary]:
+    """Every preset this build ships, with the fields it asks for."""
+    return [
+        PresetSummary(
+            key=preset.key,
+            title=preset.title,
+            icon=preset.icon,
+            default_name=preset.default_name,
+            params_schema=preset.params.model_json_schema(),
+        )
+        for preset in BUILTIN_PRESETS
+    ]
+
+
+@router.post("/{key}/deploy", status_code=201, dependencies=protect())
+async def deploy_preset(
+    key: str,
+    body: DeployPresetRequest,
     tenant_id: TenantId = Depends(tenant_id_dep),
     flows: FlowService = Depends(_flow_service),
     triggers: TriggerService = Depends(_trigger_service),
-) -> AutobumpResponse:
-    """Compile the settings, save the flow, compile it, then attach the schedule.
+) -> DeployPresetResponse:
+    """Validate the parameters against the preset, build the graph, save, compile, schedule.
 
-    Compiled before the trigger is attached on purpose: compilation is the validity gate, so a graph
-    that cannot compile must never acquire a schedule that would try to run it every 30 minutes.
+    Compiled BEFORE the trigger is attached, on purpose: compilation is the validity gate, so a
+    graph that cannot compile must never acquire a schedule that would try to run it every
+    30 minutes.
     """
-    spec = build_autobump_flow(
-        body.name,
-        AutobumpSettings(
-            accounts=tuple(body.accounts),
-            schedule_cron=body.schedule_cron,
-            max_bumps=body.max_bumps,
-            reprice=body.reprice,
-            reprice_currency=body.reprice_currency,
-            reprice_price=body.reprice_price,
-        ),
-    )
+    preset = get_preset(key)
+    try:
+        params: PresetParams = preset.params.model_validate(body.params)
+    except ValidationError as exc:
+        raise PresetParamsInvalid(key, str(exc)) from exc
+
+    spec = preset.build(body.name or preset.default_name, params)
+    # Typed, not looked up by name: `schedule_cron` lives on PresetParams precisely so the deploy
+    # path can read it off any preset without knowing which one it is holding.
+    schedule_cron = params.schedule_cron.value
+
     flow = await flows.create(tenant_id, spec)
     await flows.compile(tenant_id, flow.id)
     trigger = await triggers.create(
-        tenant_id,
-        flow.id,
-        TriggerKind.SCHEDULE,
-        schedule_cron=body.schedule_cron,
-        event_type=None,
+        tenant_id, flow.id, TriggerKind.SCHEDULE, schedule_cron=schedule_cron, event_type=None
     )
-    return AutobumpResponse(flow_id=str(flow.id), trigger_id=str(trigger.id))
+    return DeployPresetResponse(flow_id=str(flow.id), trigger_id=str(trigger.id))

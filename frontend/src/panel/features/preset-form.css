@@ -20,7 +20,7 @@
 }
 
 .autobump__section-hint {
-  font-size: 12px;
+  font-size: 14px;
   color: var(--lzt-text-dim);
   line-height: 1.5;
   margin: 0;
@@ -113,7 +113,7 @@
   border: 1px solid var(--lzt-border);
   background: transparent;
   color: var(--lzt-text-dim);
-  font-size: 13px;
+  font-size: 14px;
   font-family: inherit;
   cursor: pointer;
   transition: all 160ms ease-out;
@@ -138,7 +138,7 @@
 }
 
 .autobump__field label {
-  font-size: 13px;
+  font-size: 14px;
   color: var(--lzt-text);
 }
 
@@ -152,7 +152,7 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  font-size: 13px;
+  font-size: 14px;
   color: var(--lzt-text);
   cursor: pointer;
   padding: 6px 0;
@@ -170,6 +170,6 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  font-size: 12px;
+  font-size: 14px;
   color: var(--lzt-text-dim);
 }

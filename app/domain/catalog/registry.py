@@ -32,6 +32,7 @@ from app.domain.catalog.nodes.batch_status import BatchStatusNode
 from app.domain.catalog.nodes.batch_submit import BatchNode
 from app.domain.catalog.nodes.bool_op import BoolOpNode
 from app.domain.catalog.nodes.bump import BumpNode
+from app.domain.catalog.nodes.bump_thread import BumpThreadNode
 from app.domain.catalog.nodes.compare import CompareNode
 from app.domain.catalog.nodes.condition import ConditionNode
 from app.domain.catalog.nodes.dynamic_method import DynamicMethodNode
@@ -185,5 +186,6 @@ BUILTIN_REGISTRATIONS: tuple[NodeRegistration, ...] = tuple(
         BatchListPendingNode,
         SearchNode,
         FastBuyNode,
+        BumpThreadNode,
     )
 )

@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import "../autoform.css";
+import "./autoform.css";
 
 /** Chevron for the custom select — native `appearance: none` strips the OS arrow, so the
  * dropdown affordance is drawn here instead. */
@@ -23,11 +23,14 @@ function ChevronIcon() {
 interface FieldProps {
   label: string;
   required?: boolean;
+  /** The field'''s own explanation, rendered under the control. Comes straight from the schema'''s
+   * `description`, so a form explains itself without the screen restating anything. */
+  hint?: string;
   children: ReactNode;
 }
 
 /** Labelled field wrapper shared by every control. */
-export function Field({ label, required, children }: FieldProps) {
+export function Field({ label, required, hint, children }: FieldProps) {
   return (
     <label className="autoform__field">
       <span className="autoform__label">
@@ -35,6 +38,7 @@ export function Field({ label, required, children }: FieldProps) {
         {required ? <span className="autoform__required">*</span> : null}
       </span>
       {children}
+      {hint ? <span className="autoform__hint">{hint}</span> : null}
     </label>
   );
 }
@@ -151,11 +155,11 @@ export function OptionPicker({ value, onChange, options, placeholder }: PickerPr
 }
 
 export function AccountPicker(props: Omit<PickerProps, "placeholder">) {
-  return <OptionPicker {...props} placeholder="Select an account…" />;
+  return <OptionPicker {...props} placeholder="выберите аккаунт…" />;
 }
 
 export function CategoryPicker(props: Omit<PickerProps, "placeholder">) {
-  return <OptionPicker {...props} placeholder="Select a category…" />;
+  return <OptionPicker {...props} placeholder="выберите категорию…" />;
 }
 
 interface TextAreaProps {

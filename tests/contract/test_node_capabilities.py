@@ -71,7 +71,7 @@ def test_market_mutators_declare_market_mutate(key: str) -> None:
 def test_every_builtin_is_declared() -> None:
     """A bare count is a weak assertion, but it is the one that fires when a node is added and
     nobody thinks about its capabilities. Bump it deliberately, never to make the suite green."""
-    assert len(builtin_registry().all()) == 24
+    assert len(builtin_registry().all()) == 25
 
 
 @pytest.mark.parametrize("key", _money_node_keys())

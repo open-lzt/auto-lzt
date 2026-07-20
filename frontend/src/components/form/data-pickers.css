@@ -1,0 +1,54 @@
+.data-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.data-picker__row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  /* >=8px vertical so the hover target is a comfortable band, not a hairline. */
+  padding: 8px 10px;
+  border-radius: var(--radius-sm, 8px);
+  cursor: pointer;
+  transition: background-color 140ms ease-out;
+}
+
+.data-picker__row:hover {
+  background: var(--surface-2);
+}
+
+.data-picker__check {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.data-picker__name {
+  font-size: 14px;
+  color: var(--text);
+}
+
+.data-picker__sub {
+  font-size: 14px;
+  color: var(--text-muted);
+}
+
+/* Pushed right and tabular so a column of balances can be compared down the list. */
+.data-picker__balance {
+  margin-left: auto;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.data-picker__note {
+  margin: 0;
+  padding: 8px 10px;
+  font-size: 14px;
+  color: var(--text-muted);
+}

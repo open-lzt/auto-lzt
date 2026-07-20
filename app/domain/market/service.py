@@ -17,6 +17,8 @@ from app.domain.market.dtos import (
     RelistResult,
     RepriceResult,
     SearchResult,
+    ThreadBumpResult,
+    ThreadRef,
 )
 from app.domain.market.errors import TokenInvalid
 
@@ -56,6 +58,23 @@ class MarketService:
             if self._excluder is not None:
                 await self._excluder.exclude_account(tenant_id, exc.account_id)
             raise
+
+    async def bump_thread(self, thread_id: int, account: Account) -> ThreadBumpResult:
+        """Bump one forum thread on behalf of one explicit account.
+
+        Pinned only, with no pooled variant on purpose: a thread belongs to the account that
+        posted it, so letting the round-robin pick the credential would try to bump someone
+        else's thread and fail — or, worse, succeed against the wrong account.
+        """
+        token = self._cipher.decrypt(account.encrypted_token, account.tenant_id)
+        adapter = MarketAdapter(token=token, account_id=account.id, base_url=self._market_base_url)
+        return await adapter.bump_thread(thread_id)
+
+    async def thread_info(self, thread_id: int, account: Account) -> ThreadRef:
+        """One thread's title, so the picker shows a name next to the id."""
+        token = self._cipher.decrypt(account.encrypted_token, account.tenant_id)
+        adapter = MarketAdapter(token=token, account_id=account.id, base_url=self._market_base_url)
+        return await adapter.thread_info(thread_id)
 
     async def reprice(
         self, item_id: int, account: Account, *, price: int, currency: Currency

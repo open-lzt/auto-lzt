@@ -1,15 +1,17 @@
-import type { JsonSchema, JsonSchemaUi } from "../api/flowClient";
+import type { JsonSchema, JsonSchemaUi } from "../../api/flowClient";
 import {
   Checkbox,
   DateTimePicker,
   Field,
   MultiSelect,
+  OptionPicker,
   RadioGroup,
-  SelectField,
   Slider,
   TextArea,
   TextField,
-} from "./ui/controls";
+  type PickerOption,
+} from "./controls";
+import { AccountMultiPicker, CategorySelect } from "./DataPickers";
 import "./autoform.css";
 
 type FieldValue = string | number | boolean;
@@ -20,33 +22,66 @@ const NUMBER_OR_PARAM_REF = /^(-?\d*\.?\d*|\{\{?p?a?r?a?m?\.?[\w.]*\}?\}?)$/;
 interface FieldSpec {
   key: string;
   title: string;
+  description?: string;
   required: boolean;
   kind: "string" | "number" | "boolean" | "enum" | "unknown";
   enumValues?: (string | number)[];
+  // Human captions for `enumValues`, from `x-ui.options`. JSON Schema has nowhere to put them,
+  // and without it a cron-valued enum renders the raw expression instead of «Каждые 30 минут».
+  options?: PickerOption[];
   // x-ui.widget picks the control within a kind: radio/multiselect for enum, textarea/datetime
   // for string. "slider" is number-only, so it carries its own config below instead of here.
   widget?: JsonSchemaUi["widget"];
   slider?: { min: number; max: number; step: number; unit?: string };
 }
 
-// Pydantic v2 renders `X | None` as anyOf: [{type: X}, {type: "null"}] — unwrap to the real type
-// so the form still renders a normal input instead of falling back to "unknown".
-function resolveType(schema: JsonSchema): { type?: string; enumValues?: (string | number)[] } {
+/** Unwrap a property schema down to the type that decides which control to render.
+ *
+ * Three shapes arrive from Pydantic and all three used to fall through to "unknown":
+ *   - `anyOf: [{type: X}, {type: "null"}]` for `X | None`;
+ *   - `$ref: "#/$defs/Name"` for ANY enum-typed field — which is every picker in the app;
+ *   - a plain inline `enum`.
+ * `$defs` is threaded through because a `$ref` can only be resolved against the ROOT schema.
+ */
+function resolveType(
+  schema: JsonSchema,
+  defs: Record<string, JsonSchema>,
+): { type?: string; enumValues?: (string | number)[] } {
+  const ref = typeof schema.$ref === "string" ? schema.$ref : null;
+  if (ref) {
+    const target = defs[ref.replace("#/$defs/", "")];
+    if (target) return resolveType(target, defs);
+  }
   if (schema.enum) return { type: schema.type, enumValues: schema.enum };
   if (schema.anyOf) {
-    const real = schema.anyOf.find((s) => s.type && s.type !== "null");
-    if (real) return resolveType(real);
+    const real = schema.anyOf.find((s) => s.$ref ?? (s.type && s.type !== "null"));
+    if (real) return resolveType(real, defs);
   }
   return { type: schema.type };
 }
 
-function toFieldSpec(key: string, schema: JsonSchema, required: Set<string>): FieldSpec {
-  const { type, enumValues } = resolveType(schema);
+function toFieldSpec(
+  key: string,
+  schema: JsonSchema,
+  required: Set<string>,
+  defs: Record<string, JsonSchema>,
+): FieldSpec {
+  const { type, enumValues } = resolveType(schema, defs);
   const title = schema.title ?? key;
+  const description = typeof schema.description === "string" ? schema.description : undefined;
   const isRequired = required.has(key);
   const ui = schema["x-ui"];
-  if (enumValues) {
-    return { key, title, required: isRequired, kind: "enum", enumValues, widget: ui?.widget };
+  if (enumValues || ui?.widget === "category_picker" || ui?.widget === "account_ref") {
+    return {
+      key,
+      title,
+      description,
+      required: isRequired,
+      kind: "enum",
+      enumValues,
+      options: ui?.options,
+      widget: ui?.widget,
+    };
   }
   if (type === "integer" || type === "number") {
     const slider =
@@ -58,11 +93,13 @@ function toFieldSpec(key: string, schema: JsonSchema, required: Set<string>): Fi
             unit: ui.unit,
           }
         : undefined;
-    return { key, title, required: isRequired, kind: "number", slider };
+    return { key, title, description, required: isRequired, kind: "number", slider };
   }
-  if (type === "boolean") return { key, title, required: isRequired, kind: "boolean" };
-  if (type === "string") return { key, title, required: isRequired, kind: "string", widget: ui?.widget };
-  return { key, title, required: isRequired, kind: "unknown" };
+  if (type === "boolean") return { key, title, description, required: isRequired, kind: "boolean" };
+  if (type === "string" || type === "array") {
+    return { key, title, description, required: isRequired, kind: "string", widget: ui?.widget };
+  }
+  return { key, title, description, required: isRequired, kind: "unknown" };
 }
 
 interface AutoFormProps {
@@ -71,14 +108,20 @@ interface AutoFormProps {
   onChange: (key: string, value: FieldValue) => void;
 }
 
-/** Renders one input per JSON-Schema property — the node's `input_schema` fetched from GET
- * /catalog. Supports string/number/boolean/enum, with `x-ui.widget` upgrading string to
- * textarea/datetime, enum to radio/multiselect, and number to slider; anything more exotic falls
+/** Renders one input per JSON-Schema property.
+ *
+ * Drives both surfaces that describe their fields as a schema: a node's `input_schema` from GET
+ * /catalog, and a preset's parameter model from GET /panel/presets/list. Supports
+ * string/number/boolean/enum, with `x-ui.widget` upgrading string to textarea/datetime, enum to
+ * radio/multiselect/account/category pickers, and number to slider; anything more exotic falls
  * back to a plain text field rather than silently dropping the parameter. */
 export function AutoForm({ schema, values, onChange }: AutoFormProps) {
   const properties = schema.properties ?? {};
   const required = new Set(schema.required ?? []);
-  const fields = Object.entries(properties).map(([key, propSchema]) => toFieldSpec(key, propSchema, required));
+  const defs = (schema.$defs ?? {}) as Record<string, JsonSchema>;
+  const fields = Object.entries(properties).map(([key, propSchema]) =>
+    toFieldSpec(key, propSchema, required, defs),
+  );
 
   if (fields.length === 0) {
     return <p className="autoform__empty">у этого блока нет параметров</p>;
@@ -99,32 +142,38 @@ export function AutoForm({ schema, values, onChange }: AutoFormProps) {
             </label>
           );
         }
+        // `x-ui.options` wins over the raw enum values: the schema knows the allowed set, the
+        // ui hint knows what to call each one.
+        const options: PickerOption[] =
+          field.options ??
+          (field.enumValues ?? []).map((opt) => ({ value: String(opt), label: String(opt) }));
         return (
-          <Field key={field.key} label={field.title} required={field.required}>
-            {field.kind === "enum" && field.widget === "radio" ? (
+          <Field
+            key={field.key}
+            label={field.title}
+            required={field.required}
+            hint={field.description}
+          >
+            {field.widget === "account_ref" ? (
+              <AccountMultiPicker value={raw} onChange={(v) => onChange(field.key, v)} />
+            ) : field.widget === "category_picker" ? (
+              <CategorySelect value={raw} onChange={(v) => onChange(field.key, v)} />
+            ) : field.kind === "enum" && field.widget === "radio" ? (
               <RadioGroup
                 name={field.key}
                 value={String(values[field.key] ?? "")}
                 onChange={(v) => onChange(field.key, v)}
-                options={(field.enumValues ?? []).map((opt) => ({ value: String(opt), label: String(opt) }))}
+                options={options}
               />
             ) : field.kind === "enum" && field.widget === "multiselect" ? (
-              <MultiSelect
-                value={raw}
-                onChange={(v) => onChange(field.key, v)}
-                options={(field.enumValues ?? []).map((opt) => ({ value: String(opt), label: String(opt) }))}
-              />
+              <MultiSelect value={raw} onChange={(v) => onChange(field.key, v)} options={options} />
             ) : field.kind === "enum" ? (
-              <SelectField value={String(values[field.key] ?? "")} onChange={(v) => onChange(field.key, v)}>
-                <option value="" disabled>
-                  выберите…
-                </option>
-                {field.enumValues?.map((opt) => (
-                  <option key={String(opt)} value={opt}>
-                    {opt}
-                  </option>
-                ))}
-              </SelectField>
+              <OptionPicker
+                value={String(values[field.key] ?? "")}
+                onChange={(v) => onChange(field.key, v)}
+                options={options}
+                placeholder="выберите…"
+              />
             ) : field.kind === "number" && field.slider ? (
               <Slider
                 value={Number(values[field.key] ?? field.slider.min)}

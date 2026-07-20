@@ -15,12 +15,12 @@ import {
   Slider,
   TextArea,
   TextField,
-} from "./ui/controls";
+} from "../components/form/controls";
 import { MARKET_CATEGORIES, isVisible, validateParam } from "./paramTypes";
 import type { ParamSpec, ParamValue } from "./paramTypes";
 import { fetchCategories } from "../api/flowClient";
-import type { PickerOption } from "./ui/controls";
-import "./autoform.css";
+import type { PickerOption } from "../components/form/controls";
+import "../components/form/autoform.css";
 
 /** Live market categories with the static snapshot as an offline fallback (closes the wave-01
  * hardcode: the picker prefers GET /catalog/categories, degrades to the bundled list on failure). */

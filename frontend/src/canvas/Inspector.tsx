@@ -1,8 +1,8 @@
 import type { CatalogNode, TriggerKind } from "../api/flowClient";
-import { AutoForm } from "./AutoForm";
+import { AutoForm } from "../components/form/AutoForm";
 import type { CanvasNodeData, TriggerConfig } from "./canvasTypes";
 import { displayLabel } from "./labels";
-import { Field, SelectField, TextField } from "./ui/controls";
+import { Field, SelectField, TextField } from "../components/form/controls";
 import { useResizablePane } from "../components/ResizablePane";
 import "./inspector.css";
 

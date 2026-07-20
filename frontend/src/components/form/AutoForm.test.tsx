@@ -2,7 +2,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { AutoForm } from "./AutoForm";
-import type { JsonSchema } from "../api/flowClient";
+import type { JsonSchema } from "../../api/flowClient";
 
 /** One field's schema wrapped in the object shape `AutoForm` reads off GET /catalog. */
 function schemaFor(key: string, propSchema: JsonSchema, required = true): JsonSchema {
