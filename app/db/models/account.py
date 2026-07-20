@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 from datetime import datetime
+from decimal import Decimal
 from uuid import UUID
 
-from sqlalchemy import DateTime, Index, LargeBinary, String, UniqueConstraint, Uuid
+from sqlalchemy import DateTime, Index, LargeBinary, Numeric, String, UniqueConstraint, Uuid
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -26,6 +27,14 @@ class AccountORM(Base):
     token_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     label: Mapped[str | None] = mapped_column(String(100), nullable=True)
     last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Cached marketplace profile — refreshed on demand, never on the read path.
+    username: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    # Numeric, not Float: this is money. 18/2 holds any marketplace balance without rounding it.
+    balance: Mapped[Decimal | None] = mapped_column(Numeric(18, 2), nullable=True)
+    balance_currency: Mapped[str | None] = mapped_column(String(8), nullable=True)
+    profile_synced_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     __table_args__ = (
         Index("ix_accounts_tenant_id", "tenant_id"),

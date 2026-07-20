@@ -29,6 +29,9 @@ class RunORM(Base):
     # Caller-supplied flow parameters, validated at fire time; read by the runtime resolver for
     # ``{{vars.<key>}}`` refs. Nullable for rows created before the parameter surface existed.
     vars: Mapped[dict[str, Any] | None] = mapped_column(_JSONB, nullable=True)
+    # Why the run failed; NULL on every non-failed row. Bounded so a pathological repr from a
+    # node cannot write an unbounded blob into the run header.
+    error: Mapped[str | None] = mapped_column(String(2000), nullable=True)
     version: Mapped[int] = mapped_column(Integer, nullable=False)
     claimed_by: Mapped[str | None] = mapped_column(String(100), nullable=True)
     claimed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -78,6 +81,10 @@ class RunTraceORM(Base):
     duration_ms: Mapped[int] = mapped_column(Integer, nullable=False)
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     completed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    # server_default so every row written before failed-step capture existed reads back as
+    # "completed" — which is exactly what those rows are, since capture only ran on success.
+    status: Mapped[str] = mapped_column(String(16), nullable=False, server_default="completed")
+    error: Mapped[str | None] = mapped_column(String(2000), nullable=True)
 
     __table_args__ = (
         Index("ix_run_traces_run_id", "run_id"),

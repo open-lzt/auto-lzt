@@ -1,10 +1,12 @@
-import { Alert, Badge, Button, Card, Empty, Input, Skeleton, useToast } from "@open-lzt/ui";
+import { Alert, Badge, Button, Card, Empty, Icon, Input, Skeleton, useToast } from "@open-lzt/ui";
 import { useCallback, useEffect, useState } from "react";
 import {
+  accountBalance,
   addAccount,
   deleteAccount,
   fetchAccounts,
   reactivateAccount,
+  refreshAccountProfile,
   setAccountLabel,
   type Account,
 } from "../../../api/accountsClient";
@@ -82,6 +84,23 @@ export function AccountsView() {
     }
   }
 
+  async function handleRefresh(account: Account): Promise<void> {
+    setBusyId(account.id);
+    try {
+      await refreshAccountProfile(account.id);
+      await reload();
+    } catch (err) {
+      // Named per-account: with several rows on screen, "не удалось обновить" alone leaves the
+      // operator guessing which token is the bad one.
+      toast.show(
+        err instanceof Error ? err.message : `не удалось обновить ${account.id.slice(0, 8)}`,
+        { tone: "danger" },
+      );
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   async function handleReactivate(account: Account): Promise<void> {
     setBusyId(account.id);
     try {
@@ -156,17 +175,34 @@ export function AccountsView() {
                 aria-label="Название аккаунта"
                 onBlur={(e) => void handleRename(account, e.target.value)}
               />
-              {/* The bump tab identifies an unnamed account by this same id prefix. Without it here
-                  the two screens disagree — one calls the account «Без названия», the other
-                  «72f48cfc» — and nothing on either tells the operator they are the same row. */}
-              <code className="accounts-row__id" title={account.id}>
-                {account.id.slice(0, 8)}
-              </code>
+              {/* The nickname is the account's real name. The id prefix survives only as the
+                  fallback for a token whose profile has never been fetched, so a row is never
+                  anonymous — and the account pickers use the same rule, so the screens agree. */}
+              <span className="accounts-row__username" title={account.id}>
+                {account.username ?? account.id.slice(0, 8)}
+              </span>
+              <span className="accounts-row__balance">
+                {accountBalance(account) ?? <span className="accounts-row__muted">—</span>}
+              </span>
               <Badge tone={account.status === "active" ? "brand" : "warning"} pill>
                 {account.status === "active" ? "Активен" : "Исключён"}
               </Badge>
               <span className="accounts-row__seen">{formatLastSeen(account.last_seen_at)}</span>
               <div className="accounts-row__actions">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  loading={busyId === account.id}
+                  aria-label="Обновить ник и баланс"
+                  title={
+                    account.profile_synced_at
+                      ? `Обновлено ${new Date(account.profile_synced_at).toLocaleString("ru-RU")}`
+                      : "Ник и баланс ещё не загружались"
+                  }
+                  onClick={() => void handleRefresh(account)}
+                >
+                  <Icon name="refresh" size={14} />
+                </Button>
                 {account.status === "excluded" ? (
                   <Button
                     variant="ghost"

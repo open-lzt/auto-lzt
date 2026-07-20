@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from datetime import datetime
+from decimal import Decimal
 from typing import Any
 
 from sqlalchemy import func, select
@@ -24,6 +26,10 @@ def _to_domain(orm: AccountORM) -> Account:
         token_hash=orm.token_hash,
         label=orm.label,
         last_seen_at=orm.last_seen_at,
+        username=orm.username,
+        balance=orm.balance,
+        balance_currency=orm.balance_currency,
+        profile_synced_at=orm.profile_synced_at,
     )
 
 
@@ -99,6 +105,27 @@ class AccountRepository(BaseRepo[Account, AccountId]):
             raise KeyError(f"account {account_id} not found for tenant {tenant_id}")
         orm.status = status.value
         await self._session.flush()
+
+    async def save_profile(
+        self,
+        tenant_id: TenantId,
+        account_id: AccountId,
+        *,
+        username: str,
+        balance: Decimal,
+        currency: str,
+        synced_at: datetime,
+    ) -> Account:
+        """Store the profile fetched from the marketplace. Raises KeyError if absent."""
+        orm = await self._session.get(AccountORM, account_id)
+        if orm is None or orm.tenant_id != tenant_id:
+            raise KeyError(f"account {account_id} not found for tenant {tenant_id}")
+        orm.username = username
+        orm.balance = balance
+        orm.balance_currency = currency
+        orm.profile_synced_at = synced_at
+        await self._session.flush()
+        return _to_domain(orm)
 
     async def set_label(
         self, tenant_id: TenantId, account_id: AccountId, label: str | None

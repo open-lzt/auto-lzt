@@ -40,6 +40,12 @@ class AccountResponse(BaseSchema):
     status: AccountStatus
     label: str | None = None
     last_seen_at: datetime | None = None
+    username: str | None = None
+    # A string, not a float: this is money, and a JSON float would reintroduce exactly the
+    # rounding that Decimal is used to avoid. The panel formats it, never arithmetics it.
+    balance: str | None = None
+    balance_currency: str | None = None
+    profile_synced_at: datetime | None = None
 
 
 class DeleteAccountResponse(BaseSchema):
@@ -53,6 +59,10 @@ def _to_response(account: Account) -> AccountResponse:
         status=account.status,
         label=account.label,
         last_seen_at=account.last_seen_at,
+        username=account.username,
+        balance=str(account.balance) if account.balance is not None else None,
+        balance_currency=account.balance_currency,
+        profile_synced_at=account.profile_synced_at,
     )
 
 
@@ -70,7 +80,7 @@ async def get_account_service(
     lifetime, per /backend's Depends-injection rule (never build a service inline in a handler)."""
     cipher = EnvelopeCipher(master_key=settings.master_key)
     async with session_scope(request.app.state.sessionmaker) as session:
-        yield AccountService(AccountRepository(session), cipher, pool)
+        yield AccountService(AccountRepository(session), cipher, pool, settings.market_base_url)
 
 
 @router.post("/create", status_code=201, dependencies=protect())
@@ -80,7 +90,7 @@ async def add_account(
     svc: AccountService = Depends(get_account_service),
 ) -> AccountResponse:
     account = await svc.add_account(tenant_id, body.token)
-    return AccountResponse(id=str(account.id), status=account.status)
+    return _to_response(account)
 
 
 @router.post("/{account_id}/reactivate", dependencies=protect())
@@ -91,6 +101,22 @@ async def reactivate_account(
 ) -> AccountResponse:
     await svc.reactivate(tenant_id, AccountId(account_id))
     return AccountResponse(id=str(account_id), status=AccountStatus.ACTIVE)
+
+
+@router.post("/{account_id}/refresh", dependencies=protect())
+async def refresh_account_profile(
+    account_id: UUID,
+    tenant_id: TenantId = Depends(tenant_id_dep),
+    svc: AccountService = Depends(get_account_service),
+) -> AccountResponse:
+    """Re-read this account's nickname and balance from the marketplace.
+
+    A separate call rather than folding it into ``/list``: listing accounts must not depend on
+    the marketplace being reachable, and refreshing N accounts on every page open would spend N
+    upstream requests to render a screen the operator may only be glancing at.
+    """
+    account = await svc.refresh_profile(tenant_id, AccountId(account_id))
+    return _to_response(account)
 
 
 @router.get("/list", dependencies=protect())

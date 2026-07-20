@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+from decimal import Decimal
 
 from pydantic import Field
 
@@ -54,6 +55,34 @@ class FastBuyResult:
     price: int
     # False when the node ran with dry_run — nothing was bought and no money moved.
     purchased: bool
+
+
+@dataclass(slots=True, frozen=True)
+class ProfileResult:
+    """The account's own profile — what the panel shows instead of a UUID fragment.
+
+    ``balance`` is Decimal, never float: it is money, and the wire sends it as a string that
+    parses losslessly. ``currency`` travels WITH the amount so a number is never rendered
+    under the wrong sign."""
+
+    user_id: int
+    username: str
+    balance: Decimal
+    currency: str
+
+
+@dataclass(slots=True, frozen=True)
+class ThreadBumpResult:
+    thread_id: int
+    bumped_at: datetime  # UTC, tz-aware
+
+
+@dataclass(slots=True, frozen=True)
+class ThreadRef:
+    """One forum thread the operator owns — the picker's row on the «Поднятие тем» screen."""
+
+    thread_id: int
+    title: str
 
 
 @dataclass(slots=True, frozen=True)

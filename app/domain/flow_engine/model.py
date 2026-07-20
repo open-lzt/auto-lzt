@@ -87,6 +87,10 @@ class Run:
     # Validated flow parameters, injected into the runtime resolver for ``{{vars.<key>}}`` refs.
     # Defaulted so event/schedule-triggered runs (no params) construct unchanged.
     vars: dict[str, str | int | float | bool | None] = field(default_factory=dict)
+    # Why the run FAILED. ``current_node_id`` already records WHERE it stopped; without this the
+    # operator could see that a run failed and at which node, but never what the node actually
+    # said — the cause was raised, logged, and then dropped on the way to the database.
+    error: str | None = None
 
 
 @dataclass(slots=True, frozen=True)
@@ -122,6 +126,12 @@ class RunTrace:
     duration_ms: int
     started_at: datetime
     completed_at: datetime
+    # A FAILED step now gets a trace row too. Previously capture ran only after a step
+    # succeeded, so the timeline stopped one row BEFORE the node that broke — the single most
+    # useful row was the one never written. ``output`` is empty on such a row; ``error`` holds
+    # what the node raised.
+    status: RunStatus = RunStatus.COMPLETED
+    error: str | None = None
 
 
 @dataclass(slots=True, frozen=True)

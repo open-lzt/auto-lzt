@@ -109,7 +109,12 @@ class RunStore(Protocol):
     async def get(self, run_id: RunId) -> Run | None: ...
     async def claim(self, run_id: RunId, expected_version: int, worker_id: str) -> int | None: ...
     async def touch(
-        self, run_id: RunId, expected_version: int, current_node_id: str | None, status: RunStatus
+        self,
+        run_id: RunId,
+        expected_version: int,
+        current_node_id: str | None,
+        status: RunStatus,
+        error: str | None = None,
     ) -> int | None: ...
 
 
@@ -223,12 +228,17 @@ async def _capture_trace(
     node: IRNode,
     iteration_key: str | None,
     results: Mapping[str, StepResultDTO],
-    result: StepResultDTO,
+    result: StepResultDTO | None,
     started_at: datetime,
     elapsed_s: float,
+    error: str | None = None,
 ) -> None:
     """Best-effort (wave-03): a trace-write failure is caught and logged here, never propagated —
-    trace capture is observability, not a correctness dependency of the run itself."""
+    trace capture is observability, not a correctness dependency of the run itself.
+
+    ``result is None`` means the step FAILED: there is no output to record, and ``error`` carries
+    what the node raised. Input resolution still runs, because the inputs a failing node was
+    handed are usually the whole explanation."""
     try:
         resolve = _make_resolver(node, results, run.vars)
         inputs = {port: resolve(port) for port in node.inputs}
@@ -241,16 +251,51 @@ async def _capture_trace(
                 iteration_key=iteration_key,
                 node_type=node.type,
                 inputs=inputs,
-                output=result.output,
+                output=result.output if result is not None else {},
                 duration_ms=round(elapsed_s * 1000),
                 started_at=started_at,
                 completed_at=_now(),
+                status=RunStatus.COMPLETED if result is not None else RunStatus.FAILED,
+                error=error,
             )
         )
     except Exception:  # noqa: BLE001 — trace capture boundary: never fail the run over a
         # best-effort observability write (wave-03 decision, mirrors the two-phase commit's own
         # non-critical-path guarantees).
         log.exception("run_trace.write_failed", run_id=str(run.id), node_id=node.id)
+
+
+async def _capture_failed_step(
+    trace_sink: TraceSink | None,
+    run: Run,
+    tenant_id: TenantId | None,
+    node: IRNode,
+    iteration_key: str | None,
+    results: Mapping[str, StepResultDTO],
+    started_at: datetime,
+    elapsed_s: float,
+    error: str,
+) -> None:
+    """Record the step that FAILED, before the failure propagates.
+
+    Capture used to run only after a step succeeded, so a failed run's timeline stopped one row
+    short of the node that broke — the single most useful row was the one never written. Same
+    best-effort contract as ``_capture_trace``: observability, never a correctness dependency.
+    """
+    if trace_sink is None or tenant_id is None:
+        return
+    await _capture_trace(
+        trace_sink,
+        run,
+        tenant_id,
+        node,
+        iteration_key,
+        results,
+        None,
+        started_at,
+        elapsed_s,
+        error=error,
+    )
 
 
 class _AbortRun(Exception):
@@ -325,7 +370,10 @@ async def execute_run(
     except RunAlreadyClaimed:
         raise
     except RunFailed as exc:
-        await runs.touch(run_id, version_box[0], exc.step, RunStatus.FAILED)
+        # exc.message is PERSISTED, not merely raised: it is the only record of why the run
+        # stopped. It used to be dropped here, so the panel could say "failed at step buy" and
+        # never what the step actually said.
+        await runs.touch(run_id, version_box[0], exc.step, RunStatus.FAILED, exc.cause)
         await _publish_task_event(event_transport, run, TaskEventReason.RUN_FINISHED)
         raise
 
@@ -429,17 +477,31 @@ async def _run_chain(
 
         step_started = time.monotonic()
         started_at = _now()
-        result = await _run_node(
-            run,
-            node,
-            steps,
-            registry,
-            node_deps,
-            results,
-            active_iteration_key,
-            active_account,
-            visits - 1,
-        )
+        try:
+            result = await _run_node(
+                run,
+                node,
+                steps,
+                registry,
+                node_deps,
+                results,
+                active_iteration_key,
+                active_account,
+                visits - 1,
+            )
+        except RunFailed as exc:
+            await _capture_failed_step(
+                trace_sink,
+                run,
+                tenant_id,
+                node,
+                active_iteration_key,
+                results,
+                started_at,
+                time.monotonic() - step_started,
+                exc.cause,
+            )
+            raise
         results[node.id] = result
         last_result = result
         if trace_sink is not None and tenant_id is not None:

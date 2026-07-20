@@ -337,10 +337,14 @@ class RunRepository(BaseSessionmakerRepo[Run, RunId]):
         expected_version: int,
         current_node_id: str | None,
         status: RunStatus,
+        error: str | None = None,
     ) -> int | None:
         """Re-assert ownership on each step and advance progress. Bumping version every step means a
         concurrent (re-enqueued) executor holding a stale version fails here — per-step mutual
-        exclusion (F-1). Returns the new version or None if ownership was lost."""
+        exclusion (F-1). Returns the new version or None if ownership was lost.
+
+        ``error`` is written only on the failing call; every per-step touch passes None and so
+        clears it, which is correct — a run that moved past a node is no longer failed there."""
         new_version = expected_version + 1
         stmt = (
             update(RunORM)
@@ -349,6 +353,7 @@ class RunRepository(BaseSessionmakerRepo[Run, RunId]):
                 version=new_version,
                 current_node_id=current_node_id,
                 status=status.value,
+                error=error[:2000] if error else None,
                 updated_at=_now(),
             )
         )
@@ -366,6 +371,7 @@ def _run_from_orm(orm: RunORM) -> Run:
         run_key=orm.run_key,
         status=RunStatus(orm.status),
         current_node_id=orm.current_node_id,
+        error=orm.error,
         vars=orm.vars or {},
         version=orm.version,
         claimed_by=orm.claimed_by,
@@ -461,6 +467,8 @@ class RunTraceRepository(BaseSessionmakerRepo[RunTrace, UUID]):
             duration_ms=trace.duration_ms,
             started_at=trace.started_at,
             completed_at=trace.completed_at,
+            status=trace.status.value,
+            error=trace.error[:2000] if trace.error else None,
         )
         async with session_scope(self._sm) as session:
             session.add(orm)
@@ -554,4 +562,6 @@ def _run_trace_from_orm(orm: RunTraceORM) -> RunTrace:
         duration_ms=orm.duration_ms,
         started_at=orm.started_at,
         completed_at=orm.completed_at,
+        status=RunStatus(orm.status),
+        error=orm.error,
     )

@@ -17,10 +17,12 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
+from decimal import Decimal, InvalidOperation
 from typing import Any, Final
 from uuid import UUID
 
 import structlog
+from pydantic import ValidationError
 from pylzt import AuthFailed, Client, ClientConfig, Forbidden, RateLimited, TransportError
 from pylzt.types import Currency, ItemOrigin, OrderBy
 
@@ -30,10 +32,13 @@ from app.domain.market.dtos import (
     BumpResult,
     FastBuyResult,
     LotsPage,
+    ProfileResult,
     RelistResult,
     RepriceResult,
     SearchHit,
     SearchResult,
+    ThreadBumpResult,
+    ThreadRef,
 )
 from app.domain.market.errors import LotUnavailable, MarketApiError, TokenInvalid
 
@@ -187,6 +192,54 @@ class MarketAdapter:
         return FastBuyResult(
             item_id=response.item.item_id, price=response.item.price, purchased=True
         )
+
+    async def profile(self) -> ProfileResult:
+        """Wraps ``profile_get`` — the account's own nickname and balance in one call.
+
+        ``balance`` arrives as a string and is parsed through ``str(...)`` into Decimal rather
+        than float: this is money, and binary floats do not represent it exactly. A blank or
+        unparseable amount degrades to 0 instead of raising — the panel showing a nickname with a
+        zero balance is worth more than an accounts page that refuses to load.
+        """
+        try:
+            response = await self._call(lambda client: client.market.profile_get())
+        except ValidationError as exc:
+            # The upstream answered with a shape pylzt could not parse. Mapped here rather than
+            # let out raw, because this adapter is the boundary whose whole job is that no
+            # pylzt-or-pydantic error reaches the domain wearing its own type.
+            raise MarketApiError(status=502) from exc
+        try:
+            balance = Decimal(str(response.balance))
+        except InvalidOperation:
+            logger.warning("profile_balance_unparseable", user_id=response.user_id)
+            balance = Decimal(0)
+        return ProfileResult(
+            user_id=response.user_id,
+            username=response.username,
+            balance=balance,
+            currency=response.currency,
+        )
+
+    async def bump_thread(self, thread_id: int) -> ThreadBumpResult:
+        """Wraps ``forum.threads_bump`` — the forum-side counterpart of ``bump``.
+
+        Lives on this adapter rather than a second forum-only one because the rule that keeps
+        pylzt contained is "one module imports pylzt", not "one module per facade".
+        """
+        await self._call(lambda client: client.forum.threads_bump(thread_id=thread_id))
+        return ThreadBumpResult(thread_id=thread_id, bumped_at=datetime.now(UTC))
+
+    async def thread_info(self, thread_id: int) -> ThreadRef:
+        """One thread's title, so the picker shows a name instead of a bare id.
+
+        Deliberately per-thread rather than a list call: every pylzt method that ENUMERATES
+        threads (``threads_list``, ``threads_recent``, ``threads_followed``) is typed
+        ``-> str`` — the generator had no response model for them, so their JSON shape is
+        unverified. ``threads_get`` is the one thread-reading method that returns a parsed
+        ``Content``, so it is the only one whose fields can be relied on here.
+        """
+        content = await self._call(lambda client: client.forum.threads_get(thread_id=thread_id))
+        return ThreadRef(thread_id=content.thread_id, title=content.thread_title)
 
     async def list_lots_page(self, *, page: int) -> LotsPage:
         """Wraps ``list_user`` (Wave 4) — one page of the pinned account's own lots.

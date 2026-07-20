@@ -8,7 +8,7 @@
 }
 
 .accounts-add__label {
-  font-size: 12px;
+  font-size: 14px;
   color: var(--lzt-text-dim);
 }
 
@@ -23,7 +23,7 @@
 }
 
 .accounts-add__hint {
-  font-size: 12px;
+  font-size: 14px;
   color: var(--lzt-text-dim);
   line-height: 1.5;
   margin: 0;
@@ -72,18 +72,31 @@
   border-color: var(--lzt-brand);
 }
 
-.accounts-row__id {
+.accounts-row__username {
   flex: none;
-  font-family: var(--lzt-font-mono, ui-monospace, monospace);
-  font-size: 11px;
+  font-size: 14px;
   color: var(--lzt-text-dim);
-  background: var(--lzt-surface-2);
-  border-radius: 6px;
-  padding: 2px 6px;
+  white-space: nowrap;
+}
+
+/* tabular-nums so amounts line up digit-for-digit down the column — proportional figures make a
+   list of balances impossible to compare at a glance. */
+.accounts-row__balance {
+  flex: none;
+  min-width: 112px;
+  text-align: right;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  color: var(--lzt-text);
+  white-space: nowrap;
+}
+
+.accounts-row__muted {
+  color: var(--lzt-text-dim);
 }
 
 .accounts-row__seen {
-  font-size: 12px;
+  font-size: 14px;
   color: var(--lzt-text-dim);
   white-space: nowrap;
 }

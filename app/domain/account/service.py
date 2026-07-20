@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from uuid import uuid4
 
+import structlog
 from sqlalchemy.exc import IntegrityError
 
 from app.core.exceptions import Conflict
@@ -13,13 +14,47 @@ from app.domain.account.errors import AccountInUse, AccountNotFound
 from app.domain.account.model import Account, AccountId, AccountStatus, TenantId
 from app.domain.account.pool import TokenPool
 from app.domain.account.repo import AccountRepository
+from app.domain.market.adapter import MarketAdapter
+
+log = structlog.get_logger()
 
 
 class AccountService:
-    def __init__(self, repo: AccountRepository, cipher: EnvelopeCipher, pool: TokenPool) -> None:
+    def __init__(
+        self,
+        repo: AccountRepository,
+        cipher: EnvelopeCipher,
+        pool: TokenPool,
+        market_base_url: str | None = None,
+    ) -> None:
         self._repo = repo
         self._cipher = cipher
         self._pool = pool
+        self._market_base_url = market_base_url
+
+    async def refresh_profile(self, tenant_id: TenantId, account_id: AccountId) -> Account:
+        """Fetch this account's nickname and balance from the marketplace and store them.
+
+        Deliberately a PINNED adapter (one token), not ``pool.acquire()``: the pooled Client
+        round-robins across every account of the tenant, so ``profile_get`` through it would
+        return whichever account the rotation happened to land on — each account's balance
+        would be some other account's. The one call that must speak as a specific credential
+        cannot go through the pool.
+        """
+        account = await self._repo.get(tenant_id, account_id)
+        if account is None:
+            raise AccountNotFound(account_id)
+        token = self._cipher.decrypt(account.encrypted_token, tenant_id)
+        adapter = MarketAdapter(token=token, account_id=account_id, base_url=self._market_base_url)
+        profile = await adapter.profile()
+        return await self._repo.save_profile(
+            tenant_id,
+            account_id,
+            username=profile.username,
+            balance=profile.balance,
+            currency=profile.currency,
+            synced_at=datetime.now(UTC),
+        )
 
     async def add_account(self, tenant_id: TenantId, token: str) -> Account:
         account = Account(
@@ -32,7 +67,17 @@ class AccountService:
         )
         await self._repo.create(tenant_id, account)
         await self._pool.invalidate(tenant_id)
-        return account
+        try:
+            return await self.refresh_profile(tenant_id, account.id)
+        except Exception:  # noqa: BLE001 — enrichment boundary: fetching the nickname and
+            # balance is a nicety, storing the credential is the operation. A narrow
+            # `except (TokenInvalid, MarketApiError)` looked right and was not: an upstream
+            # whose response shape drifts raises something else entirely, and adding an account
+            # then failed outright — the enrichment taking the operation down with it.
+            # The account lands with blank profile fields and a «Обновить» button, which reads
+            # as "not fetched yet" rather than pretending a balance of zero.
+            log.warning("account_profile_unavailable_on_add", account_id=str(account.id))
+            return account
 
     async def reactivate(self, tenant_id: TenantId, account_id: AccountId) -> None:
         await self._repo.update_status(tenant_id, account_id, AccountStatus.ACTIVE)

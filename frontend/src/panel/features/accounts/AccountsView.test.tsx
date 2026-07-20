@@ -32,6 +32,10 @@ function account(overrides: Partial<Account> = {}): Account {
     status: overrides.status ?? "active",
     label: overrides.label ?? "Основной",
     last_seen_at: overrides.last_seen_at ?? "2026-07-20T10:00:00.000Z",
+    username: overrides.username ?? null,
+    balance: overrides.balance ?? null,
+    balance_currency: overrides.balance_currency ?? null,
+    profile_synced_at: overrides.profile_synced_at ?? null,
   };
 }
 

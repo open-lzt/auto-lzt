@@ -208,6 +208,7 @@ class FakeRunRepo:
         expected_version: int,
         current_node_id: str | None,
         status: RunStatus,
+        error: str | None = None,
     ) -> int | None:
         run = self._by_id.get(run_id)
         if run is None or run.version != expected_version:
@@ -215,6 +216,7 @@ class FakeRunRepo:
         run.version += 1
         run.current_node_id = current_node_id
         run.status = status
+        run.error = error
         run.updated_at = _now()
         return run.version
 

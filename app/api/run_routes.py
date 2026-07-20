@@ -72,6 +72,9 @@ class RunSummary(BaseSchema):
     started_at: str
     finished_at: str | None
     duration_ms: int | None
+    # Which node stopped the run, and what it said. Both None unless the run FAILED.
+    failed_node_id: str | None = None
+    error: str | None = None
 
 
 _TERMINAL_STATUSES = {RunStatus.COMPLETED, RunStatus.FAILED}
@@ -89,6 +92,8 @@ def _to_summary(run: Run) -> RunSummary:
         started_at=run.created_at.isoformat(),
         finished_at=finished.isoformat() if finished else None,
         duration_ms=duration,
+        failed_node_id=run.current_node_id if run.status is RunStatus.FAILED else None,
+        error=run.error,
     )
 
 
@@ -101,6 +106,8 @@ class RunTraceEntry(BaseSchema):
     duration_ms: int
     started_at: str
     completed_at: str
+    status: RunStatus = RunStatus.COMPLETED
+    error: str | None = None
 
 
 def _run_service(request: Request) -> RunService:
@@ -188,6 +195,8 @@ async def get_run_trace(
             duration_ms=t.duration_ms,
             started_at=t.started_at.isoformat(),
             completed_at=t.completed_at.isoformat(),
+            status=t.status,
+            error=t.error,
         )
         for t in traces
     ]

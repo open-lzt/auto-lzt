@@ -137,13 +137,19 @@ class _InMemoryRunStore:
         return self._run.version
 
     async def touch(
-        self, run_id: RunId, expected_version: int, current_node_id: str | None, status: RunStatus
+        self,
+        run_id: RunId,
+        expected_version: int,
+        current_node_id: str | None,
+        status: RunStatus,
+        error: str | None = None,
     ) -> int | None:
         if self._run.version != expected_version:
             return None
         self._run.version += 1
         self._run.current_node_id = current_node_id
         self._run.status = status
+        self._run.error = error
         return self._run.version
 
 
