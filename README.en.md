@@ -13,33 +13,56 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge" alt="License"></a>
 </p>
 
-> **Renamed.** The GitHub repository was renamed from `lzt-flow` to **`auto-lzt`**. The package, module, CLI, and almost all documentation still use the name **`flow`** / `lzt-flow` — it's the same project, nothing to change.
+> **About the name.** The GitHub repository was renamed from `lzt-flow` to **`auto-lzt`**.
+> The package, module, CLI, and almost all docs still say **`flow`** / `lzt-flow`.
+> Same project. Nothing to change on your side.
 
-**lzt-flow** is a self-hosted automation engine: describe a flow, press Deploy, close the tab —
-the flow keeps running on the server, 24/7, without your machine.
+Describe a flow → press Deploy → close the tab.
 
-**Authoring is text.** You install a ready-made module from the [official
-registry](https://github.com/open-lzt/lzt-flows) and run it from Telegram; the engine itself is
-extended by installing a Python package — a **node pack** (one new node type) or a **full
-[plugin](docs/plugins.en.md)** (nodes + API routes + bot handlers + lifecycle), which the owner installs
-straight from the Telegram bot's `/plugins` menu. The bot is button-driven end to end: browse flows,
-run one and read its logs, install modules and plugins. The visual canvas ships in this repo but is
-**off by default** — see *Deferred, not dead* below.
+The flow keeps running **on the server**. 24/7, without your machine.
 
-[Architecture](ARCHITECTURE.md) · [Plugins](docs/plugins.en.md) · [Modules](docs/modules.en.md) · [Flows](docs/flow-design-guide.en.md) · [AI-agent docs](docs/for_ai/) · [Issues](../../issues)
+**Flow** — a chain of steps. For example: on schedule → get my lots → for each account →
+bump the lot + reprice it.
 
-The reference flow this project is built around: **on-schedule → get-my-lots → for-each-account →
-bump + reprice.** A seller wires it once on the canvas, hits Deploy, and the flow bumps their lots
-on schedule from the server — surviving a closed browser tab and a worker restart, resuming from
-the last committed step, never double-acting.
+**Node** — one step in that chain. `market.bump` is a node.
+
+That is the reference flow this whole project is built around.
+A seller wires it once, hits Deploy — and their lots get bumped from the server, on schedule.
+
+It survives a closed browser tab. It survives a worker restart: it resumes from the last committed
+step and **never performs an action twice**.
+
+[Architecture](ARCHITECTURE.en.md) · [Plugins](docs/plugins.en.md) · [Modules](docs/modules.en.md) · [Flows](docs/flow-design-guide.en.md) · [AI-agent docs](docs/for_ai/) · [Issues](../../issues)
 
 > A canvas demo GIF belongs here — see [docs/DEMO.en.md](docs/DEMO.en.md) for how to capture one.
 
+## Authoring is text, not a mouse
+
+Ready-made flows live in the [official registry](https://github.com/open-lzt/lzt-flows).
+
+What you install from there is a **module** — a finished flow packaged as **data**, not code.
+Install from the registry, run it from Telegram.
+
+The engine itself is extended differently — by installing a Python package. Two shapes:
+
+- **node pack** — one new node type;
+- **[plugin](docs/plugins.en.md)** — nodes + API routes + bot handlers + lifecycle.
+
+The owner installs either one straight from the Telegram bot's `/plugins` menu.
+
+The bot is button-driven end to end: browse flows, run one and read its logs, install modules
+and plugins.
+
+The visual canvas ships in this repo too, but it is **off by default** —
+why exactly, see *Deferred, not dead* below.
+
 ## Quickstart
 
-### No-Docker dev mode (fastest — SQLite + fakeredis + mock market)
+### No-Docker dev mode
 
-Zero external services. Runs the whole core loop in-process.
+The fastest path: SQLite + fakeredis + mock market.
+
+Zero external services, the whole core loop in one process.
 
 ```bash
 uv sync --extra dev
@@ -47,72 +70,83 @@ uv run python dev.py                 # dev API on http://127.0.0.1:8000
 pnpm --dir frontend dev              # React Flow canvas on http://localhost:5173
 ```
 
-Prove the core loop end to end in one command:
+Verify the loop end to end with one command:
 
 ```bash
-uv run python dev.py --demo          # drives one bump flow -> prints FINAL run -> {... 'status': 'completed'}
-# or:  bash scripts/smoke.sh         # same gate, exits 0/1 (this is what CI runs)
+uv run python dev.py --demo          # runs one bump flow -> prints FINAL run -> {... 'status': 'completed'}
+# or:  bash scripts/smoke.sh         # same gate, exit 0/1 (this is what CI runs)
 ```
 
-### Docker production path
+### Production via Docker
 
 ```bash
 scripts/install.sh                   # docker + compose, .env from .env.example, migrations, stack up
-# API on http://localhost:8000 · canvas on http://localhost:5173 · health at /health
+# API on http://localhost:8000 · canvas on http://localhost:5173 · health on /health
 ```
 
-Put a reverse proxy (nginx/Caddy) in front to terminate HTTPS — never leave a deployment with real
-marketplace tokens on bare HTTP.
+Put a reverse proxy (nginx/Caddy) in front of it for HTTPS.
 
-## Operating lzt-flow
+Never leave a deploy holding real marketplace tokens on bare HTTP.
+
+## Operating it
 
 | Action | Command |
 |---|---|
 | Status / health | `curl http://localhost:8000/health` |
 | Logs | `docker compose logs -f api worker` |
-| Update | `scripts/update.sh` — pulls, migrates, restarts |
+| Update | `scripts/update.sh` — pull, migrate, restart |
 | Backup / restore | `scripts/backup.sh` / `scripts/restore.sh` (Postgres) |
-| Manage | canvas UI at `http://localhost:5173` — author, deploy, and monitor flows |
-| Remove | `docker compose down -v` (drops containers + volumes; no dedicated uninstall script yet) |
+| Manage | canvas UI on `http://localhost:5173` |
+| Remove | `docker compose down -v` (containers + volumes; no dedicated uninstall script) |
 
 ## Configuration
 
-Copy `.env.example` → `.env` and fill the secrets. Two **separate** config surfaces (by design):
+Copy `.env.example` → `.env` and fill in the secrets.
 
-- `LZT_FLOW_*` — lzt-flow's own settings, incl. `LZT_FLOW_MASTER_KEY` (envelope key for account
-  tokens).
-- `LZT_*` — the embedded `lzt-eventus` engine (only needed for the `on-event` trigger path), incl.
-  `LZT_TOKENS` (poll tokens) and `LZT_TOKEN_ENC_KEY` — a key **distinct** from
-  `LZT_FLOW_MASTER_KEY`.
+Here is the trap people fall into: there are **two** config surfaces, and they are different.
+Deliberately.
 
-### Sandbox testing against a fake market backend
+- `LZT_FLOW_*` — lzt-flow's own settings.
+  This is where `LZT_FLOW_MASTER_KEY` lives — the envelope key that encrypts account tokens.
 
-`LZT_FLOW_MARKET_BASE_URL` (unset by default, real `prod-api.lzt.market`) points every
-**ephemeral** `MarketAdapter` construction at a different market backend instead — for running
-lzt-flow against a fake API during local dev/manual testing, without touching the real
-marketplace. It is a different thing from the dry-run gate below: with this var set, real code
-still executes real HTTP calls, just against a fake server.
+- `LZT_*` — the embedded `lzt-eventus` engine, needed only for the `on-event` trigger path.
+  This is where `LZT_TOKENS` (polling tokens) and `LZT_TOKEN_ENC_KEY` live.
 
-Boot the fake server from the sibling `lzt-testnet` repo (see its own README for the full
-quickstart) and point `dev.py` at it:
+**FACT to memorise:** `LZT_TOKEN_ENC_KEY` ≠ `LZT_FLOW_MASTER_KEY`. Two different keys.
+
+### Running against a fake market
+
+`LZT_FLOW_MARKET_BASE_URL` points market calls at a different backend.
+Unset by default — meaning the real `prod-api.lzt.market`.
+
+What it's for: testing locally without touching the real marketplace.
+
+Kill the wrong model right away: this is **not** a dry run. The code still performs real HTTP
+requests — just against a fake server.
+
+Bring one up from the neighbouring `lzt-testnet` repo (full quickstart in its own README):
 
 ```bash
-cd ../lzt-testnet && scripts/run.sh          # starts the mock market on 127.0.0.1:8765
+cd ../lzt-testnet && scripts/run.sh          # mock market on 127.0.0.1:8765
 # in this repo:
 LZT_FLOW_MARKET_BASE_URL=http://127.0.0.1:8765 uv run python dev.py --demo
 ```
 
-**Known gap**: the pooled-client construction path (`MarketAdapter(client=...)`, used where a
-`httpx.AsyncClient` is shared/injected) does **not** honor this env var — only the ephemeral,
-per-call construction path does. This is a documented limitation, not a silent one.
+**Known gap.** Only the ephemeral `MarketAdapter` construction path — the one built per call —
+reads that variable.
+
+The pool-client path (`MarketAdapter(client=...)`, where an `httpx.AsyncClient` is shared) does
+**not**. A documented limitation, not a silent one.
 
 ## Examples
 
-Two independent ways to work with an already-running instance — pick by integration surface,
-not as a progression.
+Two independent ways to work with a running instance.
 
-### REST API — author, compile, and fire a flow imperatively
-For scripting a one-off run or wiring your own tooling directly against the API.
+Not a progression from one to the other — pick by integration surface.
+
+### REST API — drive a flow imperatively
+
+For scripting a one-off run, or your own automation on top of the API.
 
 ```bash
 # examples/01_rest_flow.sh
@@ -135,14 +169,19 @@ curl -sS -X POST http://localhost:8000/runs/create \
 curl -sS "http://localhost:8000/runs/<run_id>/get"
 # -> {"run_id": "...", "status": "completed"}
 ```
-`X-API-Key` is required on the mutating calls above once `LZT_FLOW_API_KEY` is set (default empty,
-fine for a loopback-only self-host).
 
-#### Parameters & synchronous invoke
+`X-API-Key` is required on the mutating calls above as soon as `LZT_FLOW_API_KEY` is set.
+It is empty by default — fine for a loopback-only self-host.
 
-A flow can declare a **parameter surface** — a flat set of tunables (a delay, a count, a category)
-edited from one settings form instead of hunting values inside individual blocks. Declare them under
-`params` and reference each from a node input as the literal `"{{vars.<key>}}"`:
+#### Params and synchronous invoke
+
+A flow can declare a **param surface** — a flat set of settings: delay, count, category.
+
+What it buys you: editing them in one settings form instead of hunting values inside individual
+nodes.
+
+Declare them under `params`, then reference each from a node input as the literal
+`"{{vars.<key>}}"`:
 
 ```jsonc
 {
@@ -153,9 +192,13 @@ edited from one settings form instead of hunting values inside individual blocks
 }
 ```
 
-Both `POST /runs/create` and `POST /flows/{id}/invoke` accept a `params` body validated against the
-declared surface. `invoke` runs the flow **synchronously** and returns its terminal output — bounded
-by `LZT_FLOW_FLOW_INVOKE_TIMEOUT_S` (default `60`); use the async `/runs/create` path for long flows.
+Both endpoints accept a `params` body — `POST /runs/create` and `POST /flows/{id}/invoke` —
+and both validate it against the declared surface.
+
+The difference: `invoke` runs the flow **synchronously** and returns its final output.
+
+Hence its ceiling: `LZT_FLOW_FLOW_INVOKE_TIMEOUT_S`, `60` seconds by default.
+For long flows use the async `/runs/create` path.
 
 ```bash
 curl -sS -X POST "http://localhost:8000/flows/<flow_id>/invoke" \
@@ -163,8 +206,9 @@ curl -sS -X POST "http://localhost:8000/flows/<flow_id>/invoke" \
 # -> {"run_id": "...", "status": "completed", "output": {...}}
 ```
 
-### Triggers — attach a schedule so the flow fires without any further call
-For the actual autopilot use case: no imperative call after setup, the flow runs itself.
+### Triggers — so the flow fires itself
+
+The actual autopilot case: after setup there are no imperative calls at all.
 
 ```bash
 # examples/03_attach_schedule_trigger.sh
@@ -178,27 +222,36 @@ curl -sS "http://localhost:8000/flows/<flow_id>/status"
 
 ## Architecture
 
-lzt-flow is a thin domain layer over the reusable `lzt-*` ecosystem — `pylzt` (transport) and
-`lzt-eventus` (event fabric) are **reused, not rewritten**. See **[ARCHITECTURE.md](ARCHITECTURE.md)**
-for the full contrast table (vs. a client-side flow builder) and the runtime shape diagram.
+lzt-flow is a thin domain layer over the `lzt-*` ecosystem.
+
+`pylzt` (transport) and `lzt-eventus` (event fabric) are **reused, not rewritten**.
+
+The full contrast table (vs. a client-side flow builder) and the runtime shape diagram live in
+**[ARCHITECTURE.en.md](ARCHITECTURE.en.md)**.
+
+> `pylzt` and `lzt-eventus` live in separate public repos under the
+> [`open-lzt`](https://github.com/open-lzt) org and are wired in as git dependencies in
+> `pyproject.toml`. No need to clone them yourself — `uv sync` pulls them in.
 
 Designing a flow from a text description? See the **[flow design guide](docs/flow-design-guide.en.md)**
-and the `flow-from-text` skill (`.claude/skills/flow-from-text/`), which turns a plain-language
-brief into a compile-and-dry-run-verified `FlowSpec`.
+and the `flow-from-text` skill (`.claude/skills/flow-from-text/`) — it turns a plain-language brief
+into a `FlowSpec` verified by compile and dry run.
 
-> `pylzt` and `lzt-eventus` (org `open-lzt`) are separate private repos pinned by SHA in
-> `pyproject.toml` — cloning this repo alone is not enough to build until you have read access.
+### What a module's `sha256` actually equals
 
-### A note on module trust
+Every module in the registry's `index.json` carries a `sha256`. It is easy to read it wrong.
 
-A module's `sha256` in the registry's `index.json` is **transport integrity**: it proves the flow
-you install is byte-for-byte the flow that was reviewed. It is **not a signature** and says nothing
-about whether its author is trustworthy. The only thing standing between you and a hostile module
-is that a maintainer read it before merging — and that a module is *data*, so you can read it too.
+What it means: **transport integrity**. The flow you install is byte-for-byte the flow that was
+reviewed.
+
+What it does **not** mean: a signature. It says nothing about its author.
+
+Exactly one thing stands between you and a hostile module — a maintainer read it before merging.
+Plus this: a module is *data*, so you can read it too.
 
 ## Node plugins
 
-A node is added by installing a distribution that advertises the `lzt_flow.nodes` entry point:
+A new node arrives by installing a distribution that advertises the `lzt_flow.nodes` entry point:
 
 ```toml
 # in your package's pyproject.toml
@@ -206,62 +259,97 @@ A node is added by installing a distribution that advertises the `lzt_flow.nodes
 my_pack = "my_pack.nodes:REGISTRATIONS"
 ```
 
-`pip install` is the entire install step. There is no plugin directory to scan and no path to
-configure, so a node cannot appear without somebody having installed a package that provides it.
-The node then shows up in `GET /catalog/list`, gets a form in the web canvas and in the bot with no
-edits to either, and is compiled and run by the same interpreter as the built-ins.
+`pip install` is the entire install step.
 
-Two rules a plugin cannot talk its way around:
+No plugin folder to scan, no path to configure. Hence the property that matters: a node **cannot
+appear on its own** — somebody installed the package providing it.
 
-- **It may never shadow a built-in.** A plugin claiming `market.bump` fails the boot with
-  `DuplicateNodeType` naming both sides. It never wins by load order — a package that silently
-  replaced a money node would have every flow on the stand calling its code, with nothing to see.
-- **It cannot reach the network unpoliced.** A request node derives from `BaseRequestNode`, whose
-  `execute()` is final and goes through `deps.http`, which cannot be constructed without an
-  `EgressPolicy`. There is no seam to opt out of.
+From then on it behaves like a built-in: it shows up in `GET /catalog/list`, gets a form in the
+canvas and in the bot with no edit to either, and compiles and executes on the same interpreter.
 
-Every node declares what it can do (`NodeCapability`), and that declaration is what the module
-validator filters on — see `app/domain/catalog/capabilities.py`.
+Two rules a plugin cannot get around:
+
+**1. It can never shadow a built-in node.**
+A plugin claiming `market.bump` fails startup with `DuplicateNodeType`, naming both sides.
+Load order never wins it.
+
+Why so strict: a package that quietly shadowed a money node would make every flow on the
+deployment call its code — leaving no trace.
+
+**2. It cannot reach the network unchecked.**
+A request node inherits from `BaseRequestNode`, whose `execute()` is final.
+It goes through `deps.http`, which cannot be constructed without an `EgressPolicy`. No way around.
+
+Every node declares its capabilities (`NodeCapability`) — and that declaration is what the module
+validator filters on, see `app/domain/catalog/capabilities.py`.
 
 ## Outbound requests
 
-Nodes that talk to something other than the marketplace go through an egress fence
-(`app/domain/egress/`). It is `https` only, matches an **exact** allow-list that is **empty by
-default**, judges the *resolved address* rather than the hostname, and connects to the address it
-checked — so `2130706433`, `0177.0.0.1` and `::ffff:127.0.0.1` are all recognised as loopback and
-DNS rebinding has nothing to re-resolve. Redirects are refused rather than followed.
+`EgressPolicy` from the previous section — here is what it does.
+
+Anything talking to something other than the marketplace goes through the egress fence
+(`app/domain/egress/`):
+
+- `https` only;
+- checked against an **exact** allow-list, which is **empty by default**;
+- the *resolved address* is evaluated, not the hostname;
+- the connection goes to exactly the address that was checked.
+
+Two consequences. `2130706433`, `0177.0.0.1` and `::ffff:127.0.0.1` all read as loopback.
+And DNS rebinding has nothing to re-resolve: the address is already pinned.
+
+Redirects are rejected, not followed.
 
 ```bash
-LZT_FLOW_EGRESS_ALLOWED_HOSTS=api.telegram.org   # comma-separated; empty means "reach nothing"
+LZT_FLOW_EGRESS_ALLOWED_HOSTS=api.telegram.org   # comma-separated; empty means "can't reach anything"
 ```
 
-Unconfigured means unreachable, on purpose: this process sits next to a Redis holding the
-money-idempotency guards and the job queue, so `http://redis:6379` in a community module would
-otherwise be code execution in the worker.
+Unconfigured means unreachable — deliberately.
+
+Why empty by default: this process sits next to Redis, and Redis holds the money-idempotency guards
+and the task queue. Without the fence, `http://redis:6379` in a community module would be code
+execution in the worker.
 
 ## Deferred, not dead
 
-The visual canvas and the composite-block authoring UI are behind `VITE_BUILDER_ENABLED`, **off by
-default**. The code stays in the tree deliberately — this is a deferral, not a removal, and a
-`/cleanup` pass that concludes `AuthoringMode` and the deploy path are dead code would delete a
-working feature. Build with the flag on to get it back:
+The visual canvas and the composite-block authoring UI sit behind `VITE_BUILDER_ENABLED`,
+**off by default**.
+
+Off — not removed. The code stays in the tree deliberately: this is a **deferral**.
+
+Which sets a trap for anyone tidying the repo: from the outside, `AuthoringMode` and the
+deploy path look like dead code. They are not dead — they are flagged off. Don't cut them.
+
+Build with the flag on to get them back:
 
 ```bash
 VITE_BUILDER_ENABLED=1 npm run build
 ```
 
-Flagging the UI off is a **product decision, not a security boundary**: the mutating endpoints are
-still there and still gated by the API key. What makes the preview build honest is that it ships no
-key to hide behind the buttons — the key is typed by an operator at runtime into sessionStorage.
+Second trap: the flag is a **product decision, not a security boundary**.
+The mutating endpoints are still there and still gated by the API key — hiding the buttons
+hides the buttons, nothing more.
+
+What makes the preview build honest is something else: it **ships no key** to hide behind
+those buttons. The key is typed in by an operator at runtime and lives in sessionStorage.
 
 ## Community
 
-See [docs/](docs/) for the architecture writeup and demo notes, and [AGENTS.md](AGENTS.md) /
-[CLAUDE.md](CLAUDE.md) for the layering + coding conventions a PR is expected to match. Before
-opening one: `uv sync --extra dev && uv run ruff check . && uv run mypy app --strict && uv run pytest -q`
-must all pass. `tests/e2e/` spins up a real `dev.py` subprocess over a real port — opt in with
-`uv run pytest -m e2e` (excluded from the default run, slower). Use [issues](../../issues) for
-bugs and feature requests.
+The architecture writeup and demo notes are in [docs/](docs/).
+
+The layering and coding conventions a PR is expected to match are in [AGENTS.md](AGENTS.md) /
+[CLAUDE.md](CLAUDE.md).
+
+Before opening a PR, all of this has to pass:
+
+```bash
+uv sync --extra dev && uv run ruff check . && uv run mypy app --strict && uv run pytest -q
+```
+
+`tests/e2e/` is excluded from the default run — it spawns a real `dev.py` subprocess on a real port
+and is therefore slower. Opt in with `uv run pytest -m e2e`.
+
+Bugs and feature requests go to [issues](../../issues).
 
 <a href="https://github.com/open-lzt"><img src="https://github.com/open-lzt.png" width="48" height="48" style="border-radius:50%" alt="open-lzt"/></a>
 
