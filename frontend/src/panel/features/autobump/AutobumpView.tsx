@@ -102,6 +102,7 @@ export function AutobumpView({ onDeployed }: AutobumpViewProps) {
               <label key={account.id} className="autobump__account">
                 <input
                   type="checkbox"
+                  className="autobump__check"
                   checked={selected.has(account.id)}
                   onChange={() => toggle(account.id)}
                 />
@@ -152,7 +153,12 @@ export function AutobumpView({ onDeployed }: AutobumpViewProps) {
             Это ограничение на один запуск. Общий темп задаёт расписание выше.
           </p>
           <label className="autobump__toggle">
-            <input type="checkbox" checked={reprice} onChange={() => setReprice((v) => !v)} />
+            <input
+              type="checkbox"
+              className="autobump__check"
+              checked={reprice}
+              onChange={() => setReprice((v) => !v)}
+            />
             <span>Обновлять цену вместе с поднятием</span>
           </label>
         </Card>

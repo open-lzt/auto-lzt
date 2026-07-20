@@ -156,6 +156,12 @@ export function AccountsView() {
                 aria-label="Название аккаунта"
                 onBlur={(e) => void handleRename(account, e.target.value)}
               />
+              {/* The bump tab identifies an unnamed account by this same id prefix. Without it here
+                  the two screens disagree — one calls the account «Без названия», the other
+                  «72f48cfc» — and nothing on either tells the operator they are the same row. */}
+              <code className="accounts-row__id" title={account.id}>
+                {account.id.slice(0, 8)}
+              </code>
               <Badge tone={account.status === "active" ? "brand" : "warning"} pill>
                 {account.status === "active" ? "Активен" : "Исключён"}
               </Badge>
