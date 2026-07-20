@@ -21,6 +21,7 @@ from app.api import (
     flow_status_routes,
     health_routes,
     module_routes,
+    panel_preset_routes,
     panel_routes,
     plugin_routes,
     run_routes,
@@ -145,6 +146,7 @@ def create_app() -> FastAPI:
     app.include_router(flow_status_routes.router)
     app.include_router(module_routes.router)
     app.include_router(panel_routes.router)
+    app.include_router(panel_preset_routes.router)
     app.include_router(plugin_routes.router)
     app.include_router(run_routes.router)
     app.include_router(task_routes.router)

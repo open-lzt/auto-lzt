@@ -53,6 +53,11 @@ BUILTIN_PANEL_TABS: Final[tuple[PanelTabSpec, ...]] = (
     PanelTabSpec(key="tasks", title="Задачи", order=10, icon="clock"),
     PanelTabSpec(key="autobump", title="Поднятие", order=20, icon="zap"),
     PanelTabSpec(key="accounts", title="Аккаунты", order=30, icon="bot"),
+    PanelTabSpec(key="flows", title="Флоу", order=40, icon="workflow"),
+    PanelTabSpec(key="history", title="История", order=50, icon="history"),
+    # Authoring-only. The backend advertises it because the capability exists server-side; a build
+    # with the builder switched off filters it out client-side rather than showing it broken.
+    PanelTabSpec(key="composites", title="Составные блоки", order=60, icon="blocks"),
 )
 
 

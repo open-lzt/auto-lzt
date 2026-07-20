@@ -45,6 +45,7 @@ from app.domain.catalog.nodes.relist import RelistNode
 from app.domain.catalog.nodes.reprice import RepriceNode
 from app.domain.catalog.nodes.string_concat import StringConcatNode
 from app.domain.catalog.nodes.switch import SwitchNode
+from app.domain.catalog.nodes.take import TakeNode
 from app.domain.catalog.nodes.telegram.send_message import SendMessageNode
 from app.domain.catalog.nodes.wait_until import WaitUntilNode
 from app.domain.flow_engine.base_node import BaseNode
@@ -165,6 +166,7 @@ BUILTIN_REGISTRATIONS: tuple[NodeRegistration, ...] = tuple(
         ConditionNode,
         ForEachLotNode,
         ForEachAccountNode,
+        TakeNode,
         GetMyLotsNode,
         DynamicMethodNode,
         BoolOpNode,
