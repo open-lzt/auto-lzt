@@ -1,0 +1,77 @@
+.panel-shell {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--lzt-bg);
+}
+
+.panel-shell__topbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  border-bottom: 1px solid var(--lzt-border);
+  background: color-mix(in srgb, var(--lzt-bg) 88%, transparent);
+  backdrop-filter: blur(12px);
+}
+
+.panel-shell__topbar-inner {
+  display: flex;
+  align-items: center;
+  gap: 28px;
+  height: 56px;
+  max-width: 1240px;
+  margin: 0 auto;
+  padding: 0 28px;
+  width: 100%;
+}
+
+.panel-shell__brand {
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--lzt-text);
+  white-space: nowrap;
+}
+
+.panel-shell__brand-accent {
+  color: var(--lzt-brand);
+}
+
+.panel-shell__tabs {
+  flex: 1;
+  min-width: 0;
+}
+
+.panel-shell__topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-left: auto;
+}
+
+.panel-shell__main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.panel-shell__tab-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  animation: panel-tab-in 200ms ease-out;
+}
+
+@keyframes panel-tab-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .panel-shell__tab-content {
+    animation: none;
+  }
+}

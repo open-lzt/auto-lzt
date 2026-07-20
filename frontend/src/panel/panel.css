@@ -1,0 +1,186 @@
+.panel-view {
+  padding: 32px 28px 48px;
+  max-width: 1240px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.panel-view__head {
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.panel-view__title {
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--lzt-text);
+  margin: 0;
+}
+
+.panel-live {
+  font-size: 12px;
+  color: var(--lzt-text-dim);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: color 160ms ease-out;
+}
+
+.panel-live::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.panel-live--live {
+  color: var(--lzt-brand);
+}
+
+.panel-live--offline {
+  color: var(--lzt-danger);
+}
+
+.panel-empty__hint {
+  color: var(--lzt-text-dim);
+  font-size: 14px;
+  line-height: 1.5;
+  max-width: 42ch;
+  margin: 0 0 20px;
+}
+
+/* auto-fill, not auto-fit: with one task, auto-fit would stretch a single card the full width of
+   the page. auto-fill keeps the column width honest and leaves the empty tracks empty. */
+.task-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+}
+
+.task-grid__more {
+  display: flex;
+  justify-content: center;
+  margin-top: 28px;
+}
+
+.task-card {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 20px;
+  animation: task-card-in 260ms cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+}
+
+@keyframes task-card-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+.task-card--skeleton {
+  height: 232px;
+  animation: none;
+}
+
+.task-card__head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.task-card__name {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--lzt-text);
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.task-card__countdown {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* The one place on the card allowed to be loud. tabular-nums stops the countdown from jittering
+   sideways as digits change, which on a ticking clock reads as sloppiness more than anything else. */
+.task-card__countdown .countdown {
+  font-size: 32px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+  color: var(--lzt-text);
+  transition: color 200ms ease-out;
+}
+
+.task-card__countdown .countdown--urgent {
+  color: var(--lzt-brand);
+}
+
+.task-card__countdown .countdown--idle {
+  color: var(--lzt-text-dim);
+}
+
+.task-card__countdown-label {
+  font-size: 12px;
+  color: var(--lzt-text-dim);
+}
+
+.task-card__meta {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  font-size: 12px;
+}
+
+.task-card__meta-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.task-card__meta-row dt {
+  color: var(--lzt-text-dim);
+}
+
+.task-card__meta-row dd {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--lzt-text);
+  min-width: 0;
+}
+
+.task-card__cron {
+  font-family: var(--lzt-font-mono, ui-monospace, monospace);
+  font-size: 11px;
+  color: var(--lzt-text-dim);
+  background: var(--lzt-surface-2);
+  border-radius: 6px;
+  padding: 2px 6px;
+}
+
+.task-card__last-run {
+  color: var(--lzt-text-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .task-card {
+    animation: none;
+  }
+}

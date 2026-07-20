@@ -1,0 +1,126 @@
+.autobump {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 620px;
+}
+
+.autobump__section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 20px;
+}
+
+.autobump__section-title {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--lzt-text);
+  margin: 0;
+}
+
+.autobump__section-hint {
+  font-size: 12px;
+  color: var(--lzt-text-dim);
+  line-height: 1.5;
+  margin: 0;
+}
+
+.autobump__accounts {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.autobump__account {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  /* ≥6px vertical so the hover target is a comfortable row, not a hairline. */
+  padding: 8px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 140ms ease-out;
+}
+
+.autobump__account:hover {
+  background: var(--lzt-surface-2);
+}
+
+.autobump__account-name {
+  font-size: 14px;
+  color: var(--lzt-text);
+}
+
+.autobump__intervals {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.autobump__interval {
+  padding: 8px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--lzt-border);
+  background: transparent;
+  color: var(--lzt-text-dim);
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 160ms ease-out;
+}
+
+.autobump__interval:hover {
+  color: var(--lzt-text);
+  border-color: var(--lzt-border-strong, var(--lzt-border));
+}
+
+.autobump__interval--active {
+  color: var(--lzt-bg);
+  background: var(--lzt-brand);
+  border-color: var(--lzt-brand);
+}
+
+.autobump__field {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.autobump__field label {
+  font-size: 13px;
+  color: var(--lzt-text);
+}
+
+.autobump__field input {
+  width: 100px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.autobump__toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  color: var(--lzt-text);
+  cursor: pointer;
+  padding: 6px 0;
+}
+
+.autobump__deploy {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 4px 2px;
+}
+
+.autobump__summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  color: var(--lzt-text-dim);
+}

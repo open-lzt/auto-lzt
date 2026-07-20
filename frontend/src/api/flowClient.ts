@@ -199,7 +199,9 @@ export function getApiKey(): string | null {
   return apiKey;
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+// Exported so tasksClient shares this exact error path. A second fetch helper would mean a second
+// place that decides what an ErrorEnvelope is and a second way for an error to reach the UI.
+export async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   if (apiKey) {
     headers["X-API-Key"] = apiKey;

@@ -124,3 +124,33 @@
     gap: 10px;
   }
 }
+
+/* The canvas and composites tabs keep the original two-pane workspace; only the chrome above them
+   moved into PanelShell. */
+.app__workspace {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.app__workspace-main {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
+.app__flow-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--lzt-border);
+}
+
+.app__flow-bar-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-left: auto;
+}
