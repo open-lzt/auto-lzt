@@ -18,10 +18,13 @@ from uuid import UUID, uuid4
 import httpx
 import pytest
 from asgi_lifespan import LifespanManager
+from fastapi import Request
 from sqlalchemy import select
 
 import app.db.models  # noqa: F401 — registers ORM models on Base.metadata
+from app.api.task_routes import _task_frames, stream_tasks
 from app.core.config import get_settings
+from app.core.stream_token import StreamScope, issue
 from app.core.streaming import StreamLimiter, TooManyStreams
 from app.db.base import Base, make_engine, make_sessionmaker
 from app.db.models import FlowORM, RunORM, TriggerORM
@@ -130,12 +133,25 @@ async def test_run_now_on_an_unknown_task_is_404(sqlite_app) -> None:  # type: i
     assert resp.status_code == 404
 
 
-async def test_stream_token_handshake_then_a_frame_arrives(sqlite_app) -> None:  # type: ignore[no-untyped-def]
-    """POST stream-token -> GET stream?token=, then a published TaskEvent reaches the client."""
+async def test_a_published_task_event_reaches_the_tenant_feed(sqlite_app) -> None:  # type: ignore[no-untyped-def]
+    """A TaskEvent published on the tenant channel comes back out as an SSE frame.
+
+    Driven against ``_task_frames`` rather than through the ASGI client, and that is not a shortcut.
+    ``httpx.ASGITransport`` buffers the entire response before returning a byte, so it can only read
+    a stream that ENDS — and the tenant feed deliberately has no terminal state, because a panel tab
+    stays open indefinitely. An earlier version of this test did read it through the client and
+    passed only because a bug (``asyncio.wait_for`` cancelling the subscription) killed the stream
+    after one heartbeat; when the bug was fixed the test hung forever. Delivery over real HTTP is
+    asserted in tests/e2e/test_task_stream_over_http.py, against a real socket, where it belongs.
+    """
     flow_id, _ = await _seed_task(sqlite_app)
     app = create_app()
     async with LifespanManager(app), await _client(app) as client:
-        token = (await client.post("/tasks/stream-token")).json()["token"]
+        # Kept in the test: the handshake is the route's contract, even though the frames below are
+        # read one level down.
+        handshake = await client.post("/tasks/stream-token")
+        assert handshake.status_code == 200
+        assert handshake.json()["expires_in"] > 0
 
         transport = RedisEventTransport(app.state.redis)
         await transport.publish(
@@ -147,23 +163,42 @@ async def test_stream_token_handshake_then_a_frame_arrives(sqlite_app) -> None: 
             ),
         )
 
-        frames = ""
-        async with client.stream("GET", f"/tasks/stream?token={token}") as resp:
-            assert resp.status_code == 200
-            assert resp.headers["x-accel-buffering"] == "no"
-            async for chunk in resp.aiter_text():
-                frames += chunk
-                if "run_started" in frames:
-                    break
+        frames = _task_frames(TENANT, None, transport, 0.05)
+        first = await frames.__anext__()
+        await frames.aclose()
 
-    assert str(flow_id) in frames
-    assert '"type":"task"' in frames.replace(" ", "")
+    assert str(flow_id) in first
+    assert '"type":"task"' in first.replace(" ", "")
+
+
+async def test_the_stream_sets_the_headers_a_buffering_proxy_reads(sqlite_app) -> None:  # type: ignore[no-untyped-def]
+    """``X-Accel-Buffering: no`` is what stops nginx holding frames until its buffer fills.
+
+    Asserted on the response object built by the route, not by reading the body — see the note
+    above on why the body cannot be read through ASGITransport.
+    """
+    app = create_app()
+    async with LifespanManager(app):
+        settings = get_settings()
+        token = issue(settings.master_key, str(TENANT), scope=StreamScope.TENANT)
+        request = Request({"type": "http", "headers": [], "method": "GET", "path": "/tasks/stream"})
+        response = await stream_tasks(
+            request,
+            token,
+            None,
+            TENANT,
+            RedisEventTransport(app.state.redis),
+            app.state.stream_limiter,
+            settings,
+        )
+
+    assert response.headers["x-accel-buffering"] == "no"
+    assert response.headers["cache-control"] == "no-cache"
+    assert response.media_type == "text/event-stream"
 
 
 async def test_stream_refuses_a_token_of_the_wrong_scope(sqlite_app) -> None:  # type: ignore[no-untyped-def]
     """A run-scope token must not open the tenant feed even though the subject would match."""
-    from app.core.stream_token import StreamScope, issue
-
     await _seed_task(sqlite_app)
     app = create_app()
     async with LifespanManager(app), await _client(app) as client:

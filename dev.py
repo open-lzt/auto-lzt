@@ -53,6 +53,7 @@ from app.db.models import AccountORM, Base, RunORM  # noqa: E402
 from app.domain.account.crypto import EnvelopeCipher  # noqa: E402
 from app.domain.account.model import AccountStatus  # noqa: E402
 from app.domain.catalog.plugins import build_registry  # noqa: E402
+from app.domain.flow_engine.events import RedisEventTransport  # noqa: E402
 from app.domain.flow_engine.model import RunId, RunStatus  # noqa: E402
 from app.domain.flow_engine.repo import (  # noqa: E402
     FlowIrRepository,
@@ -145,6 +146,11 @@ async def _dev_executor(stop: asyncio.Event) -> None:
                         node_deps=node_deps,
                         worker_id="dev-executor",
                         trace_sink=RunTraceRepository(sm),
+                        # Without this the parameter defaults to None and the dev server publishes
+                        # no events at all — every live surface (run stream, task cards) sits
+                        # silent, looking like a frontend bug. The fake Redis is one shared server,
+                        # so this really does reach the API process's subscribers.
+                        event_transport=RedisEventTransport(redis),
                     )
                 except Exception:  # noqa: BLE001 — dev loop must survive one bad run, but a
                     # swallowed failure here left runs stuck in `pending` with no clue why.

@@ -11,7 +11,7 @@ never provides that durability.
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncGenerator
 from enum import StrEnum
 from typing import TYPE_CHECKING, Annotated, Literal, Protocol
 
@@ -109,9 +109,13 @@ def decode_run_event(raw: str | bytes) -> RunEvent:
 
 class EventTransport(Protocol):
     async def publish(self, channel: str, event: RunEvent) -> None: ...
+
+    # AsyncGenerator, not AsyncIterator: a subscription holds a Pub/Sub connection, so the consumer
+    # must be able to close it deterministically when the client disconnects. A plain AsyncIterator
+    # cannot promise that, and an unclosed subscription is a leaked connection per dropped stream.
     def subscribe(
         self, channel: str, last_event_id: str | None = None
-    ) -> AsyncIterator[tuple[str, RunEvent]]: ...
+    ) -> AsyncGenerator[tuple[str, RunEvent], None]: ...
 
 
 class RedisEventTransport:
@@ -142,7 +146,7 @@ class RedisEventTransport:
 
     async def subscribe(
         self, channel: str, last_event_id: str | None = None
-    ) -> AsyncIterator[tuple[str, RunEvent]]:
+    ) -> AsyncGenerator[tuple[str, RunEvent], None]:
         """Replays anything after ``last_event_id`` from the capped buffer, then switches to live
         Pub/Sub. A single malformed buffered/live payload is logged and skipped rather than
         killing the whole long-lived stream — ``decode_run_event`` itself still fails loud for

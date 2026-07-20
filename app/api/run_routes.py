@@ -46,7 +46,6 @@ router = APIRouter(prefix="/runs", tags=["runs"])
 # wave-07: idle-stream heartbeat cadence — keeps a default-buffering reverse proxy from killing a
 # long-lived SSE connection (see README's nginx/Caddy no-buffering note for this route). A test
 # monkeypatches this module attribute to a short interval rather than waiting 15s.
-_HEARTBEAT_INTERVAL_S = 15.0
 _TERMINAL_RUN_STATUSES = frozenset({RunStatus.COMPLETED, RunStatus.FAILED})
 
 
@@ -199,6 +198,7 @@ def _run_event_frames(
     last_event_id: str | None,
     transport: EventTransport,
     run_repo: RunRepository,
+    heartbeat_s: float,
 ) -> AsyncIterator[str]:
     """This run's SSE frames: the shared generator plus this route's one domain rule — stop once the
     run is terminal. The transport mechanics live in ``app.core.streaming`` because they are
@@ -208,14 +208,12 @@ def _run_event_frames(
         current = await run_repo.get(run_id)
         return current is None or current.status in _TERMINAL_RUN_STATUSES
 
-    # The interval is read from the module global HERE, at call time, so a test that monkeypatches
-    # it on this module still shortens the beat after the extraction moved the loop out.
     return sse_frames(
         f"run:{run_id}:events",
         last_event_id,
         transport,
         is_closed=_terminal,
-        heartbeat_s=_HEARTBEAT_INTERVAL_S,
+        heartbeat_s=heartbeat_s,
     )
 
 
@@ -257,7 +255,9 @@ async def stream_run(
 
     last_event_id = request.headers.get("Last-Event-ID")
     return StreamingResponse(
-        _run_event_frames(RunId(run_id), last_event_id, transport, run_repo),
+        _run_event_frames(
+            RunId(run_id), last_event_id, transport, run_repo, settings.stream_heartbeat_s
+        ),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )

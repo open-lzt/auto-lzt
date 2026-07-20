@@ -58,6 +58,14 @@ class Settings(BaseSettings):
         default=50, description="Maximum simultaneously open SSE streams across the process."
     )
 
+    # Must stay BELOW the idle timeout of whatever sits in front of the app (nginx
+    # proxy_read_timeout, an ELB idle timeout, a corporate proxy) — those reap a quiet socket, and
+    # the heartbeat is the only thing that stops them. A different deployment fronts a different
+    # intermediary, so this is configuration rather than a constant.
+    stream_heartbeat_s: float = Field(
+        default=15.0, description="Seconds of silence before an SSE stream emits a keepalive."
+    )
+
     run_trace_retention_days: int = Field(default=30)
     run_trace_max_rows_per_run: int = Field(default=5000)
 

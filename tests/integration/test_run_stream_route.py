@@ -149,8 +149,11 @@ async def test_reconnect_with_last_event_id_replays_missed_events_only(
     events, then closes on the very next idle check (heartbeat patched short), making each request
     a bounded, fully-buffered response we can assert on as a whole — exercising the exact same
     last_event_id replay code path a genuinely live reconnect would."""
-    monkeypatch.setattr("app.api.run_routes._HEARTBEAT_INTERVAL_S", 0.05)
     settings = get_settings()
+    # Patched on the cached Settings instance rather than via the environment: monkeypatch reverts
+    # an attribute by itself, whereas an env change would also need get_settings.cache_clear() on
+    # both sides and leaks into every later test if either is missed.
+    monkeypatch.setattr(settings, "stream_heartbeat_s", 0.05)
     tenant_id = TenantId(UUID(settings.default_tenant_id))
     run = await _seed_run(sqlite_app, tenant_id)
     run_repo = RunRepository(sqlite_app)  # type: ignore[arg-type]
@@ -217,8 +220,11 @@ async def test_stream_heartbeats_while_idle_and_closes_on_terminal_status(
     sqlite_app: object,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr("app.api.run_routes._HEARTBEAT_INTERVAL_S", 0.05)
     settings = get_settings()
+    # Patched on the cached Settings instance rather than via the environment: monkeypatch reverts
+    # an attribute by itself, whereas an env change would also need get_settings.cache_clear() on
+    # both sides and leaks into every later test if either is missed.
+    monkeypatch.setattr(settings, "stream_heartbeat_s", 0.05)
     tenant_id = TenantId(UUID(settings.default_tenant_id))
     run = await _seed_run(sqlite_app, tenant_id)
     run_repo = RunRepository(sqlite_app)  # type: ignore[arg-type]

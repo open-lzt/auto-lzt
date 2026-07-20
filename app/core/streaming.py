@@ -19,10 +19,11 @@ has neither a cap nor a gauge and carries the same live risk) can adopt it in on
 from __future__ import annotations
 
 import asyncio
+import contextlib
 from collections.abc import AsyncIterator, Awaitable, Callable
 
 from app.core.exceptions import AppError, ErrorCode
-from app.domain.flow_engine.events import EventTransport
+from app.domain.flow_engine.events import EventTransport, RunEvent
 
 HEARTBEAT_INTERVAL_S = 15.0
 
@@ -104,14 +105,36 @@ async def sse_frames(
     per-heartbeat check it has no use for.
     """
     events = transport.subscribe(channel, last_event_id)
-    while True:
-        try:
-            event_id, event = await asyncio.wait_for(events.__anext__(), timeout=heartbeat_s)
-        except TimeoutError:
-            yield ": heartbeat\n\n"
-            if is_closed is not None and await is_closed():
+    # The pending __anext__ is held across heartbeats instead of being re-awaited each pass, and
+    # that is the whole reason this is a task rather than `asyncio.wait_for`. wait_for CANCELS its
+    # awaitable on timeout; cancelling __anext__ throws into the generator at its suspension point
+    # and closes it, so the next call raises StopAsyncIteration and the stream ends after exactly
+    # one beat. EventSource reconnects silently, which is what kept it hidden: an idle feed looked
+    # alive while actually reconnecting every heartbeat interval, forever.
+    pending: asyncio.Task[tuple[str, RunEvent]] | None = None
+    try:
+        while True:
+            if pending is None:
+                pending = asyncio.create_task(events.__anext__())
+            done, _ = await asyncio.wait({pending}, timeout=heartbeat_s)
+            if not done:
+                yield ": heartbeat\n\n"
+                if is_closed is not None and await is_closed():
+                    return
+                continue
+            settled, pending = pending, None
+            try:
+                event_id, event = settled.result()
+            except StopAsyncIteration:
                 return
-        except StopAsyncIteration:
-            return
-        else:
             yield f"id: {event_id}\ndata: {event.model_dump_json()}\n\n"
+    finally:
+        if pending is not None:
+            # Cancelling delivers the cancellation INTO the subscribe generator, which then runs its
+            # own finally and closes the Pub/Sub connection — so this both drops the dangling task
+            # and releases the subscription. Awaiting it is what makes that ordering deterministic;
+            # an explicit events.aclose() on top is redundant and closes a generator that is still
+            # finishing, which wedges the worker rather than just this stream.
+            pending.cancel()
+            with contextlib.suppress(asyncio.CancelledError, StopAsyncIteration):
+                await pending

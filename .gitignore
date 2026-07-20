@@ -30,3 +30,6 @@ Thumbs.db
 desktop.ini
 *.swp
 *~
+
+# TypeScript incremental build cache — a build artifact, regenerated on every tsc run.
+*.tsbuildinfo

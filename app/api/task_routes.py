@@ -47,8 +47,6 @@ from app.worker.enqueue import build_arq_enqueue
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
 
-_HEARTBEAT_INTERVAL_S = 15.0
-
 
 def tenant_channel(tenant_id: TenantId) -> str:
     """The one channel every task card listens on. Named here because a channel agreed by two
@@ -127,7 +125,10 @@ async def create_stream_token(
 
 
 def _task_frames(
-    tenant_id: TenantId, last_event_id: str | None, transport: EventTransport
+    tenant_id: TenantId,
+    last_event_id: str | None,
+    transport: EventTransport,
+    heartbeat_s: float,
 ) -> AsyncIterator[str]:
     """No ``is_closed``, and the signature cannot express one.
 
@@ -140,7 +141,7 @@ def _task_frames(
         tenant_channel(tenant_id),
         last_event_id,
         transport,
-        heartbeat_s=_HEARTBEAT_INTERVAL_S,
+        heartbeat_s=heartbeat_s,
     )
 
 
@@ -148,6 +149,7 @@ def _task_frames(
 async def stream_tasks(
     request: Request,
     token: str,
+    last_event_id: str | None = None,
     tenant_id: TenantId = Depends(tenant_id_dep),
     transport: EventTransport = Depends(_event_transport),
     limiter: StreamLimiter = Depends(_stream_limiter),
@@ -159,7 +161,12 @@ async def stream_tasks(
     except StreamTokenInvalid as exc:
         raise Unauthorized() from exc
 
-    frames = _task_frames(tenant_id, request.headers.get("Last-Event-ID"), transport)
+    # The header is what a browser sends when EventSource reconnects on its own; the query parameter
+    # is for the reconnect the CLIENT has to drive, after a token expires. EventSource cannot set
+    # headers, so without the parameter every token renewal would silently resume from "now" and
+    # drop whatever happened during the gap. Header wins — only the browser can set it.
+    resume_from = request.headers.get("Last-Event-ID") or last_event_id
+    frames = _task_frames(tenant_id, resume_from, transport, settings.stream_heartbeat_s)
     return StreamingResponse(
         limiter.open(frames),
         media_type="text/event-stream",
