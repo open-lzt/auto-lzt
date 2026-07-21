@@ -1,4 +1,4 @@
-import { Container, Icon, Shell, Tabs, Topbar } from "@open-lzt/ui";
+import { Icon, Shell, Sidenav, SidenavItem, Topbar } from "@open-lzt/ui";
 import { useEffect, useState, type ReactNode } from "react";
 import { ThemeToggle } from "../components/ThemeToggle";
 import { fetchPanelTabs, type PanelTab } from "./tabs";
@@ -41,46 +41,49 @@ export function PanelShell({ renderTab, supported, headerRight }: PanelShellProp
   return (
     <Shell className="panel-shell">
       <Topbar className="panel-shell__topbar">
-        <Container className="panel-shell__topbar-inner">
+        <div className="panel-shell__topbar-inner">
           <span className="panel-shell__brand">
             auto<span className="panel-shell__brand-accent">-lzt</span>
           </span>
-          {tabs && tabs.length > 0 && active ? (
-            <Tabs
-              // The backend has always named an icon per tab; nothing rendered it, so the whole
-              // strip read as bare text. A tab without one still renders — just its title.
-              items={tabs.map((tab) => ({
-                value: tab.key,
-                label: (
-                  <span className="panel-shell__tab-label">
-                    {tab.icon ? <Icon name={tab.icon} size={15} /> : null}
-                    {tab.title}
-                  </span>
-                ),
-              }))}
-              value={active}
-              onChange={setActive}
-              className="panel-shell__tabs"
-            />
-          ) : null}
           <div className="panel-shell__topbar-right">
             {headerRight}
             <ThemeToggle />
           </div>
-        </Container>
+        </div>
       </Topbar>
-      {/* A plain <main>, not the kit's Main: that one is a sidebar grid
-          (`grid-template-columns: var(--lzt-sidebar) 1fr`) and the panel has no sidebar, so its
-          single child landed in the 240px sidebar track with the content track left empty. */}
-      <main className="panel-shell__main">
-        {/* Keyed by tab so switching remounts and replays the entrance animation instead of
-            swapping content in place, which reads as a jump cut. */}
-        {active ? (
-          <div key={active} className="panel-shell__tab-content">
-            {renderTab(active, setActive)}
-          </div>
-        ) : null}
-      </main>
+
+      {/* Navigation is a left COLUMN, not a top strip. Nine destinations never fit one row — the
+          last tab was clipped and the strip crowded the controls it shared the bar with. A column
+          grows downwards for free, and every label reads at full length. */}
+      <div className="panel-shell__body">
+        <Sidenav className="panel-shell__nav" label="Разделы">
+          {(tabs ?? []).map((tab) => (
+            <SidenavItem
+              key={tab.key}
+              href="#"
+              active={tab.key === active}
+              className="panel-shell__nav-item"
+              onClick={(e) => {
+                e.preventDefault();
+                setActive(tab.key);
+              }}
+            >
+              {tab.icon ? <Icon name={tab.icon} size={16} /> : null}
+              <span className="panel-shell__nav-label">{tab.title}</span>
+            </SidenavItem>
+          ))}
+        </Sidenav>
+
+        <main className="panel-shell__main">
+          {/* Keyed by tab so switching remounts and replays the entrance animation instead of
+              swapping content in place, which reads as a jump cut. */}
+          {active ? (
+            <div key={active} className="panel-shell__tab-content">
+              {renderTab(active, setActive)}
+            </div>
+          ) : null}
+        </main>
+      </div>
     </Shell>
   );
 }

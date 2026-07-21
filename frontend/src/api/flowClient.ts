@@ -435,6 +435,17 @@ interface FlowSummaryWire {
   name: string;
 }
 
+/** Whether this stand actually enforces a key.
+ *
+ * `require_api_key` is a NO-OP when the server has no key configured, so a prompt shown
+ * regardless would imply a boundary that does not exist — and ANY string typed into it would
+ * appear to work, because the validating read succeeds for everyone. The gate has to ask before
+ * it can tell a real lock from a painted one.
+ */
+export function authRequired(): Promise<{ required: boolean }> {
+  return request<{ required: boolean }>("/auth/required");
+}
+
 export async function fetchFlows(): Promise<FlowSummary[]> {
   const wire = await request<FlowSummaryWire[]>("/flows/list");
   return wire.map((flow) => ({ id: flow.flow_id, name: flow.name }));

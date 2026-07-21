@@ -17,11 +17,11 @@
 .panel-shell__topbar-inner {
   display: flex;
   align-items: center;
-  gap: 28px;
   height: 56px;
-  max-width: 1240px;
-  margin: 0 auto;
-  padding: 0 28px;
+  /* Full width, no centred max-width container: the bar used to centre its contents while the
+     border ran edge to edge, so the right-hand controls sat past the line's end and read as
+     clipped. Padding matches the nav below so the brand aligns with the column. */
+  padding: 0 20px;
   width: 100%;
 }
 
@@ -37,11 +37,6 @@
   color: var(--lzt-brand);
 }
 
-.panel-shell__tabs {
-  flex: 1;
-  min-width: 0;
-}
-
 .panel-shell__topbar-right {
   display: flex;
   align-items: center;
@@ -49,11 +44,71 @@
   margin-left: auto;
 }
 
+.panel-shell__body {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+
+.panel-shell__nav {
+  flex: none;
+  width: 212px;
+  padding: 16px 12px;
+  border-right: 1px solid var(--lzt-border);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  position: sticky;
+  top: 56px;
+  align-self: flex-start;
+  max-height: calc(100vh - 56px);
+  overflow-y: auto;
+}
+
+.panel-shell__nav-item {
+  display: flex;
+  align-items: center;
+  /* 10px, not the 6px the icons sat at before: an icon touching its label reads as one smudged
+     glyph instead of a symbol next to a word. */
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm, 8px);
+  color: var(--lzt-text-dim);
+  font-size: 14px;
+  text-decoration: none;
+  white-space: nowrap;
+  transition:
+    background-color 140ms ease-out,
+    color 140ms ease-out;
+}
+
+.panel-shell__nav-item:hover {
+  background: var(--lzt-surface-2, rgba(255, 255, 255, 0.04));
+  color: var(--lzt-text);
+}
+
+.panel-shell__nav-item[aria-current="page"],
+.panel-shell__nav-item.is-active {
+  background: var(--lzt-surface-2, rgba(255, 255, 255, 0.06));
+  color: var(--lzt-text);
+}
+
+.panel-shell__nav-item:focus-visible {
+  outline: 2px solid var(--lzt-brand);
+  outline-offset: 2px;
+}
+
+.panel-shell__nav-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .panel-shell__main {
   flex: 1;
   display: flex;
   flex-direction: column;
   min-height: 0;
+  min-width: 0;
 }
 
 .panel-shell__tab-content {
@@ -73,5 +128,22 @@
 @media (prefers-reduced-motion: reduce) {
   .panel-shell__tab-content {
     animation: none;
+  }
+}
+
+/* Narrow screens: the column becomes a scrollable row rather than eating half the width. */
+@media (max-width: 900px) {
+  .panel-shell__body {
+    flex-direction: column;
+  }
+
+  .panel-shell__nav {
+    width: 100%;
+    max-height: none;
+    position: static;
+    flex-direction: row;
+    overflow-x: auto;
+    border-right: none;
+    border-bottom: 1px solid var(--lzt-border);
   }
 }

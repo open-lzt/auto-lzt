@@ -1,58 +1,38 @@
-import { Alert, Button, Card, Icon, useToast } from "@open-lzt/ui";
+import { Button, Card, useToast } from "@open-lzt/ui";
 import { useEffect, useState } from "react";
 import { AutoForm } from "../../../components/form/AutoForm";
-import {
-  coerceParams,
-  defaultValues,
-  deployPreset,
-  fetchPresets,
-  type PresetSummary,
-} from "./presetClient";
+import { coerceParams, defaultValues, deployPreset, type PresetSummary } from "./presetClient";
 import "../preset-form.css";
 
 type FormValue = string | number | boolean;
 
-export interface PresetViewProps {
-  /** Which preset to render — the panel tab key, which matches the preset key. */
-  presetKey: string;
+export interface PresetFormProps {
+  preset: PresetSummary;
   onDeployed?: () => void;
 }
 
-/** The one screen behind every preset tab.
+/** The form for ONE preset — presentational, handed the preset it renders.
  *
  * There is no per-preset component on purpose. A preset states its own fields server-side
  * (`domain/panel/preset_registry.py`) and this renders whatever it states, so adding a preset is
- * a backend change and this file never grows. The previous shape — one hand-written React screen
+ * a backend change and this file never grows. The shape before — one hand-written React screen
  * per preset — meant the interval list and the market's category enum were re-typed in
  * TypeScript, where they immediately began to drift.
  */
-export function PresetView({ presetKey, onDeployed }: PresetViewProps) {
-  const [preset, setPreset] = useState<PresetSummary | null>(null);
-  const [values, setValues] = useState<Record<string, FormValue>>({});
-  const [error, setError] = useState<string | null>(null);
+export function PresetForm({ preset, onDeployed }: PresetFormProps) {
+  const [values, setValues] = useState<Record<string, FormValue>>(() =>
+    defaultValues(preset.params_schema),
+  );
   const [deploying, setDeploying] = useState(false);
   const toast = useToast();
 
+  // Switching preset resets the form: the previous preset's values are keyed by ITS field names,
+  // and carrying them over would submit fields the new preset never declared.
   useEffect(() => {
-    let cancelled = false;
-    fetchPresets()
-      .then((all) => {
-        if (cancelled) return;
-        const found = all.find((p) => p.key === presetKey) ?? null;
-        setPreset(found);
-        if (found) setValues(defaultValues(found.params_schema));
-        else setError(`пресет «${presetKey}» не найден на сервере`);
-      })
-      .catch((err: unknown) =>
-        setError(err instanceof Error ? err.message : "не удалось загрузить пресет"),
-      );
-    return () => {
-      cancelled = true;
-    };
-  }, [presetKey]);
+    setValues(defaultValues(preset.params_schema));
+  }, [preset]);
 
   async function handleDeploy(): Promise<void> {
-    if (!preset) return;
     setDeploying(true);
     try {
       await deployPreset(preset.key, coerceParams(preset.params_schema, values));
@@ -65,52 +45,25 @@ export function PresetView({ presetKey, onDeployed }: PresetViewProps) {
     }
   }
 
-  if (error) {
-    return (
-      <div className="panel-view">
-        <Alert tone="danger" title="Пресет не загрузился">
-          {error}
-        </Alert>
-      </div>
-    );
-  }
-
-  if (!preset) {
-    return (
-      <div className="panel-view">
-        <p className="preset-form__note">загрузка…</p>
-      </div>
-    );
-  }
-
   return (
-    <div className="panel-view">
-      <div className="panel-view__head">
-        <h2 className="panel-view__title">
-          <Icon name={preset.icon} size={20} />
-          {preset.title}
-        </h2>
-      </div>
+    <div className="preset-form">
+      <Card className="preset-form__section">
+        <AutoForm
+          schema={preset.params_schema}
+          values={values}
+          onChange={(key, value) => setValues((prev) => ({ ...prev, [key]: value }))}
+        />
+      </Card>
 
-      <div className="preset-form">
-        <Card className="preset-form__section">
-          <AutoForm
-            schema={preset.params_schema}
-            values={values}
-            onChange={(key, value) => setValues((prev) => ({ ...prev, [key]: value }))}
-          />
-        </Card>
-
-        <div className="preset-form__deploy">
-          <Button
-            variant="primary"
-            loading={deploying}
-            disabled={deploying}
-            onClick={() => void handleDeploy()}
-          >
-            Включить
-          </Button>
-        </div>
+      <div className="preset-form__deploy">
+        <Button
+          variant="primary"
+          loading={deploying}
+          disabled={deploying}
+          onClick={() => void handleDeploy()}
+        >
+          Включить
+        </Button>
       </div>
     </div>
   );

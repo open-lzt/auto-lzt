@@ -56,9 +56,11 @@ class DuplicatePanelTabKey(Exception):
 # sprite lives in a separate package, and the panel consumes its BUILT copy.
 BUILTIN_PANEL_TABS: Final[tuple[PanelTabSpec, ...]] = (
     PanelTabSpec(key="tasks", title="Задачи", order=10, icon="clock"),
-    PanelTabSpec(key="autobump", title="Поднятие", order=20, icon="zap"),
-    PanelTabSpec(key="threadbump", title="Поднятие тем", order=25, icon="message"),
-    PanelTabSpec(key="autobuy", title="Автобай", order=28, icon="wallet"),
+    # ONE tab for every preset. Each used to own a top-level tab, which left adding a preset a
+    # frontend edit — the last per-preset hardcoding after the forms themselves became
+    # server-declared. The screen behind this key builds its own switcher from
+    # `/panel/presets/list`, so a new preset appears here without anyone touching a tab list.
+    PanelTabSpec(key="automation", title="Автоматизация", order=20, icon="zap"),
     PanelTabSpec(key="accounts", title="Аккаунты", order=30, icon="user"),
     PanelTabSpec(key="flows", title="Флоу", order=40, icon="share"),
     PanelTabSpec(key="registry", title="Реестр", order=45, icon="package"),

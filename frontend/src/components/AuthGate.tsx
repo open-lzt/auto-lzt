@@ -1,21 +1,48 @@
-import { useState, type FormEvent, type ReactNode } from "react";
-import { fetchFlows, getApiKey, setApiKey } from "../api/flowClient";
+import { useEffect, useState, type FormEvent, type ReactNode } from "react";
+import { authRequired, fetchFlows, getApiKey, setApiKey } from "../api/flowClient";
 import "./auth-gate.css";
 
 interface AuthGateProps {
   children: ReactNode;
 }
 
-type GateStatus = "checking" | "authed" | "prompting" | "validating";
+type GateStatus = "checking" | "open" | "authed" | "prompting" | "validating";
 
-/** Gates the whole app behind an API key. A key already in sessionStorage renders `children`
- * immediately (no re-validation on every reload — the backend rejects it on the first real call
- * if it's gone stale, which then re-opens this gate). A freshly entered key is validated with a
- * cheap read before trusting it, and cleared on failure so a bad key can't loop-fail forever. */
+/** Gates the app behind an API key — but only when there is one.
+ *
+ * The server's `require_api_key` is a NO-OP when no key is configured, which is the self-host
+ * default. A prompt shown anyway would be a painted lock: every string typed into it "worked",
+ * because the read used to validate it succeeds for everybody. Someone setting up a stand would
+ * see a login screen, type a key, and reasonably conclude they were protected.
+ *
+ * So the gate ASKS first (`GET /auth/required`). No key configured → render the app with a
+ * standing warning that says so out loud, rather than a login that means nothing.
+ *
+ * A key already in sessionStorage renders children immediately: no re-validation per reload, the
+ * backend rejects a stale key on the first real call and that re-opens this gate.
+ */
 export function AuthGate({ children }: AuthGateProps) {
-  const [status, setStatus] = useState<GateStatus>(getApiKey() ? "authed" : "prompting");
+  const [status, setStatus] = useState<GateStatus>("checking");
   const [keyInput, setKeyInput] = useState("");
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    authRequired()
+      .then(({ required }) => {
+        if (cancelled) return;
+        if (!required) setStatus("open");
+        else setStatus(getApiKey() ? "authed" : "prompting");
+      })
+      .catch(() => {
+        // Unreachable or erroring backend: prompt rather than open. Failing closed here costs a
+        // needless login screen; failing open would hide an unprotected stand behind a guess.
+        if (!cancelled) setStatus(getApiKey() ? "authed" : "prompting");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -37,8 +64,24 @@ export function AuthGate({ children }: AuthGateProps) {
     }
   }
 
+  if (status === "checking") {
+    return null;
+  }
+
   if (status === "authed") {
     return <>{children}</>;
+  }
+
+  if (status === "open") {
+    return (
+      <>
+        <div className="auth-gate__open-banner" role="status">
+          Ключ не задан — панель открыта всем, кто дотянется до этого адреса. Задайте
+          <code> LZT_FLOW_API_KEY</code>, прежде чем выставлять её наружу.
+        </div>
+        {children}
+      </>
+    );
   }
 
   return (

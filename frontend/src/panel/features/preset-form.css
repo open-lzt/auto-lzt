@@ -173,3 +173,50 @@
   font-size: 14px;
   color: var(--lzt-text-dim);
 }
+
+/* Preset switcher: the one place all presets are offered, built from what the server returns. */
+.preset-switch {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 20px;
+}
+
+.preset-switch__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  height: 34px;
+  padding: 0 14px;
+  border: 1px solid var(--lzt-border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--lzt-text-dim);
+  font-size: 14px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background-color 140ms ease-out, color 140ms ease-out, border-color 140ms ease-out;
+}
+
+.preset-switch__item:hover {
+  color: var(--lzt-text);
+  border-color: var(--lzt-border-strong, var(--lzt-border));
+}
+
+.preset-switch__item--active {
+  color: var(--lzt-text);
+  border-color: var(--lzt-brand);
+  background: rgba(46, 204, 113, 0.10);
+}
+
+.preset-switch__item:focus-visible {
+  outline: 2px solid var(--lzt-brand);
+  outline-offset: 2px;
+}
+
+.panel-view__subtitle {
+  margin: 6px 0 0;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--lzt-text-dim);
+}

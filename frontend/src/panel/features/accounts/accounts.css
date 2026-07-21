@@ -41,6 +41,11 @@
   align-items: center;
   gap: 16px;
   padding: 12px 16px;
+  /* Without this the row is sized by its content, so a long nickname or an odd currency code
+     pushes «Удалить» straight out past the card's right edge — each row ending at a different
+     width. A flex item's default min-width is auto, which refuses to shrink below its text. */
+  min-width: 0;
+  overflow: hidden;
 }
 
 .accounts-row--skeleton {
@@ -50,8 +55,10 @@
 /* Edited in place rather than behind a dialog: renaming is the one field here that is safe to get
    wrong, and a modal for a single text input is friction with no payoff. */
 .accounts-row__label {
-  flex: 1;
-  min-width: 0;
+  /* A real basis, not `flex: 1` alone: with everything else sized by content the label was the
+     only shrinkable item and collapsed to a few characters — «Без назва…». */
+  flex: 1 1 140px;
+  min-width: 96px;
   background: transparent;
   border: 1px solid transparent;
   border-radius: 8px;
@@ -72,8 +79,14 @@
   border-color: var(--lzt-brand);
 }
 
+/* Truncates rather than pushes: the nickname is the most variable thing in the row, and the
+   controls to its right must keep their place. Full value stays in the title attribute. */
 .accounts-row__username {
-  flex: none;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
   font-size: 14px;
   color: var(--lzt-text-dim);
   white-space: nowrap;
@@ -82,8 +95,11 @@
 /* tabular-nums so amounts line up digit-for-digit down the column — proportional figures make a
    list of balances impossible to compare at a glance. */
 .accounts-row__balance {
-  flex: none;
-  min-width: 112px;
+  flex: 0 1 auto;
+  min-width: 96px;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
   text-align: right;
   font-size: 14px;
   font-variant-numeric: tabular-nums;
