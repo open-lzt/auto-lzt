@@ -1,175 +1,37 @@
-.autobump {
+/* Styles for the preset screen (PresetView / AutomationView).
+ *
+ * This file used to describe `.autobump*` — the hand-written per-preset views that the
+ * server-declared preset rework deleted. The markup became `.preset-form*`; the stylesheet was
+ * never renamed, so ~170 lines styled classes that no longer existed and the surface that DID
+ * exist got nothing at all. That is why the form had no measure and the deploy button sat flush
+ * against the card: `.preset-form` was an unstyled `div`. Dead rules removed rather than renamed —
+ * most described controls (interval pills, a bespoke checkbox, a numeric field) that AutoForm and
+ * the shared form controls now own.
+ */
+
+.preset-form {
   display: flex;
   flex-direction: column;
+  /* The gap the deploy button was missing. */
   gap: 16px;
   max-width: var(--panel-column);
 }
 
-.autobump__section {
+.preset-form__section {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  padding: 20px;
 }
 
-.autobump__section-title {
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--lzt-text);
-  margin: 0;
-}
-
-.autobump__section-hint {
-  font-size: 14px;
-  color: var(--lzt-text-dim);
-  line-height: 1.5;
-  margin: 0;
-}
-
-.autobump__accounts {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.autobump__account {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  /* ≥6px vertical so the hover target is a comfortable row, not a hairline. */
-  padding: 8px 10px;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: background 140ms ease-out;
-}
-
-.autobump__account:hover {
-  background: var(--lzt-surface-2);
-}
-
-.autobump__account-name {
-  font-size: 14px;
-  color: var(--lzt-text);
-}
-
-/* The kit has no checkbox, and the browser default is a light-mode grey box that reads as broken on
-   a dark surface. Styled here rather than in the kit because this tab is the only checkbox in the
-   panel — it moves to the kit when a second surface needs one. */
-.autobump__check {
-  appearance: none;
-  flex: none;
-  width: 16px;
-  height: 16px;
-  margin: 0;
-  border: 1px solid var(--lzt-border-strong, var(--lzt-border));
-  border-radius: 5px;
-  background: var(--lzt-surface-2);
-  cursor: pointer;
-  display: grid;
-  place-content: center;
-  transition:
-    background 140ms ease-out,
-    border-color 140ms ease-out;
-}
-
-.autobump__check::after {
-  content: "";
-  width: 9px;
-  height: 5px;
-  border: 1.5px solid var(--lzt-bg);
-  border-top: 0;
-  border-right: 0;
-  transform: rotate(-45deg) translate(1px, -1px) scale(0.6);
-  opacity: 0;
-  transition:
-    opacity 120ms ease-out,
-    transform 140ms cubic-bezier(0.2, 0.8, 0.2, 1);
-}
-
-.autobump__check:checked {
-  background: var(--lzt-brand);
-  border-color: var(--lzt-brand);
-}
-
-.autobump__check:checked::after {
-  opacity: 1;
-  transform: rotate(-45deg) translate(1px, -1px) scale(1);
-}
-
-.autobump__check:focus-visible {
-  outline: 2px solid var(--lzt-brand);
-  outline-offset: 2px;
-}
-
-.autobump__intervals {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.autobump__interval {
-  padding: 8px 14px;
-  border-radius: 10px;
-  border: 1px solid var(--lzt-border);
-  background: transparent;
-  color: var(--lzt-text-dim);
-  font-size: 14px;
-  font-family: inherit;
-  cursor: pointer;
-  transition: all 160ms ease-out;
-}
-
-.autobump__interval:hover {
-  color: var(--lzt-text);
-  border-color: var(--lzt-border-strong, var(--lzt-border));
-}
-
-.autobump__interval--active {
-  color: var(--lzt-bg);
-  background: var(--lzt-brand);
-  border-color: var(--lzt-brand);
-}
-
-.autobump__field {
+.preset-form__deploy {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
 }
 
-.autobump__field label {
-  font-size: 14px;
-  color: var(--lzt-text);
-}
-
-.autobump__field input {
-  width: 100px;
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-}
-
-.autobump__toggle {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-size: 14px;
-  color: var(--lzt-text);
-  cursor: pointer;
-  padding: 6px 0;
-}
-
-.autobump__deploy {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 4px 2px;
-}
-
-.autobump__summary {
-  display: flex;
-  align-items: center;
-  gap: 10px;
+.preset-form__note {
+  margin: 0;
   font-size: 14px;
   color: var(--lzt-text-dim);
 }
@@ -206,7 +68,7 @@
 .preset-switch__item--active {
   color: var(--lzt-text);
   border-color: var(--lzt-brand);
-  background: rgba(46, 204, 113, 0.10);
+  background: rgba(46, 204, 113, 0.1);
 }
 
 .preset-switch__item:focus-visible {

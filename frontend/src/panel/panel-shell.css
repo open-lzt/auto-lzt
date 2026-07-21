@@ -34,21 +34,35 @@
   backdrop-filter: blur(12px);
 }
 
+/* The kit's own wrapper is what was centring the bar.
+ *
+ * `.panel-shell__topbar-inner` below already asks for full width — but Topbar renders
+ * `.lzt-topbar__inner` BETWEEN the bar and our div, and that one carries `max-width: 1180px;
+ * margin: 0 auto`. So the brand was inset 161px from the left edge on a wide screen, floating in
+ * the middle of nowhere: not on the nav's line, not on the content's, not on the window's. An
+ * earlier pass fixed our div and never saw the wrapper in between. */
+.panel-shell__topbar .lzt-topbar__inner {
+  max-width: none;
+  margin: 0;
+  padding: 0;
+}
+
 .panel-shell__topbar-inner {
   display: flex;
   align-items: center;
   height: 56px;
-  /* Full width, no centred max-width container: the bar used to centre its contents while the
-     border ran edge to edge, so the right-hand controls sat past the line's end and read as
-     clipped. Padding matches the nav below so the brand aligns with the column. */
+  /* 20px puts the brand on the same vertical line as the nav's own text below it. */
   padding: 0 20px;
   width: 100%;
 }
 
 .panel-shell__brand {
-  font-size: 14px;
+  /* A wordmark set at body size reads as a label, not as the product's name — it was 14px, the
+     same as every hint on the page. 20px is the next step on the type scale, and the topbar is
+     56px tall, so it costs no height. */
+  font-size: 20px;
   font-weight: 600;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.02em;
   color: var(--lzt-text);
   white-space: nowrap;
 }
