@@ -44,6 +44,29 @@ from app.domain.market.errors import LotUnavailable, MarketApiError, TokenInvali
 
 logger = structlog.get_logger()
 
+# `accounts.balance_currency` is VARCHAR(8). Postgres ENFORCES that and aborts the insert; SQLite
+# ignores it entirely, so a too-long value is invisible in dev and a hard failure in production —
+# the worst shape a bug can have. A test stand handing back a 20-character string is what surfaced
+# it. Real codes are three letters, so 8 is already generous.
+_CURRENCY_MAX_LEN: Final = 8
+
+
+def _plausible_currency(raw: str, *, user_id: int) -> str:
+    """Upstream's currency, or empty when it cannot be one.
+
+    Dropped rather than truncated: cutting a currency to fit would invent a DIFFERENT currency and
+    label real money with it, which is worse than showing an amount with no unit at all. The
+    warning is the point — an implausible code here means the upstream contract moved.
+    """
+    code = (raw or "").strip()
+    if not code:
+        return ""
+    if len(code) > _CURRENCY_MAX_LEN or not code.isalpha():
+        logger.warning("profile_currency_implausible", user_id=user_id, length=len(code))
+        return ""
+    return code
+
+
 # `fast-buy` takes 28-31s against prod — the SDK's 30s default sat exactly on that edge, so the
 # client gave up on a purchase the marketplace was still completing. The retry then hit a lot that
 # was already ours and came back Forbidden, and the run reported failure for money that had moved.
@@ -217,7 +240,7 @@ class MarketAdapter:
             user_id=response.user_id,
             username=response.username,
             balance=balance,
-            currency=response.currency,
+            currency=_plausible_currency(response.currency, user_id=response.user_id),
         )
 
     async def bump_thread(self, thread_id: int) -> ThreadBumpResult:
