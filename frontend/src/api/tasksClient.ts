@@ -10,6 +10,9 @@ export interface Task {
   flow_id: string;
   flow_name: string;
   schedule_cron: string;
+  /** The same schedule in words («Каждые 4 часа»), resolved server-side from the one map the
+   * schedule picker is built from. Falls back to the raw cron for a flow edited on the canvas. */
+  schedule_label: string;
   active: boolean;
   health: TaskHealth;
   next_fire_at: string | null;

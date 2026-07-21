@@ -8,6 +8,10 @@
   display: flex;
   align-items: center;
   gap: 12px;
+  /* Without min-width:0 a flex child refuses to shrink below its own text, so one long balance
+     string pushed this row — and with it the whole page — past the viewport on a phone (measured
+     487px against a 390px screen). The cardinal responsive bug. */
+  min-width: 0;
   /* >=8px vertical so the hover target is a comfortable band, not a hairline. */
   padding: 8px 10px;
   border-radius: var(--radius-sm, 8px);
@@ -28,18 +32,35 @@
 }
 
 .data-picker__name {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: 14px;
   color: var(--text);
 }
 
 .data-picker__sub {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: 14px;
   color: var(--text-muted);
 }
 
-/* Pushed right and tabular so a column of balances can be compared down the list. */
+/* Pushed right and tabular so a column of balances can be compared down the list. Capped and
+   truncating: a currency code is 3–4 characters in reality, but it is free text on the wire, and
+   one long value must never get to size the row. */
 .data-picker__balance {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 45%;
   margin-left: auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
   font-size: 14px;
   font-variant-numeric: tabular-nums;
   color: var(--text-muted);

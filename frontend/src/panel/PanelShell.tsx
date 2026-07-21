@@ -63,6 +63,15 @@ export function PanelShell({ renderTab, supported, headerRight }: PanelShellProp
               href="#"
               active={tab.key === active}
               className="panel-shell__nav-item"
+              // The label is hidden on phones, where the strip is icons only — without this the
+              // control would read as an unnamed link to a screen reader, and hover would tell a
+              // mouse user nothing either.
+              title={tab.title}
+              aria-label={tab.title}
+              // Stable hook for the responsive audit, which drives every destination at every
+              // width. Selecting by visible text would break on phones, where the label is
+              // hidden and only the icon remains.
+              data-key={tab.key}
               onClick={(e) => {
                 e.preventDefault();
                 setActive(tab.key);

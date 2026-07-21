@@ -29,6 +29,8 @@ interface FieldSpec {
   // Human captions for `enumValues`, from `x-ui.options`. JSON Schema has nowhere to put them,
   // and without it a cron-valued enum renders the raw expression instead of «Каждые 30 минут».
   options?: PickerOption[];
+  /** Explicit position from `x-ui.order`; absent means "keep declaration order". */
+  order?: number;
   // x-ui.widget picks the control within a kind: radio/multiselect for enum, textarea/datetime
   // for string. "slider" is number-only, so it carries its own config below instead of here.
   widget?: JsonSchemaUi["widget"];
@@ -80,6 +82,7 @@ function toFieldSpec(
       kind: "enum",
       enumValues,
       options: ui?.options,
+      order: ui?.order,
       widget: ui?.widget,
     };
   }
@@ -93,13 +96,13 @@ function toFieldSpec(
             unit: ui.unit,
           }
         : undefined;
-    return { key, title, description, required: isRequired, kind: "number", slider };
+    return { key, title, description, order: ui?.order, required: isRequired, kind: "number", slider };
   }
-  if (type === "boolean") return { key, title, description, required: isRequired, kind: "boolean" };
+  if (type === "boolean") return { key, title, description, order: ui?.order, required: isRequired, kind: "boolean" };
   if (type === "string" || type === "array") {
-    return { key, title, description, required: isRequired, kind: "string", widget: ui?.widget };
+    return { key, title, description, order: ui?.order, required: isRequired, kind: "string", widget: ui?.widget };
   }
-  return { key, title, description, required: isRequired, kind: "unknown" };
+  return { key, title, description, order: ui?.order, required: isRequired, kind: "unknown" };
 }
 
 interface AutoFormProps {
@@ -119,9 +122,15 @@ export function AutoForm({ schema, values, onChange }: AutoFormProps) {
   const properties = schema.properties ?? {};
   const required = new Set(schema.required ?? []);
   const defs = (schema.$defs ?? {}) as Record<string, JsonSchema>;
-  const fields = Object.entries(properties).map(([key, propSchema]) =>
-    toFieldSpec(key, propSchema, required, defs),
-  );
+  const fields = Object.entries(properties)
+    .map(([key, propSchema]) => toFieldSpec(key, propSchema, required, defs))
+    // Declaration order is the default, but a field may claim a position with `x-ui.order`.
+    // Needed because Pydantic emits INHERITED fields first: a schedule declared on a shared base
+    // would open every form with «Как часто», asking when before who. Stable sort keeps
+    // everything without an order in its declared sequence.
+    .map((field, index) => ({ field, index }))
+    .sort((a, b) => (a.field.order ?? 0) - (b.field.order ?? 0) || a.index - b.index)
+    .map(({ field }) => field);
 
   if (fields.length === 0) {
     return <p className="autoform__empty">у этого блока нет параметров</p>;

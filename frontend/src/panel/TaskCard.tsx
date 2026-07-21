@@ -36,7 +36,9 @@ const OUTCOME_LABEL = {
  * failure under yesterday and quietly show the wrong thing.
  */
 function formatLastRun(iso: string | null, now: string): string {
-  if (iso === null) return "ещё не запускалась";
+  // Genderless on purpose: the subject is the flow's own name, and «ещё не запускалась» silently
+  // assumed a feminine one — it read wrong beside «Автобай» and «Поднятие».
+  if (iso === null) return "запусков не было";
   const at = new Date(iso);
   if (Number.isNaN(at.getTime())) return "—";
   const time = at.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
@@ -47,6 +49,19 @@ function formatLastRun(iso: string | null, now: string): string {
     at.getDate() === today.getDate();
   if (sameDay) return time;
   return `${at.toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit" })}, ${time}`;
+}
+
+/** The next fire as a local wall-clock time — «в 15:00», or «завтра в 12:00» past midnight.
+ *
+ * Rendered in the browser's zone on purpose: the countdown says HOW LONG, this says WHEN, and
+ * "when" is only useful in the zone the operator lives in. */
+function formatFireAt(iso: string): string {
+  const at = new Date(iso);
+  if (Number.isNaN(at.getTime())) return "";
+  const time = at.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
+  const now = new Date();
+  const tomorrow = at.getDate() !== now.getDate() || at.getMonth() !== now.getMonth();
+  return tomorrow ? `завтра в ${time}` : `в ${time}`;
 }
 
 export function TaskCard({ task, serverTime, onRunNow, busy = false, index = 0 }: TaskCardProps) {
@@ -73,14 +88,21 @@ export function TaskCard({ task, serverTime, onRunNow, busy = false, index = 0 }
         <span className="task-card__countdown-label">
           {paused ? "на паузе" : "до следующего запуска"}
         </span>
+        {/* The wall-clock moment, in the operator's OWN zone. Schedules run in UTC, so a
+            «9:00» task fires at 12:00 for someone at UTC+3 — a countdown alone never reveals
+            that, and the mismatch reads as a broken clock rather than a timezone. */}
+        {!paused && task.next_fire_at ? (
+          <span className="task-card__countdown-at">{formatFireAt(task.next_fire_at)}</span>
+        ) : null}
       </div>
 
       <dl className="task-card__meta">
         <div className="task-card__meta-row">
           <dt>Расписание</dt>
-          <dd>
-            <code className="task-card__cron">{task.schedule_cron}</code>
-          </dd>
+          {/* The words, not the cron. The server sends both and takes the phrase from the same map
+              the schedule picker offers, so the card and the form call an interval by one name.
+              The raw expression stays in the tooltip for whoever wants it. */}
+          <dd title={task.schedule_cron}>{task.schedule_label}</dd>
         </div>
         <div className="task-card__meta-row">
           <dt>Последний запуск</dt>

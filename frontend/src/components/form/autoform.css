@@ -200,3 +200,12 @@ select.autoform__control {
   border-width: 0 2px 2px 0;
   transform: rotate(45deg);
 }
+
+/* The hint was the BRIGHTEST text on the form (#f2f2f3) while the label it explains was muted
+   (#86888d) — support shouting over the thing it supports. It steps below the label: same size,
+   lighter weight, dimmer ink, so the eye lands on the field name first. */
+.autoform__hint {
+  color: var(--lzt-text-dim);
+  font-weight: 400;
+  line-height: 1.5;
+}

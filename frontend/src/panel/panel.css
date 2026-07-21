@@ -212,3 +212,27 @@
     animation: none;
   }
 }
+
+/* The wall-clock moment under the countdown. Quiet: the countdown is the focal value, this is
+   the reference that stops a UTC schedule from reading as a broken clock. */
+.task-card__countdown-at {
+  display: block;
+  margin-top: 2px;
+  font-size: 14px;
+  color: var(--lzt-text-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Phones: the title stops sharing a row with its explanation. Side by side, a 390px column left
+   «Автоматизация» squeezed into a third of the width beside a five-line paragraph. */
+@media (max-width: 700px) {
+  .panel-view__head {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+
+  .panel-view__subtitle {
+    max-width: none;
+  }
+}

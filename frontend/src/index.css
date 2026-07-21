@@ -143,3 +143,84 @@ button {
     transition-duration: 0.001ms !important;
   }
 }
+
+
+/* ─ Floors the design kit does not enforce ─────────────────────────────────
+   The 14px minimum and the 44px tap target are OUR rules; @open-lzt/ui ships
+   12–13px labels and 28–37px controls. Overriding here rather than in the kit
+   keeps the panel's floor a panel decision, and the audit script is what proves
+   it holds (it caught every one of these). */
+
+.lzt-btn,
+.lzt-sidenav__label,
+.lzt-sidenav__item {
+  font-size: 14px;
+}
+
+/* Touch input has no hover to disambiguate a near-miss, so the target itself has to be big
+   enough. Keyed on WIDTH as well as pointer type, deliberately: a narrow window is a phone in
+   practice, and `pointer: coarse` is exactly what a headless desktop browser reports as `fine`
+   — so a pointer-only rule cannot be verified by the audit that is supposed to prove it. */
+@media (pointer: coarse), (max-width: 640px) {
+  .lzt-btn,
+  .lzt-sidenav__item,
+  .panel-theme-toggle,
+  .preset-switch__item,
+  .accounts-row__label {
+    min-height: 44px;
+  }
+
+  .panel-theme-toggle {
+    min-width: 44px;
+  }
+
+  .lzt-checkbox,
+  .data-picker__check,
+  input[type="checkbox"] {
+    width: 20px;
+    height: 20px;
+  }
+
+  .data-picker__row,
+  .account-picker__row {
+    min-height: 44px;
+  }
+}
+
+/* clip, not hidden — hidden would break position:sticky on the nav and the topbar. */
+html,
+body {
+  overflow-x: clip;
+}
+
+/* ── Touch: every control is thumb-sized ───────────────────────────────────────────────────
+   Keyed on the POINTER, not the width (responsive.md §4). A 34px input is fine for a mouse at
+   any width and wrong for a finger at any width; a breakpoint would get both cases backwards on
+   a touch laptop and a small desktop window. */
+@media (pointer: coarse) {
+  .lzt-input,
+  .lzt-btn,
+  .autoform__control,
+  .preset-switch__item,
+  .accounts-row__label {
+    min-height: 44px;
+  }
+
+  /* The row IS the tap target — the box just draws the state. Enlarging the box alone would
+     leave a 44px row with a 20px hit area in the middle of it. */
+  .data-picker__row,
+  .autoform__field--inline {
+    min-height: 44px;
+  }
+
+  .data-picker__check,
+  .autoform__checkbox {
+    width: 22px;
+    height: 22px;
+  }
+
+  /* Icon-only buttons are square, so a min-height alone still leaves them 40px wide. */
+  .accounts-row__actions .lzt-btn {
+    min-width: 44px;
+  }
+}

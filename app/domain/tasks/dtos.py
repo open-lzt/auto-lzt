@@ -16,6 +16,7 @@ from uuid import UUID
 
 from app.core.schema import BaseSchema
 from app.domain.flow_engine.model import RunStatus
+from app.domain.panel.preset_registry import schedule_label
 from app.domain.tasks.errors import InvalidCursor
 from app.domain.tasks.model import Task, TaskHealth, TaskPage
 
@@ -48,6 +49,10 @@ class TaskDTO(BaseSchema):
     flow_id: str
     flow_name: str
     schedule_cron: str
+    # The same schedule in words. Sent alongside the cron rather than instead of it: the raw
+    # expression stays available for anyone who wants it, while the card gets something a person
+    # can read. Falls back to the cron itself for a schedule edited on the canvas.
+    schedule_label: str
     active: bool
     health: TaskHealth
     next_fire_at: datetime | None
@@ -61,6 +66,7 @@ class TaskDTO(BaseSchema):
             flow_id=str(task.flow_id),
             flow_name=task.flow_name,
             schedule_cron=task.schedule_cron,
+            schedule_label=schedule_label(task.schedule_cron),
             active=task.active,
             health=task.health,
             next_fire_at=task.next_fire_at,

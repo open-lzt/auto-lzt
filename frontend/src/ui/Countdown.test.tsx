@@ -21,14 +21,14 @@ describe("Countdown", () => {
     const { container } = render(<Countdown targetAt={at(90)} serverTime={NOW.toISOString()} />);
     const el = () => container.querySelector(".countdown")!;
 
-    expect(el().textContent).toBe("01:30");
+    expect(el().textContent).toBe("1 мин 30 с");
     expect(el().className).not.toContain("countdown--urgent");
 
     act(() => {
       vi.advanceTimersByTime(30_000);
     });
 
-    expect(el().textContent).toBe("01:00");
+    expect(el().textContent).toBe("1 мин 00 с");
     expect(el().className).toContain("countdown--urgent");
   });
 
@@ -46,14 +46,14 @@ describe("Countdown", () => {
     const serverTime = new Date(NOW.getTime() - 5 * 60_000).toISOString();
     const { container } = render(<Countdown targetAt={at(-4 * 60)} serverTime={serverTime} />);
 
-    expect(container.querySelector(".countdown")!.textContent).toBe("01:00");
+    expect(container.querySelector(".countdown")!.textContent).toBe("1 мин 00 с");
   });
 
-  it("shows hours without zero-padding them", () => {
+  it("labels every unit, so mm:ss can never be mistaken for hours", () => {
     const { container } = render(
       <Countdown targetAt={at(2 * 3600 + 5 * 60 + 30)} serverTime={NOW.toISOString()} />,
     );
-    expect(container.querySelector(".countdown")!.textContent).toBe("2ч 05:30");
+    expect(container.querySelector(".countdown")!.textContent).toBe("2 ч 05 мин");
   });
 
   it("renders a dash for a paused task rather than a stopped clock", () => {

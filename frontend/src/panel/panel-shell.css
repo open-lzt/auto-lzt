@@ -1,5 +1,7 @@
 .panel-shell {
-  min-height: 100vh;
+  /* svh, not vh: on iOS `100vh` is the TALLEST viewport state, so content hides behind the
+     URL bar until you scroll. svh is the "always fits" one. */
+  min-height: 100svh;
   display: flex;
   flex-direction: column;
   background: var(--lzt-bg);
@@ -48,13 +50,25 @@
   flex: 1;
   display: flex;
   min-height: 0;
+  /* The rule between nav and content is drawn HERE, not as a border on the nav itself. The nav is
+     `align-self: flex-start` (so it can stick), which makes it exactly as tall as its own items —
+     its border-right therefore stopped partway down the page and left a dangling stub on any
+     screen taller than the menu. A background gradient on the full-height row draws the same
+     hairline for the whole column. */
+  background: linear-gradient(
+    to right,
+    transparent 0,
+    transparent 211px,
+    var(--lzt-border) 211px,
+    var(--lzt-border) 212px,
+    transparent 212px
+  );
 }
 
 .panel-shell__nav {
   flex: none;
   width: 212px;
   padding: 16px 12px;
-  border-right: 1px solid var(--lzt-border);
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -131,19 +145,85 @@
   }
 }
 
-/* Narrow screens: the column becomes a scrollable row rather than eating half the width. */
+/* Narrow screens — a REBUILD, not a reflow (responsive.md §2).
+   Stacking the column on top would put seven full-width rows between the operator and the
+   content: they would scroll past the whole menu on every visit. It becomes a horizontal
+   scrollable strip instead, so the nav costs one row of height at any width. */
 @media (max-width: 900px) {
   .panel-shell__body {
     flex-direction: column;
+    /* No column, no column rule. */
+    background: none;
   }
 
-  .panel-shell__nav {
+  /* Doubled class on the SAME element (`.lzt-sidenav.panel-shell__nav`): the kit declares
+     `flex-direction: column` at equal specificity and its stylesheet lands after this one, so a
+     single-class rule silently lost the tie — the strip stayed a column while every other rule
+     in this block applied, which is what made the symptom so confusing. */
+  .panel-shell__nav.lzt-sidenav {
     width: 100%;
     max-height: none;
-    position: static;
+    /* Sticks to the top bar rather than scrolling away — the nav is how you leave a screen. */
+    position: sticky;
+    top: 56px;
+    z-index: 15;
     flex-direction: row;
+    align-items: center;
+    flex-wrap: nowrap;
+    gap: 6px;
+    padding: 10px 12px;
     overflow-x: auto;
+    /* Momentum scrolling without a visible bar eating 8px of a short strip. */
+    scrollbar-width: none;
+    background: var(--lzt-bg);
     border-right: none;
     border-bottom: 1px solid var(--lzt-border);
+  }
+
+  .panel-shell__nav::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Two classes deep on purpose: the kit's own `.lzt-sidenav__item` stretches the item to full
+     width, and a single-class override loses the specificity tie. This is the whole reason the
+     strip still read as a stack of full-width rows after it was told to be a row. */
+  .panel-shell__nav .panel-shell__nav-item {
+    flex: none;
+    width: auto;
+  }
+
+  .panel-shell__topbar-inner {
+    padding: 0 12px;
+  }
+}
+
+/* Phones: icons only. Seven labelled items scroll; seven icons fit one row, so the nav stops
+   being something you drag through and becomes something you aim at. The accessible name moves
+   to aria-label/title on the item (see PanelShell) — an icon alone is not a name. */
+@media (max-width: 640px) {
+  .panel-shell__nav.lzt-sidenav {
+    justify-content: space-between;
+    gap: 2px;
+    overflow-x: visible;
+  }
+
+  .panel-shell__nav-label {
+    /* Not `display: none` on the item itself — the icon must stay, only its caption goes. */
+    display: none;
+  }
+
+  .panel-shell__nav .panel-shell__nav-item {
+    flex: none;
+    width: auto;
+    justify-content: center;
+    min-width: 44px;
+    min-height: 44px;
+    padding: 0;
+    gap: 0;
+  }
+
+  /* A heading over a row of icons explains nothing. */
+  .panel-shell__nav .lzt-sidenav__label {
+    display: none;
   }
 }

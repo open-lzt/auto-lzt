@@ -51,6 +51,10 @@ export interface JsonSchemaUi {
    * enum would render its raw expression instead of «Каждые 30 минут». This is the ONE way a
    * choice gets a label — do not grow a second. */
   options?: { value: string; label: string }[];
+  /** Explicit position in the form; absent means declaration order. Exists because Pydantic
+   * emits INHERITED fields first, so a schedule declared on a shared base would open every
+   * preset with «Как часто» — asking when before who. */
+  order?: number;
 }
 
 export interface JsonSchema {

@@ -17,13 +17,19 @@ function pad(value: number): string {
   return String(value).padStart(2, "0");
 }
 
-/** `2ч 05:30` past an hour, `05:30` under it. Hours are never zero-padded — a leading `0ч` reads
- * as precision the number does not have. */
+/** Two most significant units, each carrying its own suffix: `2 ч 05 мин` · `43 мин 05 с` · `05 с`.
+ *
+ * The previous shape mixed a suffixed unit with a bare clock — `1ч 43:05` on one card, `43:05` on
+ * the next — so the same field could be read as minutes or as hours depending on which card you
+ * looked at. A colon only means mm:ss if you already know the scale; a suffix always says it.
+ * Seconds are dropped past the hour: a countdown that far out does not need them ticking. */
 function format(totalSeconds: number): string {
   const hours = Math.floor(totalSeconds / 3600);
   const minutes = Math.floor((totalSeconds % 3600) / 60);
   const seconds = totalSeconds % 60;
-  return hours > 0 ? `${hours}ч ${pad(minutes)}:${pad(seconds)}` : `${pad(minutes)}:${pad(seconds)}`;
+  if (hours > 0) return `${hours} ч ${pad(minutes)} мин`;
+  if (minutes > 0) return `${minutes} мин ${pad(seconds)} с`;
+  return `${pad(seconds)} с`;
 }
 
 /**

@@ -19,6 +19,7 @@ function task(overrides: Partial<Task> = {}): Task {
     flow_id: overrides.flow_id ?? "f1",
     flow_name: overrides.flow_name ?? "Поднятие аккаунтов",
     schedule_cron: overrides.schedule_cron ?? "*/30 * * * *",
+    schedule_label: overrides.schedule_label ?? "Каждые 30 минут",
     active: overrides.active ?? true,
     health: overrides.health ?? "idle",
     next_fire_at: overrides.next_fire_at ?? "2026-07-20T12:05:00.000Z",

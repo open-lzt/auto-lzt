@@ -56,18 +56,39 @@ class SchedulePreset(StrEnum):
 # these literals far more narrowly (`dict[str, dict[str, str]]`) and rejects them at every use.
 _JsonDict = dict[str, Any]
 
-# A cron expression is not a label. `x-ui.options` carries the human text so the picker shows
-# «Каждые 30 минут» instead of «*/30 * * * *»; it is the ONE way an enum gets a caption here.
+# A cron expression is not a label. ONE mapping, read by two surfaces: the form's picker (through
+# `x-ui.options`) and the task list (through `schedule_label` on the task DTO). Keeping it single
+# is the point — the same five intervals were previously a literal in the client, and the task
+# cards showed raw cron because nothing on that path knew the words.
+SCHEDULE_LABELS: Final[dict[str, str]] = {
+    SchedulePreset.EVERY_15_MIN.value: "Каждые 15 минут",
+    SchedulePreset.EVERY_30_MIN.value: "Каждые 30 минут",
+    SchedulePreset.HOURLY.value: "Каждый час",
+    SchedulePreset.EVERY_4_HOURS.value: "Каждые 4 часа",
+    # The zone is named because this is the only option promising a WALL-CLOCK hour, and the
+    # scheduler runs every expression in UTC. An operator at UTC+3 picking a bare «9:00» would
+    # get 12:00 their time — a three-hour lie in a tool whose whole job is doing things at the
+    # right moment. The intervals above need no zone: four hours is four hours in any of them.
+    SchedulePreset.DAILY_9AM.value: "Раз в день, в 9:00 UTC",
+}
+
+
+def schedule_label(cron: str) -> str:
+    """The human name for a schedule, or the cron itself when it is not one of ours.
+
+    A flow edited on the canvas can carry any cron, and inventing a phrase for an arbitrary
+    expression would be a lie — showing it verbatim is the honest fallback.
+    """
+    return SCHEDULE_LABELS.get(cron, cron)
+
+
 _SCHEDULE_UI: _JsonDict = {
     "x-ui": {
         "widget": "select",
-        "options": [
-            {"value": SchedulePreset.EVERY_15_MIN.value, "label": "Каждые 15 минут"},
-            {"value": SchedulePreset.EVERY_30_MIN.value, "label": "Каждые 30 минут"},
-            {"value": SchedulePreset.HOURLY.value, "label": "Каждый час"},
-            {"value": SchedulePreset.EVERY_4_HOURS.value, "label": "Каждые 4 часа"},
-            {"value": SchedulePreset.DAILY_9AM.value, "label": "Раз в день, в 9:00"},
-        ],
+        # Last in the form. It lives on the base class (so the deploy route can read it typed),
+        # and Pydantic puts base fields first — which would open every preset with «Как часто».
+        "order": 100,
+        "options": [{"value": value, "label": label} for value, label in SCHEDULE_LABELS.items()],
     }
 }
 
@@ -91,6 +112,11 @@ class PresetParams(BaseSchema):
 
 
 class AutobumpParams(PresetParams):
+    # Ordering note (applies to every preset below): Pydantic emits base-class fields FIRST, so
+    # `schedule_cron` — declared on PresetParams so the deploy route can read it typed — would
+    # open every form with «Как часто». That asks WHEN before WHO or WHAT, which is the wrong
+    # order to think in. `x-ui.order` (see _SCHEDULE_UI) pushes it last without moving the field
+    # off the base class and re-duplicating it into all three subclasses.
     accounts: list[UUID] = Field(
         min_length=1,
         title="Аккаунты",
@@ -102,7 +128,7 @@ class AutobumpParams(PresetParams):
         ge=1,
         le=1000,
         title="Лотов за один запуск",
-        description="Ограничение на ОДИН запуск. Общий темп задаёт расписание.",
+        description="Ограничение на один запуск — общий темп задаёт расписание.",
     )
     reprice: bool = Field(default=False, title="Обновлять цену вместе с поднятием")
 
