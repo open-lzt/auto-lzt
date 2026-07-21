@@ -138,7 +138,19 @@ class AutobumpParams(PresetParams):
         title="Лотов за один запуск",
         description="Ограничение на один запуск — общий темп задаёт расписание.",
     )
-    reprice: bool = Field(default=False, title="Обновлять цену вместе с поднятием")
+    # No `reprice` field, deliberately. It shipped as a checkbox that deployed a task failing on
+    # EVERY fire: `market.reprice` needs `price`, or `decay_pct` together with `current_price`, and
+    # the preset wired neither — `AutobumpSettings.reprice_price` was never assigned, so the only
+    # branch that could have supplied one was unreachable.
+    #
+    # It cannot simply be wired up either: nothing in this graph knows what a lot currently costs.
+    # `get_my_lots` yields `item_ids` and `count`, `for_each_lot` yields `count` — no price
+    # anywhere, so `decay_pct` (lower each lot by a percentage, which is what the label implies)
+    # has no input to work from. The one satisfiable shape is a single fixed price applied to
+    # every lot, which would flatten a seller's whole price list to one number on the first fire.
+    #
+    # `market.reprice` stays in the catalog: on the canvas an author can wire a price from a source
+    # that has one. The preset offers the feature again when the graph can carry per-lot prices.
 
 
 class ThreadBumpParams(PresetParams):
@@ -228,7 +240,9 @@ def _build_autobump(name: str, params: AutobumpParams) -> FlowSpec:
             accounts=tuple(params.accounts),
             schedule_cron=params.schedule_cron.value,
             max_bumps=params.max_bumps,
-            reprice=params.reprice,
+            # Always False: the form no longer offers it (see AutobumpParams) because the graph
+            # has no per-lot price to reprice against.
+            reprice=False,
         ),
     )
 

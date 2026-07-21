@@ -41,12 +41,14 @@ from app.domain.flow_engine.model import (
 from app.domain.market.categories import SearchableCategory
 from app.domain.market.dtos import (
     BumpResult,
+    FastBuyResult,
     LotsPage,
     RelistResult,
     RepriceResult,
     SearchHit,
     SearchResult,
 )
+from app.domain.market.errors import LotUnavailable
 
 TENANT = TenantId(uuid4())
 
@@ -333,8 +335,29 @@ class FakeMarket:
         self.reprice_pinned_calls: list[tuple[AccountId, int, int, Currency]] = []
         self.relist_calls: list[tuple[float, int, Currency, ItemOrigin]] = []
         self.pages: dict[tuple[AccountId, int], LotsPage] = {}
+        # Recorded SEPARATELY, and each keeps the identity it was called with. The money call is
+        # the one place "which account paid" is the whole question, so a fake that flattened both
+        # paths into one list could not tell a pinned purchase from a pooled one.
+        self.fast_buy_pinned_calls: list[tuple[AccountId, int, bool]] = []
+        self.fast_buy_pooled_calls: list[tuple[TenantId, int, bool]] = []
+        self.fast_buy_price: int = 100
+        self.fast_buy_unavailable: str | None = None
         self.search_calls: list[tuple[SearchableCategory, float]] = []
         self.search_hits: tuple[SearchHit, ...] = ()
+
+    async def fast_buy(self, item_id: int, account: Account, *, dry_run: bool) -> FastBuyResult:
+        if self.fast_buy_unavailable is not None:
+            raise LotUnavailable(item_id, self.fast_buy_unavailable)
+        self.fast_buy_pinned_calls.append((account.id, item_id, dry_run))
+        return FastBuyResult(item_id=item_id, price=self.fast_buy_price, purchased=not dry_run)
+
+    async def fast_buy_via_pool(
+        self, tenant_id: TenantId, item_id: int, *, dry_run: bool
+    ) -> FastBuyResult:
+        if self.fast_buy_unavailable is not None:
+            raise LotUnavailable(item_id, self.fast_buy_unavailable)
+        self.fast_buy_pooled_calls.append((tenant_id, item_id, dry_run))
+        return FastBuyResult(item_id=item_id, price=self.fast_buy_price, purchased=not dry_run)
 
     async def bump_via_pool(self, tenant_id: TenantId, item_id: int) -> BumpResult:
         self.bump_calls.append(item_id)
