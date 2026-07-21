@@ -17,7 +17,7 @@ from pylzt.token_pool.base import Token, TokenId
 from pylzt.token_pool.round_robin import RoundRobinTokenPool
 from pylzt.transport.base import BaseTransport, Request, Response
 
-from app.domain.market.adapter import _PURCHASE_TIMEOUT_S, MarketAdapter
+from app.domain.market.adapter import PURCHASE_TIMEOUT_S, MarketAdapter
 
 pytestmark = pytest.mark.asyncio
 
@@ -48,7 +48,7 @@ async def test_a_pooled_purchase_carries_the_long_timeout() -> None:
     assert transport.requests, "the purchase never reached the transport"
     options = transport.requests[-1].options
     assert options is not None, "the pooled purchase went out with no options at all"
-    assert options.timeout == _PURCHASE_TIMEOUT_S
+    assert options.timeout == PURCHASE_TIMEOUT_S
 
 
 async def test_a_dry_run_never_reaches_the_wire() -> None:

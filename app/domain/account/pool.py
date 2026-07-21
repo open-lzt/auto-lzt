@@ -114,16 +114,20 @@ class TokenPool:
             if account.status is AccountStatus.EXCLUDED:
                 pool.quarantine(token_ids[account.id])
 
+        # No purchase timeout here. This Client used to be born with the 120s `fast-buy` needs,
+        # because a shared Client could not be widened for one call — which handed every pooled
+        # read the same 120s before it would give up. `MarketAdapter.fast_buy` now carries that
+        # timeout on the request itself, so the slow call gets it and nothing else does.
+        #
         # Testnet override must reach the POOLED worker path too — otherwise a run scheduled with
         # LZT_FLOW_MARKET_BASE_URL set still hits real prod-api.lzt.market. Both market and forum
         # hosts are redirected so forum-scoped methods don't leak past the mock either.
-        if self._market_base_url is not None:
-            config = ClientConfig(
-                base_url=self._market_base_url, forum_base_url=self._market_base_url
-            )
-            client = Client(token_pool=pool, config=config)
-        else:
-            client = Client(token_pool=pool)
+        config = (
+            ClientConfig(base_url=self._market_base_url, forum_base_url=self._market_base_url)
+            if self._market_base_url is not None
+            else None
+        )
+        client = Client(token_pool=pool, config=config)
         log.info(
             "token_pool_built",
             tenant_id=str(tenant_id),

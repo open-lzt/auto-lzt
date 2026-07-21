@@ -13,12 +13,20 @@ from typing import Any
 
 import httpx
 import pytest
+import respx
 from asgi_lifespan import LifespanManager
 
 import app.db.models  # noqa: F401 — registers ORM models on Base.metadata
 from app.core.config import get_settings
 from app.db.base import Base, make_engine
 from app.main import create_app
+from tests.fixtures.mock_lzt_server import MARKET_HOST
+
+
+@pytest.fixture(autouse=True)
+def _market_double(mock_lzt: object) -> None:
+    """Registering an account now verifies its token against the marketplace, so every test here
+    needs the double — without it the call leaves the process and comes back 401."""
 
 
 class _RecordingPool:
@@ -173,3 +181,27 @@ async def test_duplicate_account_token_rejected(
             different = await client.post("/accounts/create", json={"token": "other-token"})
             assert different.status_code == 201
     get_settings.cache_clear()
+
+
+async def test_a_token_the_marketplace_rejects_is_never_stored(
+    sqlite_db: str, monkeypatch: pytest.MonkeyPatch, mock_lzt: respx.MockRouter
+) -> None:
+    """A dead token must not reach the rotation pool.
+
+    Stored unverified it looks ACTIVE, gets picked by an autobuy run, and kills that run partway
+    through on TokenInvalid — which is exactly what happened on a real stand. The failure belongs
+    at registration, where someone is watching.
+    """
+    mock_lzt.route(host=MARKET_HOST).mock(return_value=httpx.Response(401, json={"error": "bad"}))
+    monkeypatch.setenv("LZT_FLOW_MASTER_KEY", "dGVzdC1tYXN0ZXIta2V5LTEyMzQ1Njc4OTAxMg==")
+    get_settings.cache_clear()
+    app = create_app()
+    async with LifespanManager(app):
+        app.state.arq_pool = _RecordingPool()
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            refused = await client.post("/accounts/create", json={"token": "dead-token"})
+            assert refused.status_code >= 400, "a rejected token must not be stored"
+
+            listed = await client.get("/accounts/list")
+            assert listed.json() == [], "nothing may be left behind by a refused registration"

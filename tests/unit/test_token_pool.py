@@ -184,10 +184,16 @@ async def test_market_base_url_reaches_pooled_client_config(
     assert config.forum_base_url == testnet
 
 
-async def test_no_market_base_url_leaves_pooled_client_default(
+async def test_the_pooled_client_does_not_carry_a_purchase_ceiling(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Without an override the pooled Client is built with no config (real prod hosts)."""
+    """Without a testnet override the pooled Client keeps the real prod hosts and no config at all.
+
+    It used to be born with the 120s that ``fast-buy`` needs, because a shared Client could not be
+    widened for one call. That made every pooled read wait 120s before giving up for the sake of one
+    slow POST. The purchase now carries its own timeout on the request, so this asserts the read
+    side got its default back — see ``test_purchase_timeout.py`` for the other half.
+    """
     captured: list[dict[str, object]] = []
     monkeypatch.setattr(pool_mod, "RoundRobinTokenPool", lambda tokens, **kw: _FakePool(tokens))
     monkeypatch.setattr(pool_mod, "Client", lambda **kwargs: captured.append(kwargs) or MagicMock())
@@ -202,4 +208,6 @@ async def test_no_market_base_url_leaves_pooled_client_default(
     pool = TokenPool(_fake_sessionmaker, cipher)  # type: ignore[arg-type]
     await pool.acquire(tenant_id)
 
-    assert captured and "config" not in captured[-1]
+    assert captured[-1].get("config") is None, (
+        "a pooled Client built with a config against prod hosts is the purchase ceiling coming back"
+    )

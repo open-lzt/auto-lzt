@@ -57,6 +57,13 @@ class AccountService:
         )
 
     async def add_account(self, tenant_id: TenantId, token: str) -> Account:
+        # Ask the marketplace before storing it ACTIVE. A token that is never checked joins the
+        # rotation pool anyway and fails at the first call that matters — which is how a
+        # throwaway token silently became the account an autobuy run picked, then died on
+        # TokenInvalid mid-run. Refusing here costs one request and moves the failure to the
+        # moment a human is watching.
+        await MarketAdapter(token=token, base_url=self._market_base_url).verify_token()
+
         account = Account(
             id=AccountId(uuid4()),
             tenant_id=tenant_id,
