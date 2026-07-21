@@ -3,6 +3,44 @@
 All notable changes to lzt-flow. Format loosely follows [Keep a Changelog](https://keepachangelog.com);
 this project uses a single-tenant, wave-based history — see `ARCHITECTURE.md` for the design record.
 
+## [0.3.0] — 2026-07-21
+
+### Added
+- **Presets declare their own fields.** A preset is a Pydantic model on the server; `GET
+  /panel/presets/list` returns its JSON Schema and the panel renders the form from it. Adding a
+  preset is a backend change with no frontend edit, and the same model validates the deploy body —
+  the form and the validation cannot drift apart because they are one declaration.
+- **Accounts show who they are.** Nickname, balance and currency are fetched from the marketplace
+  and stored; `POST /accounts/{id}/refresh` re-reads them. An account list is no longer a list of
+  opaque ids.
+- **A failed run says why.** The failure reason is recorded on the run and on the step that raised
+  it, and the history panel shows it. Four separate paths previously lost it — a forked branch's
+  cause was swallowed by its exception group, and a purchase that timed out reported plain failure.
+- **A flow registry** — browse official flows, install one, and export any flow to a file.
+- **The panel works on a phone.** Every tab is reachable, the editor fits, and the type scale has a
+  14px floor.
+
+### Changed
+- **A registered token is verified before it is stored.** Registration calls the marketplace; a
+  token it does not accept is refused at the door instead of failing on first use.
+- **A timed-out purchase is `PurchaseOutcomeUnknown`, not a failure.** `fast-buy` is a
+  non-idempotent POST taking 28-31s, so a timeout says nothing about whether the marketplace
+  completed it. It now says exactly that, and warns against a blind retry.
+- **The purchase timeout is carried per call.** It applies on both the pinned and the pooled path
+  without widening the shared client, so a purchase gets 120s and ordinary reads keep their default.
+  Requires pylzt >= 0.2.0.
+- **A currency the marketplace could not have sent is refused** rather than stored — it overflowed
+  its column on Postgres while passing silently on SQLite.
+
+### Fixed
+- Branching flows lost their edges when saved: an output port was looked up by bare node type
+  instead of its catalog key, so `true`/`false` and loop-body edges vanished on reload.
+- The thread-bump preset could not be filled in and so could not be deployed.
+- The autobump preset offered a reprice checkbox that could not work.
+
+### Migration
+- `0011_account_profile_and_run_error` — account profile columns and the run/step failure reason.
+
 ## [0.2.0] — 2026-07-18
 
 ### Added
