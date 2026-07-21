@@ -32,7 +32,9 @@ dependencies = [
     # uses its stdlib sqlite3 driver instead, no extra dependency needed there).
     "psycopg[binary]>=3.1",
     # Marketplace transport SDK + event engine — git sources, see [tool.uv.sources] below.
-    "pylzt",
+    # >=0.2.0 for per-call RequestOptions — the pooled purchase path needs a timeout it can set
+    # on the request itself, since it does not own the shared Client whose config it would edit.
+    "pylzt>=0.2.0",
     "lzt-eventus[engine]",
 ]
 

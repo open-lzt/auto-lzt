@@ -24,6 +24,7 @@ from uuid import UUID
 import structlog
 from pydantic import ValidationError
 from pylzt import AuthFailed, Client, ClientConfig, Forbidden, RateLimited, TransportError
+from pylzt.transport.base import RequestOptions
 from pylzt.types import Currency, ItemOrigin, OrderBy
 
 from app.domain.account.model import AccountId
@@ -72,6 +73,10 @@ def _plausible_currency(raw: str, *, user_id: int) -> str:
 # was already ours and came back Forbidden, and the run reported failure for money that had moved.
 # A timeout shorter than the operation is worse than no timeout on a non-idempotent POST.
 _PURCHASE_TIMEOUT_S = 120.0
+# Carried on the request, not on the client's config: the pooled path is handed a shared Client it
+# does not own, so there is no config of its own to widen — and editing the shared one would hand
+# every other caller a 120s ceiling too. Both paths get the same purchase timeout this way.
+_PURCHASE_OPTIONS: Final = RequestOptions(timeout=_PURCHASE_TIMEOUT_S)
 
 # Slug -> the facade method that searches it. Spelled out because the slug is NOT the method name
 # (`epicgames` -> `category_epic_games`, `tiktok` -> `category_tik_tok`), so a built name would be
@@ -203,8 +208,9 @@ class MarketAdapter:
             return FastBuyResult(item_id=item_id, price=0, purchased=False)
         try:
             response = await self._call(
-                lambda client: client.market.purchasing_fast_buy(item_id=item_id),
-                timeout_s=_PURCHASE_TIMEOUT_S,
+                lambda client: client.market.purchasing_fast_buy(
+                    item_id=item_id, request_options=_PURCHASE_OPTIONS
+                ),
             )
         except Forbidden as exc:
             # 403 here is the marketplace declining THIS lot, not rejecting us: already queued by
@@ -274,16 +280,13 @@ class MarketAdapter:
             has_next_page=response.hasNextPage,
         )
 
-    async def _call[T](
-        self, op: Callable[[Client], Awaitable[T]], *, timeout_s: float | None = None
-    ) -> T:
+    async def _call[T](self, op: Callable[[Client], Awaitable[T]]) -> T:
         if self._token is not None:
-            overrides: dict[str, object] = {}
-            if self._base_url is not None:
-                overrides |= {"base_url": self._base_url, "forum_base_url": self._base_url}
-            if timeout_s is not None:
-                overrides["request_timeout"] = timeout_s
-            config = ClientConfig(**overrides) if overrides else None
+            config = (
+                ClientConfig(base_url=self._base_url, forum_base_url=self._base_url)
+                if self._base_url is not None
+                else None
+            )
             async with Client([self._token], config=config) as client:
                 return await self._call_with(client, op)
         assert self._client is not None  # guaranteed by __init__
