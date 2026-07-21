@@ -311,7 +311,7 @@ export function AuthoringMode({ compositeId, onSaved, onCancel }: AuthoringModeP
           setNodes={setNodes}
           setEdges={setEdges}
           variant="template"
-          emptyHint="Соберите внутренний граф блока из действий слева, затем объявите его входы и выходы."
+          emptyHint="Соберите внутренний граф блока из действий в списке, затем объявите его входы и выходы."
         />
       </div>
     </div>

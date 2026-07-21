@@ -127,7 +127,9 @@ export function TaskCard({ task, serverTime, onRunNow, busy = false, index = 0 }
         disabled={busy || paused}
         onClick={() => onRunNow(task.id)}
       >
-        {busy ? "Запускаю…" : "Поднять сейчас"}
+        {/* Deliberately generic: this card renders EVERY task, and «поднять» named only one of
+            them — the button read «Поднять сейчас» on an Автобай, which buys. */}
+        {busy ? "Запускаю…" : "Запустить сейчас"}
       </Button>
     </Card>
   );

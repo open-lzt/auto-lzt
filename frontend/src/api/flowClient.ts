@@ -472,6 +472,14 @@ export interface RunSummary {
   started_at: string;
   finished_at: string | null;
   duration_ms: number | null;
+  /** Why the run stopped, and at which node — both null unless `status` is "failed".
+   *
+   * The server has sent these since runs learned to record their cause; this interface did not
+   * declare them, so the panel showed a red «Ошибка» badge and dropped the reason it had already
+   * been given. Nothing failed loudly — the field simply did not exist as far as the client was
+   * concerned, which is the failure mode a widened DTO always has. */
+  error: string | null;
+  failed_node_id: string | null;
 }
 
 export function fetchRunHistory(flowId: string): Promise<RunSummary[]> {

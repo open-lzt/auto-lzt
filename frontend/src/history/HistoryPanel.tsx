@@ -130,6 +130,19 @@ export function HistoryPanel({ flowId }: HistoryPanelProps) {
                 {formatTimestamp(selected.started_at)} · {formatDuration(selected.duration_ms)}
               </span>
             </div>
+            {/* The reason sits ABOVE the steps, not inside them: the steps say what ran, this says
+                why the run stopped. A failed run whose cause is only a red badge is the exact
+                complaint this panel exists to answer. `failed_node_id` is the graph's own node id
+                — the same string the canvas labels the block with — so it points at a place you
+                can actually go and look. */}
+            {selected.error ? (
+              <div className="history__failure" role="alert">
+                <span className="history__failure-label">
+                  Упало{selected.failed_node_id ? ` на шаге «${selected.failed_node_id}»` : ""}
+                </span>
+                <code className="history__failure-cause">{selected.error}</code>
+              </div>
+            ) : null}
             <RunTraceView
               key={`${selected.run_id}:${selected.status}`}
               runId={selected.run_id}
@@ -139,7 +152,7 @@ export function HistoryPanel({ flowId }: HistoryPanelProps) {
         ) : (
           <div className="empty-prompt">
             <p className="empty-prompt__title">Запуск не выбран</p>
-            <p className="empty-prompt__hint">Выберите запуск слева, чтобы увидеть его шаги.</p>
+            <p className="empty-prompt__hint">Выберите запуск в списке, чтобы увидеть его шаги.</p>
           </div>
         )}
       </div>

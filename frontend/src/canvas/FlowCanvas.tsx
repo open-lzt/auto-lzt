@@ -74,7 +74,9 @@ export function FlowCanvas({
   setNodes,
   setEdges,
   variant = "flow",
-  emptyHint = "Соберите флоу: начните с триггера слева, затем добавьте действия.",
+  // No «слева»: the palette is to the left only on a wide screen — below 900px it stacks ABOVE the
+  // canvas, and the hint then pointed at nothing. Naming the list is true in both layouts.
+  emptyHint = "Соберите флоу: начните с триггера в списке блоков, затем добавьте действия.",
   readOnly = false,
 }: FlowCanvasProps) {
   const theme = useDocumentTheme();

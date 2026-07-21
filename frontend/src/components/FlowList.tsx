@@ -198,7 +198,7 @@ export function FlowList({
           <p className="empty-prompt__title">Здесь пока пусто</p>
           {canAuthor ? (
             <>
-              <p className="empty-prompt__hint">Соберите первый флоу из блоков слева.</p>
+              <p className="empty-prompt__hint">Соберите первый флоу из блоков в списке.</p>
               <button type="button" className="empty-prompt__action" onClick={onCreateNew}>
                 Создать флоу
               </button>

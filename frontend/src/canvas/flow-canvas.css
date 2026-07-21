@@ -10,6 +10,41 @@
   min-width: 0;
 }
 
+/* The editor's own panes (palette · stage · inspector) stack on a phone, same reason as the
+ * workspace above them in app.css.
+ *
+ * The stage needs an EXPLICIT height here. Stacked, it is a flex item in a column, so its height
+ * resolves to its content — and React Flow paints into an absolutely-positioned layer that
+ * contributes no content height. The stage collapsed to 0 and the graph never rendered. React Flow
+ * says exactly this in the console ("The parent container needs a width and a height"); on screen
+ * it was a silent blank strip. */
+@media (max-width: 900px) {
+  .flow-canvas {
+    flex-direction: column;
+  }
+
+  .flow-canvas .sidebar {
+    width: auto !important;
+    max-height: 30vh;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .flow-canvas__stage {
+    height: 60vh;
+    flex: none;
+  }
+
+  /* The inspector needs the same release. Stacked but still 260px wide, it left a 130px band of
+     page background beside it that read as a rendering fault. Its border moves to the top edge:
+     a left border on a full-width row is a line pointing at nothing. */
+  .flow-canvas .inspector {
+    width: auto !important;
+    border-left: none;
+    border-top: 1px solid var(--border);
+  }
+}
+
 .flow-canvas__loading {
   position: absolute;
   inset: 0;

@@ -28,6 +28,15 @@
   outline: none;
 }
 
+/* Below 900px the panes stack (app.css, flow-canvas.css), so there is no vertical seam left to
+   drag — the handle became a 6px strip hanging off the left edge, invisible and unusable by touch.
+   Removed rather than restyled: a column-resize affordance has nothing to mean in a column. */
+@media (max-width: 900px) {
+  .pane-resizer {
+    display: none;
+  }
+}
+
 /* While dragging, the cursor must not turn into a text caret over the panes it sweeps across. */
 body.is-resizing {
   cursor: col-resize;

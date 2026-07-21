@@ -7,6 +7,24 @@
   background: var(--lzt-bg);
 }
 
+/* The editor tabs are a FIXED-HEIGHT surface; the list tabs are not.
+ *
+ * `min-height` above lets the shell grow with its content, which is right for Задачи and Реестр —
+ * a long list should scroll the page. It is wrong for the editor: its panes each own an internal
+ * `overflow-y: auto`, and an unbounded parent means they never reach it. The node palette grew to
+ * 1397px inside a 900px viewport, so it ran off the bottom of the screen mid-item and took the
+ * whole page scrolling with it — the editor's height cap used to come from `.app { height: 100% }`,
+ * which stopped being an ancestor when the chrome moved into PanelShell.
+ *
+ * Scoped with `:has()` so the list tabs keep growing, and to wide screens only — below 900px the
+ * panes stack and the page is SUPPOSED to scroll past one screen. */
+@media (min-width: 901px) {
+  .panel-shell:has(.app__workspace) {
+    height: 100svh;
+    min-height: 0;
+  }
+}
+
 .panel-shell__topbar {
   position: sticky;
   top: 0;

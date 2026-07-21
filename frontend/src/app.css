@@ -138,6 +138,10 @@
   flex-direction: column;
   flex: 1;
   min-width: 0;
+  /* Pairs with min-width above. A flex item refuses to shrink below its content unless told, so
+     without this the column passed its children's full height straight up the chain and defeated
+     the shell's height cap — the panes' own `overflow-y: auto` never engaged. */
+  min-height: 0;
 }
 
 .app__flow-bar {
@@ -146,6 +150,54 @@
   gap: 12px;
   padding: 12px 20px;
   border-bottom: 1px solid var(--lzt-border);
+}
+
+/* Below the editor's floor the two-pane workspace STACKS.
+ *
+ * It used to keep the desktop row on a phone: a 200px list plus a pane asking for the full
+ * container width, so the main pane started at x=200 in a 390px viewport and ran to 431. The
+ * `min-width: 1024px; overflow-x: auto` escape hatch above does not apply here — `.app` is not an
+ * ancestor of these tabs under PanelShell — and `body` carries `overflow-x: clip`, so the overflow
+ * could not even be scrolled to. The right quarter of the flows and composites tabs was simply
+ * unreachable on a phone, silently.
+ *
+ * `!important` is load-bearing: the pane width is an INLINE style owned by useResizablePane, and a
+ * drag-to-resize handle is meaningless on a touch screen anyway. */
+@media (max-width: 900px) {
+  .app__workspace {
+    flex-direction: column;
+  }
+
+  .app__workspace > .flow-list,
+  .app__workspace > .composite-list {
+    width: auto !important;
+    max-height: 34vh;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
+
+  /* The flow bar wraps instead of running off the edge.
+   *
+   * It is a nowrap row holding a 200px-min name field, a status line and «Опубликовать». At 390px
+   * that pushed the publish button 199px past the right edge — not merely clipped but unreachable,
+   * since the panes do not scroll horizontally. The editor's primary action was simply gone on a
+   * phone. The name field also gives up its 200px floor here; a fixed minimum is what forced the
+   * overflow in the first place. */
+  .app__flow-bar {
+    flex-wrap: wrap;
+    padding: 12px 16px;
+  }
+
+  .app__flow-name,
+  .app__section-title {
+    min-width: 0;
+    flex: 1 1 100%;
+  }
+
+  .app__flow-bar-right {
+    margin-left: 0;
+    flex-wrap: wrap;
+  }
 }
 
 .app__flow-bar-right {
