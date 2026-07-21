@@ -446,15 +446,23 @@ interface FlowSummaryWire {
   name: string;
 }
 
-/** Whether this stand actually enforces a key.
+/** What this stand's auth actually does — which is THREE states, not two.
  *
- * `require_api_key` is a NO-OP when the server has no key configured, so a prompt shown
- * regardless would imply a boundary that does not exist — and ANY string typed into it would
- * appear to work, because the validating read succeeds for everyone. The gate has to ask before
- * it can tell a real lock from a painted one.
+ * The gate has to ask rather than assume: a prompt shown against a server that accepts everyone is
+ * a painted lock, since any string typed into it "works". But `require_api_key` fails CLOSED, so
+ * `required: false` alone is ambiguous and this used to be read as "open":
+ *
+ *   required=true              → a key is demanded
+ *   required=false, open=true  → the dev hatch is on and anyone is admitted
+ *   required=false, open=false → no key configured and no hatch: every protected call 401s
  */
-export function authRequired(): Promise<{ required: boolean }> {
-  return request<{ required: boolean }>("/auth/required");
+export interface AuthPosture {
+  required: boolean;
+  open: boolean;
+}
+
+export function authRequired(): Promise<AuthPosture> {
+  return request<AuthPosture>("/auth/required");
 }
 
 export async function fetchFlows(): Promise<FlowSummary[]> {

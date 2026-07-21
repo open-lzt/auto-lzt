@@ -157,6 +157,15 @@ async def test_the_termination_rule_is_consulted_only_when_idle() -> None:
     assert checks == 1
 
 
+# Windows' default timer granularity is ~15.6ms, and `asyncio.sleep` may return a hair EARLY
+# against the event loop's own clock. Two 40ms beats measured 78ms and failed a `>= 80ms` assertion
+# on roughly one run in three — a test that red-lights a third of the time teaches people to ignore
+# red, which costs more than the test was ever worth. The property under test is "the configured
+# interval drives the timing", not "the clock is exact": a wrong interval (ignored config, a single
+# beat, a busy loop) is off by a factor, never by two milliseconds.
+_TIMER_SLACK = 0.9
+
+
 @pytest.mark.parametrize("heartbeat_s", [_BEAT_S, _BEAT_S * 2])
 async def test_the_heartbeat_interval_is_honoured(heartbeat_s: float) -> None:
     """The interval is configuration (it must sit under the fronting proxy's idle timeout), so it
@@ -167,4 +176,4 @@ async def test_the_heartbeat_interval_is_honoured(heartbeat_s: float) -> None:
     await _take_after_open(frames, 2)
     elapsed = asyncio.get_running_loop().time() - start
 
-    assert elapsed >= heartbeat_s * 2
+    assert elapsed >= heartbeat_s * 2 * _TIMER_SLACK

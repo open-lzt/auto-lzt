@@ -53,11 +53,28 @@ def _as_int(value: str | int | float | bool | None, port: str) -> int:
     return int(value)
 
 
+_TRUE_WORDS = frozenset({"1", "true", "yes", "on", "да"})
+_FALSE_WORDS = frozenset({"0", "false", "no", "off", "нет"})
+
+
 def _as_bool(value: str | int | float | bool | None, port: str) -> bool:
+    """Strict on this port, because the port it guards is ``dry_run``.
+
+    This used to be `value.lower() in {"1","true","yes","on"}` with no else — so «да», "y", "1.0",
+    "enabled" and "" all read as False, and False here means REAL MONEY LEAVES. The one coercion in
+    this file where ambiguity is expensive was the one resolving ambiguity toward spending, while
+    `_as_int` right above it raises on anything it cannot read. An unrecognised value on a money
+    switch must stop the run, not buy.
+    """
     if isinstance(value, bool):
         return value
     if isinstance(value, str):
-        return value.strip().lower() in {"1", "true", "yes", "on"}
+        word = value.strip().lower()
+        if word in _TRUE_WORDS:
+            return True
+        if word in _FALSE_WORDS:
+            return False
+        raise ValueError(f"{port} must be a bool, got {value!r}")
     if isinstance(value, int | float):
         return bool(value)
     raise ValueError(f"{port} must be a bool, got {value!r}")

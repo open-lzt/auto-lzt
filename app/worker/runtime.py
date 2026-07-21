@@ -378,6 +378,31 @@ async def execute_run(
         raise
 
 
+def _leaf_exceptions(exc: BaseException) -> list[BaseException]:
+    """Flatten a possibly-nested ExceptionGroup down to the exceptions actually raised."""
+    if isinstance(exc, BaseExceptionGroup):
+        return [leaf for sub in exc.exceptions for leaf in _leaf_exceptions(sub)]
+    return [exc]
+
+
+def _first_branch_cause(group: BaseExceptionGroup[BaseException]) -> BaseException | None:
+    """The interpreter-level cause inside a fork's ExceptionGroup, or None if there isn't one.
+
+    A real failure outranks a deliberate stop: if one branch asked to abort while another actually
+    broke, the run broke. Returning None means no branch raised something this interpreter models —
+    i.e. a genuine bug — and the caller re-raises the group untouched rather than recording a
+    programming error as a business failure.
+    """
+    leaves = _leaf_exceptions(group)
+    for leaf in leaves:
+        if isinstance(leaf, RunFailed):
+            return leaf
+    for leaf in leaves:
+        if isinstance(leaf, _AbortRun):
+            return leaf
+    return None
+
+
 async def _publish_task_event(
     event_transport: EventTransport | None, run: Run, reason: TaskEventReason
 ) -> None:
@@ -704,9 +729,26 @@ async def _run_fork(
         branch_results[i] = result
         branch_stopped_at[i] = stopped_at
 
-    async with asyncio.TaskGroup() as tg:
-        for i, (label, target) in enumerate(branches):
-            tg.create_task(_run_one(i, label, target))
+    try:
+        async with asyncio.TaskGroup() as tg:
+            for i, (label, target) in enumerate(branches):
+                tg.create_task(_run_one(i, label, target))
+    except BaseExceptionGroup as group:
+        # ONE failure type leaves this function, whatever the TaskGroup wrapped it in.
+        #
+        # TaskGroup collects what its tasks raise into an ExceptionGroup, so a branch raising
+        # RunFailed left the fork as ExceptionGroup — which `execute_run`'s `except RunFailed`
+        # does not match, and `contextlib.suppress(_AbortRun)` does not either. The run was then
+        # never marked terminal: verified as `status=running, error=None, current_node_id='fork1'`
+        # while the branch's real cause propagated past every handler. The SSE stream closes only
+        # on COMPLETED or FAILED, so that run's connection was held open forever too.
+        #
+        # Unwrapped HERE rather than in execute_run so the fork's contract matches the linear
+        # path's, and a second caller cannot reintroduce the same gap.
+        cause = _first_branch_cause(group)
+        if cause is None:
+            raise  # a genuine bug in a branch — do not disguise it as a business failure
+        raise cause from group
 
     join_ids = {j for j in branch_stopped_at if j is not None}
     if len(join_ids) != 1:

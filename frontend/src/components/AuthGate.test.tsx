@@ -3,10 +3,14 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { AuthGate } from "./AuthGate";
 import * as flowClient from "../api/flowClient";
 
-/** Every test states whether the SERVER enforces a key, because that is now the first thing the
- * gate asks and it decides everything after it. */
-function serverRequiresKey(required: boolean) {
-  return vi.spyOn(flowClient, "authRequired").mockResolvedValue({ required });
+/** Every test states the SERVER's posture, because that is the first thing the gate asks and it
+ * decides everything after it.
+ *
+ * Both flags, never one: `required: false` alone is ambiguous — it is the answer both for "the dev
+ * hatch is on, anyone is admitted" and for "no key is configured and the server 401s everything".
+ * Reading it as the first when it meant the second is the bug these tests now pin. */
+function serverPosture(required: boolean, open: boolean) {
+  return vi.spyOn(flowClient, "authRequired").mockResolvedValue({ required, open });
 }
 
 describe("AuthGate", () => {
@@ -15,10 +19,27 @@ describe("AuthGate", () => {
     vi.restoreAllMocks();
   });
 
-  it("renders children with a warning when the server enforces no key", async () => {
-    // The defect this guards: a stand with no key configured accepted ANY string and looked
-    // protected. `require_api_key` is a no-op there, so the prompt was a painted lock.
-    serverRequiresKey(false);
+  it("says the server refuses everything when there is no key AND no hatch", async () => {
+    // The defect this guards: this posture — the stock self-host default — was read as "open".
+    // The panel rendered a full dashboard whose every call 401s, under a banner announcing it was
+    // open to anyone: simultaneously unusable and lying about its own exposure.
+    serverPosture(false, false);
+
+    render(
+      <AuthGate>
+        <p>protected content</p>
+      </AuthGate>,
+    );
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(/отклоняет все запросы/i);
+    expect(screen.queryByText("protected content")).not.toBeInTheDocument();
+    expect(screen.queryByPlaceholderText("API-ключ")).not.toBeInTheDocument();
+  });
+
+  it("renders children with a warning when the server admits everyone", async () => {
+    // The hatch is on: `require_api_key` really is a no-op, so a prompt would be a painted lock —
+    // any string typed into it would "work".
+    serverPosture(false, true);
     const fetchFlowsMock = vi.spyOn(flowClient, "fetchFlows");
 
     render(
@@ -34,7 +55,7 @@ describe("AuthGate", () => {
   });
 
   it("renders children immediately when a key is already stored", async () => {
-    serverRequiresKey(true);
+    serverPosture(true, false);
     vi.spyOn(flowClient, "getApiKey").mockReturnValue("existing-key");
     render(
       <AuthGate>
@@ -45,7 +66,7 @@ describe("AuthGate", () => {
   });
 
   it("prompts for a key when the server enforces one and none is stored", async () => {
-    serverRequiresKey(true);
+    serverPosture(true, false);
     vi.spyOn(flowClient, "getApiKey").mockReturnValue(null);
     render(
       <AuthGate>
@@ -70,7 +91,7 @@ describe("AuthGate", () => {
   });
 
   it("validates the entered key and renders children on success", async () => {
-    serverRequiresKey(true);
+    serverPosture(true, false);
     vi.spyOn(flowClient, "getApiKey").mockReturnValue(null);
     const setApiKeyMock = vi.spyOn(flowClient, "setApiKey").mockImplementation(() => {});
     vi.spyOn(flowClient, "fetchFlows").mockResolvedValue([]);
@@ -91,7 +112,7 @@ describe("AuthGate", () => {
   });
 
   it("shows an error and clears the key on validation failure, letting the user retry", async () => {
-    serverRequiresKey(true);
+    serverPosture(true, false);
     vi.spyOn(flowClient, "getApiKey").mockReturnValue(null);
     const setApiKeyMock = vi.spyOn(flowClient, "setApiKey").mockImplementation(() => {});
     vi.spyOn(flowClient, "fetchFlows").mockRejectedValue(new Error("неверный ключ"));
@@ -113,7 +134,7 @@ describe("AuthGate", () => {
   });
 
   it("rejects an empty submission without calling the API", async () => {
-    serverRequiresKey(true);
+    serverPosture(true, false);
     vi.spyOn(flowClient, "getApiKey").mockReturnValue(null);
     const fetchFlowsMock = vi.spyOn(flowClient, "fetchFlows");
 
