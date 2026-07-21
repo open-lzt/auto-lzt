@@ -8,6 +8,13 @@ on:
   pull_request:
   workflow_dispatch:
 
+# Read-only by default. A fork's pull_request token is read-only regardless, but a push to
+# `feat/**` runs repository code — including `pnpm install`, which executes dependency build
+# scripts — and would otherwise inherit whatever the repo default is. If that default is the
+# legacy read-write token, that build script holds a token that can push to main.
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -53,6 +60,11 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Typecheck
         run: pnpm exec tsc --noEmit
+      # The gate this job was missing entirely. Typecheck and build both pass with a broken login
+      # gate or an SSE stream that never reconnects — types stay correct while behaviour rots. 24
+      # test files were tracked and none of them had ever run here.
+      - name: Test
+        run: pnpm test
       - name: Build
         run: pnpm build
 
