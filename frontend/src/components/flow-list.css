@@ -157,3 +157,24 @@
   opacity: 0.5;
   cursor: default;
 }
+
+/* On a touch screen these three become real targets.
+ *
+ * At 26px with a 2px gap they are fine under a mouse and hostile under a thumb: three icons inside
+ * ~86px, and the LAST of them deletes the flow, sitting 2px from rename. A mis-tap there is
+ * destructive and not obviously undoable. Keyed on `pointer: coarse`, not on width, so a touch
+ * laptop gets it too and a narrow desktop window does not.
+ *
+ * Deliberately not solved here: delete still sits beside its neighbours rather than behind a
+ * confirm or an overflow menu. Size buys margin for error; it does not make the action reversible. */
+@media (pointer: coarse) {
+  .flow-list__actions {
+    gap: 8px;
+    padding-right: 8px;
+  }
+
+  .flow-list__action {
+    width: 40px;
+    height: 40px;
+  }
+}

@@ -23,13 +23,11 @@
   background: var(--surface-2);
 }
 
-.data-picker__check {
-  flex: none;
-  width: 16px;
-  height: 16px;
-  accent-color: var(--accent);
-  cursor: pointer;
-}
+/* `.data-picker__check` is styled with `.autoform__checkbox` in autoform.css — one checkbox for the
+   whole form system. The rule that stood here declared its own 16px box and `accent-color`, which,
+   loading after autoform.css at equal specificity, quietly won and put a 16px native checkbox next
+   to an 18px custom one on the same form. Deleted rather than out-specified: two rules for one
+   control is what caused the drift. */
 
 .data-picker__name {
   flex: 0 1 auto;

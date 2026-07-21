@@ -317,10 +317,17 @@ export function fetchFlowStatus(flowId: string): Promise<FlowStatusResponse> {
 /** Labelled outgoing control-flow ports per node type (app/domain/flow_engine/ir_node.py docstring:
  * "next" for linear flow, "true"/"false" for condition, "body"/"after" for the fan-out nodes).
  * Not part of the catalog response — the catalog only carries *input* schema. */
+// Keys are the node's FULL catalog key (`node_type` on the backend: "logic.condition", not
+// "condition") because that is what `outputPortsFor` is called with. They were written unprefixed,
+// so every lookup missed and every branching node fell back to a single "next" handle: the second
+// port was never rendered, and React Flow then dropped any saved edge bound to it — a for-each's
+// body edge and a condition's false edge simply vanished from a flow the user had already built.
+// The graph was drawn wrong, not merely styled wrong, and it only announced itself as a console
+// warning. Keep in sync with `node_type` in app/domain/catalog/nodes/.
 const OUTPUT_PORTS: Record<string, string[]> = {
-  condition: ["true", "false"],
-  for_each_lot: ["body", "after"],
-  for_each_account: ["body", "after"],
+  "logic.condition": ["true", "false"],
+  "logic.for_each_lot": ["body", "after"],
+  "logic.for_each_account": ["body", "after"],
 };
 
 export function outputPortsFor(catalogKey: string): string[] {

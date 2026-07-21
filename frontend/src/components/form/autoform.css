@@ -2,6 +2,12 @@
   display: flex;
   flex-direction: column;
   gap: 14px;
+  /* A form is a column of text, and a 1400px-wide column is not readable — the account rows put a
+     name on one edge and its balance 1190px away on the other, and every select stretched to match.
+     `--panel-column` is the measure the panel already declares for exactly this; the form simply
+     was not using it. Falls back for the canvas inspector, which renders AutoForm outside a
+     `.panel-view` and is narrower than the cap anyway. */
+  max-width: var(--panel-column, 720px);
 }
 
 .autoform__empty {
@@ -114,6 +120,11 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  /* Capped, because `space-between` across the full form width put «Холостой прогон» 992px away
+     from the switch that toggles it — label on one edge, control on the other, nothing between.
+     The docked-right settings-row idiom is kept; it just needs a measure where the eye can still
+     see both ends at once. */
+  max-width: 420px;
 }
 
 .autoform__label {
@@ -150,6 +161,17 @@
   background: var(--surface-2);
 }
 
+/* A field's width is a promise about how much you are expected to type.
+ *
+ * Numeric inputs were inheriting the full form width: «Цена до» and «Лотов за один запуск» each
+ * rendered 1130px wide on a desktop to hold "500" and "1". A field twelve times longer than its
+ * longest plausible value reads as a text area and makes the form look like it wants an essay.
+ * Keyed off `inputmode`, which AutoForm already sets for exactly the numeric branch — no new class
+ * to thread through, and it cannot drift out of sync with which control is a number. */
+input.autoform__control[inputmode="decimal"] {
+  max-width: 160px;
+}
+
 .ctl-select {
   position: relative;
   display: flex;
@@ -172,7 +194,11 @@ select.autoform__control {
   pointer-events: none;
 }
 
-.autoform__checkbox {
+/* One checkbox in the app, not two. The account picker declared `.data-picker__check` and then
+   styled nothing, so it fell back to the browser default: a 16px grey box beside this 18px custom
+   one, on the very same form. Sharing the rule is what keeps them from drifting again. */
+.autoform__checkbox,
+.data-picker__check {
   appearance: none;
   width: 18px;
   height: 18px;
@@ -181,15 +207,18 @@ select.autoform__control {
   background: var(--surface-3);
   cursor: pointer;
   position: relative;
+  flex-shrink: 0;
   transition: background 140ms ease-out, border-color 140ms ease-out;
 }
 
-.autoform__checkbox:checked {
+.autoform__checkbox:checked,
+.data-picker__check:checked {
   background: var(--accent);
   border-color: var(--accent);
 }
 
-.autoform__checkbox:checked::after {
+.autoform__checkbox:checked::after,
+.data-picker__check:checked::after {
   content: "";
   position: absolute;
   left: 5px;

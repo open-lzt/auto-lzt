@@ -79,9 +79,13 @@
 /* Deliberately loud and not dismissible: an unprotected stand must not look like a protected
    one. Warning tone, not danger — nothing is broken, it is simply open. */
 .auth-gate__open-banner {
-  position: sticky;
-  top: 0;
-  z-index: 50;
+  /* NOT sticky. It used to be `sticky; top: 0; z-index: 50` — and the topbar below it is also
+     sticky at `top: 0`, with a LOWER z-index. Both pinned to the same edge meant that the moment
+     the page scrolled, the topbar slid underneath the banner and was completely covered: brand and
+     theme toggle vanished behind the warning. Offsetting the topbar instead would need the banner's
+     height as a constant, and it is not one — this text wraps to three lines on a phone and one on
+     a desktop. Staying in flow is what makes it right at every width, and the warning is still
+     unmissable on load and on any scroll back to the top. */
   padding: 10px 16px;
   font-size: 14px;
   line-height: 1.5;
