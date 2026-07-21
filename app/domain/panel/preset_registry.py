@@ -15,13 +15,14 @@ hand in TypeScript, and made "add a preset" a four-file change across two langua
 
 from __future__ import annotations
 
+import re
 from collections.abc import Callable
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any, Final
 from uuid import UUID
 
-from pydantic import Field
+from pydantic import Field, field_validator
 
 from app.core.exceptions import AppError, ErrorCode
 from app.core.schema import BaseSchema
@@ -96,6 +97,13 @@ _ACCOUNTS_UI: _JsonDict = {"x-ui": {"widget": "account_ref"}}
 _CATEGORY_UI: _JsonDict = {"x-ui": {"widget": "category_picker"}}
 _THREADS_UI: _JsonDict = {"x-ui": {"widget": "textarea"}}
 
+# Whitespace, commas and semicolons all separate ids — the field asks for "one per line, comma or
+# space separated", so all three have to work in one paste.
+_THREAD_SEPARATORS: Final = re.compile(r"[\s,;]+")
+# lzt thread links are `/threads/<id>/` or `/threads/<slug>.<id>/`; take the number that follows
+# the segment, not merely the last number in the URL (a trailing `/page-2` is not the thread).
+_THREAD_URL_ID: Final = re.compile(r"/threads/(?:[^/]*?\.)?(\d+)")
+
 
 class PresetParams(BaseSchema):
     """What every preset asks for, at minimum.
@@ -149,6 +157,36 @@ class ThreadBumpParams(PresetParams):
         description="По одному в строке, через запятую или пробел. Ссылку можно вставить целиком.",
         json_schema_extra=_THREADS_UI,
     )
+
+    @field_validator("threads", mode="before")
+    @classmethod
+    def _parse_threads(cls, value: object) -> object:
+        """Parse the textarea's free text into ids — the field's own description is its contract.
+
+        The widget is a textarea, so the panel sends ONE string. Without this, `list[int]` rejected
+        every shape the description promises — «12345», «12345, 67890», one per line, and a pasted
+        URL — with "Input should be a valid list". The whole «Поднятие тем» preset could not be
+        deployed: no text an operator could type into the field would validate.
+
+        Fails loudly on a token it cannot read rather than dropping it. Silently skipping an
+        unparseable id would bump fewer threads than the operator listed and report success.
+        """
+        if not isinstance(value, str):
+            return value  # a real list from an API client — leave it to the int coercion below
+        ids: list[int] = []
+        for token in _THREAD_SEPARATORS.split(value):
+            if not token:
+                continue
+            if token.isdigit():
+                ids.append(int(token))
+                continue
+            # A pasted link: the id is the first number after /threads/. Anchored on that segment
+            # rather than "last number in the string", which would read `/page-2` as the thread.
+            match = _THREAD_URL_ID.search(token)
+            if match is None:
+                raise ValueError(f"не похоже на ID темы или ссылку: {token!r}")
+            ids.append(int(match.group(1)))
+        return ids
 
 
 class AutobuyParams(PresetParams):
