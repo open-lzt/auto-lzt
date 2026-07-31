@@ -2,12 +2,20 @@
 
 from __future__ import annotations
 
+import base64
+import binascii
 from functools import lru_cache
 from pathlib import Path
 from typing import Annotated
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
+
+_MASTER_KEY_BYTES = 32
+GENERATE_KEY_HINT = (
+    'Generate one: python -c "from cryptography.fernet import '
+    'Fernet;print(Fernet.generate_key().decode())"'
+)
 
 
 class Settings(BaseSettings):
@@ -28,6 +36,46 @@ class Settings(BaseSettings):
 
     # Master key for at-rest token encryption. Base64-urlsafe 32 bytes (Fernet-compatible seed).
     master_key: str = Field(default="", description="Envelope master key; empty fails loud at use.")
+
+    @field_validator("master_key")
+    @classmethod
+    def _master_key_shape(cls, value: str) -> str:
+        """Exactly 32 bytes of base64-urlsafe, or empty.
+
+        The trap: this key is NOT stretched. ``EnvelopeCipher`` runs it through HKDF, and HKDF is
+        one hash — it derives a per-tenant key, it does not add work. A passphrase here means the
+        whole token table is an offline dictionary attack away, and nothing in the app would ever
+        notice. So the shape is enforced where the value enters the process.
+
+        Empty is still accepted here because a worker/bot deployment that never touches account
+        tokens has nothing to configure; the API refuses to start on it (``app.main``).
+        """
+        value = value.strip()
+        if not value:
+            return ""
+        try:
+            raw = base64.urlsafe_b64decode(value)
+            # Decoding alone let the passphrase through, which is the one thing this validator
+            # exists to stop. `urlsafe_b64decode` silently skips characters outside the alphabet
+            # instead of refusing them, and 43 arbitrary characters plus a padding `=` then decode
+            # to exactly 32 bytes — so the length check below saw a well-shaped key. Re-encoding is
+            # the real test: only a canonical encoding of these bytes gives back the string it came
+            # from, which also rejects every non-alphabet character the decoder swallowed.
+            if base64.urlsafe_b64encode(raw).decode() != value:
+                raise ValueError("not a canonical base64-urlsafe encoding")
+        except (binascii.Error, ValueError) as exc:
+            raise ValueError(
+                f"LZT_FLOW_MASTER_KEY must be base64-urlsafe encoded {_MASTER_KEY_BYTES} bytes. "
+                "A passphrase is not a key — HKDF derives, it does not stretch. "
+                + GENERATE_KEY_HINT
+            ) from exc
+        if len(raw) != _MASTER_KEY_BYTES:
+            raise ValueError(
+                f"LZT_FLOW_MASTER_KEY decodes to {len(raw)} bytes, expected exactly "
+                f"{_MASTER_KEY_BYTES}. A passphrase is not a key — HKDF derives, it does not "
+                "stretch. " + GENERATE_KEY_HINT
+            )
+        return value
 
     # Shared secret for mutating endpoints. Send it as X-API-Key on every mutation. When empty the
     # gate fails CLOSED (mutations blocked) unless allow_unauthenticated is explicitly set.
@@ -66,6 +114,13 @@ class Settings(BaseSettings):
     stream_heartbeat_s: float = Field(
         default=15.0, description="Seconds of silence before an SSE stream emits a keepalive."
     )
+
+    # Recovery sweep for Runs whose row committed but whose arq push never landed
+    # (``triggers/firing.sweep_stale_pending_runs``). The grace must stay comfortably above the arq
+    # pickup latency of a healthy worker — set below it, the sweep re-enqueues runs that are merely
+    # queued — and that latency is a property of the deployment, not of the code.
+    pending_sweep_grace_s: int = Field(default=300)
+    pending_sweep_batch_limit: int = Field(default=200)
 
     run_trace_retention_days: int = Field(default=30)
     run_trace_max_rows_per_run: int = Field(default=5000)

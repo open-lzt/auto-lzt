@@ -2,8 +2,15 @@
 
 Fails CLOSED: with no ``settings.api_key`` configured, mutations are blocked unless
 ``settings.allow_unauthenticated`` is explicitly set (the loopback-dev escape hatch). Once a key is
-configured, send it as the ``X-API-Key`` header on every mutation. Reads stay open (catalog/status
-power the canvas).
+configured, send it as the ``X-API-Key`` header on every mutation.
+
+Reads are NOT uniformly open, despite the name of this module. Only the routers a canvas needs
+before anyone has authenticated stay public — ``catalog``, ``health``, ``auth/required``,
+``panel/tabs``. Everything that reveals what THIS installation runs is gated whether it mutates or
+not: runs, tasks, composites, a flow's triggers and its status all carry operator data (schedules,
+active account counts, node graphs), so a read of them is as much an operator surface as a write.
+A router is therefore either ``dependencies=protect(...)`` or deliberately public with a comment —
+no third pattern, and "it's a GET" is not a reason.
 """
 
 from __future__ import annotations

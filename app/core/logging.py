@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import uuid
 from collections.abc import Awaitable, Callable
 
@@ -12,6 +13,9 @@ from starlette.requests import Request
 from starlette.responses import Response
 
 REQUEST_ID_HEADER = "X-Request-ID"
+# An inbound id is echoed into every log line and into the error envelope, so it is untrusted input:
+# accept only an opaque token, never newlines or arbitrary length.
+_REQUEST_ID_RE = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
 
 
 def configure_logging() -> None:
@@ -40,8 +44,15 @@ def configure_logging() -> None:
 async def request_id_middleware(
     request: Request, call_next: Callable[[Request], Awaitable[Response]]
 ) -> Response:
-    """Bind a request_id to structlog contextvars for the lifetime of the request."""
-    request_id = request.headers.get(REQUEST_ID_HEADER) or uuid.uuid4().hex
+    """Bind a request_id to structlog contextvars for the lifetime of the request.
+
+    The id is also stashed on ``request.state`` so the error envelope reports the SAME id the logs
+    carry — reading the header there would report an empty id for every request that did not send
+    one, while the log lines showed the generated one.
+    """
+    incoming = request.headers.get(REQUEST_ID_HEADER, "")
+    request_id = incoming if _REQUEST_ID_RE.match(incoming) else uuid.uuid4().hex
+    request.state.request_id = request_id
     structlog.contextvars.clear_contextvars()
     structlog.contextvars.bind_contextvars(request_id=request_id)
     try:

@@ -26,7 +26,7 @@ from app.core.config import Settings, get_settings
 from app.core.exceptions import Unauthorized
 from app.core.schema import BaseSchema
 from app.core.stream_token import TOKEN_TTL_S, StreamTokenInvalid, issue, verify
-from app.core.streaming import sse_frames
+from app.core.streaming import StreamLimiter, sse_frames
 from app.core.tenant import tenant_id_dep
 from app.domain.account.model import TenantId
 from app.domain.flow_engine.errors import EntityNotFound
@@ -43,9 +43,6 @@ from app.worker.enqueue import build_arq_enqueue
 
 router = APIRouter(prefix="/runs", tags=["runs"])
 
-# wave-07: idle-stream heartbeat cadence — keeps a default-buffering reverse proxy from killing a
-# long-lived SSE connection (see README's nginx/Caddy no-buffering note for this route). A test
-# monkeypatches this module attribute to a short interval rather than waiting 15s.
 _TERMINAL_RUN_STATUSES = frozenset({RunStatus.COMPLETED, RunStatus.FAILED})
 
 
@@ -77,13 +74,10 @@ class RunSummary(BaseSchema):
     error: str | None = None
 
 
-_TERMINAL_STATUSES = {RunStatus.COMPLETED, RunStatus.FAILED}
-
-
 def _to_summary(run: Run) -> RunSummary:
     """A run has no finished_at column — once it reaches a terminal status, updated_at IS the
     moment it finished, since nothing touches the row afterwards."""
-    finished = run.updated_at if run.status in _TERMINAL_STATUSES else None
+    finished = run.updated_at if run.status in _TERMINAL_RUN_STATUSES else None
     duration = int((finished - run.created_at).total_seconds() * 1000) if finished else None
     return RunSummary(
         run_id=str(run.id),
@@ -122,6 +116,13 @@ def _run_repo(request: Request) -> RunRepository:
 
 def _trace_repo(request: Request) -> RunTraceRepository:
     return RunTraceRepository(request.app.state.sessionmaker)
+
+
+def _stream_limiter(request: Request) -> StreamLimiter:
+    """Built once in the lifespan, not per request — a per-request limiter would count to one and
+    bound nothing."""
+    limiter: StreamLimiter = request.app.state.stream_limiter
+    return limiter
 
 
 def _event_transport(request: Request) -> EventTransport:
@@ -251,6 +252,7 @@ async def stream_run(
     token: str,
     run_repo: RunRepository = Depends(_run_repo),
     transport: EventTransport = Depends(_event_transport),
+    limiter: StreamLimiter = Depends(_stream_limiter),
     settings: Settings = Depends(get_settings),
 ) -> StreamingResponse:
     """Live SSE feed of a run's progress (wave-07). Authorized by a ``stream-token`` bound to this
@@ -263,10 +265,11 @@ async def stream_run(
         raise Unauthorized() from exc
 
     last_event_id = request.headers.get("Last-Event-ID")
+    frames = _run_event_frames(
+        RunId(run_id), last_event_id, transport, run_repo, settings.stream_heartbeat_s
+    )
     return StreamingResponse(
-        _run_event_frames(
-            RunId(run_id), last_event_id, transport, run_repo, settings.stream_heartbeat_s
-        ),
+        limiter.open(frames),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )

@@ -21,7 +21,7 @@ from app.domain.flow_engine.repo import FlowRepository
 from app.domain.triggers.repo import TriggerRepository
 from app.domain.triggers.service import TriggerService
 
-router = APIRouter(prefix="/flows", tags=["triggers"])
+router = APIRouter(prefix="/flows", tags=["triggers"], dependencies=protect())
 
 
 class CreateTriggerRequest(BaseSchema):
@@ -42,7 +42,7 @@ def _trigger_service(request: Request) -> TriggerService:
     return TriggerService(FlowRepository(sm), TriggerRepository(sm))
 
 
-@router.post("/{flow_id}/triggers/create", status_code=201, dependencies=protect())
+@router.post("/{flow_id}/triggers/create", status_code=201)
 async def create_trigger(
     flow_id: UUID,
     body: CreateTriggerRequest,

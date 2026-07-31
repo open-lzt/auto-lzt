@@ -28,6 +28,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Request
 
+from app.core.auth import protect
 from app.core.schema import BaseSchema
 from app.core.tenant import tenant_id_dep
 from app.db.base import session_scope
@@ -39,7 +40,7 @@ from app.domain.flow_engine.repo import FlowRepository
 from app.domain.tasks.repo import TaskRepository
 from app.domain.tasks.service import TaskService
 
-router = APIRouter(prefix="/flows", tags=["flows"])
+router = APIRouter(prefix="/flows", tags=["flows"], dependencies=protect())
 
 
 class FlowStatusDTO(BaseSchema):
