@@ -45,8 +45,8 @@ class NodeDeps:
     ``list_accounts`` (Wave 4) lists every account owned by a tenant (active + excluded, same
     convention as ``TokenPool._build``) so ``ForEachAccountNode`` can fan out over the ACTIVE ones.
     ``get_client`` (F-13) is a context-manager factory for ``DynamicMethodNode``'s raw-Client path:
-    pinned (``account_id`` given) opens+closes a scoped Client; pooled (``None``) yields the shared
-    cached Client from ``TokenPool.acquire_client`` with no close — mirrors
+    pinned (``account_id`` given) opens+closes a scoped Client; pooled (``None``) leases the shared
+    cached Client from ``TokenPool.lease_client``, which the pool closes itself — mirrors
     ``MarketAdapter._call``'s existing pinned-vs-pooled dual mode.
     ``http`` is the ONLY general-purpose outbound-HTTP surface a node may use: ``get_client``
     yields an pylzt ``Client`` (the marketplace, nothing else), so before this field a request
@@ -77,6 +77,15 @@ class RunContext:
     resolve_input: Callable[[str], str | int | float | bool | None]
     deps: NodeDeps
     active_account_id: AccountId | None = None
+    step_replay: bool = False
+    """True when a RunStep row for this exact step already existed and was NOT completed — i.e.
+    an earlier attempt started this step and never committed a result.
+
+    This is the DURABLE half of a money node's "did we already do this" question. The redis
+    ``DedupGuard`` answers it precisely but only within its TTL; this row lives in Postgres and
+    survives a TTL expiry, a redis flush and a restart. It is coarser (it fires for a crash before
+    the effect too), so a node reads it as "refuse and let a human check", never as "it succeeded".
+    """
     loop_iteration: int = 0
     """0-based count of prior self-loop revisits of this exact node in the current chain (Wave 6/
     wave-02's ``WaitUntilNode``) — lets a self-looping node bound its own wait without persisted

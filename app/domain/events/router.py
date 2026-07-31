@@ -20,6 +20,7 @@ from lzt_eventus.events.base import DomainEvent
 from app.domain.events.types import FLOW_RELEVANT_EVENT_TYPES
 from app.domain.flow_engine.model import Run, RunId, RunStatus
 from app.domain.flow_engine.repo import FlowIrRepository, RunRepository
+from app.domain.triggers.firing import create_and_enqueue_run
 from app.domain.triggers.model import TriggerDefinition
 from app.domain.triggers.repo import TriggerRepository
 
@@ -76,20 +77,10 @@ class FlowEventRouter(BaseConsumer):
             created_at=now,
             updated_at=now,
         )
-        inserted = await self._runs.create_if_absent(run)
-        stored = (
-            run
-            if inserted
-            else await self._runs.get_by_key(trigger.tenant_id, trigger.flow_id, run_key)
-        )
-        if stored is None:  # pragma: no cover — the row exists by construction after DO NOTHING
-            raise RuntimeError(f"event fire lost its row: run_key={run_key}")
-
+        stored, inserted = await create_and_enqueue_run(self._runs, run, self._enqueue_run)
         log.info(
             "flow_event_router.run_created" if inserted else "flow_event_router.run_deduped",
             run_id=str(stored.id),
             run_key=run_key,
             event_type=event.event_type.value,
         )
-        if inserted:
-            await self._enqueue_run(stored.id)

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from datetime import timedelta
 from typing import Any
 from uuid import UUID
 
@@ -45,7 +46,9 @@ from app.domain.flow_engine.repo import (
 )
 from app.domain.flow_engine.retention import prune_run_traces
 from app.domain.market.service import MarketService
+from app.domain.triggers.firing import sweep_stale_pending_runs
 from app.plugin_runtime import PluginManager, PluginProcess
+from app.worker.enqueue import build_arq_enqueue
 from app.worker.runtime import execute_run
 
 log = structlog.get_logger()
@@ -118,14 +121,16 @@ def _build_node_deps(
     ) -> AsyncIterator[Client]:
         """Mirrors ``MarketAdapter._call``'s dual mode (the worker composition root legitimately
         constructs a Client here, same precedent as ``TokenPool._build``): pinned opens+closes a
-        scoped single-token Client; pooled yields the tenant's shared cached Client, no close."""
+        scoped single-token Client; pooled leases the tenant's shared cached Client, which the pool
+        keeps alive for the body of the block and closes itself once nobody holds it."""
         if account_id is not None:
             account = await load_account(tenant_id, account_id)
             token = cipher.decrypt(account.encrypted_token, tenant_id)
             async with Client([token]) as client:
                 yield client
         else:
-            yield await token_pool.acquire_client(tenant_id)
+            async with token_pool.lease_client(tenant_id) as client:
+                yield client
 
     return NodeDeps(
         market=market,
@@ -161,6 +166,19 @@ async def prune_run_traces_task(ctx: dict[str, Any]) -> int:
     )
 
 
+async def sweep_pending_runs_task(ctx: dict[str, Any]) -> int:
+    """Re-enqueue Runs whose row was committed but whose arq push never landed (process death or
+    an unreachable Redis between the two steps) — see ``triggers/firing.py``. ``ctx["redis"]`` is
+    the ArqRedis pool arq itself puts on the job context, so this opens no second connection."""
+    settings = get_settings()
+    return await sweep_stale_pending_runs(
+        RunRepository(ctx["sessionmaker"]),
+        build_arq_enqueue(ctx["redis"]),
+        grace=timedelta(seconds=settings.pending_sweep_grace_s),
+        limit=settings.pending_sweep_batch_limit,
+    )
+
+
 async def execute_run_task(ctx: dict[str, Any], run_id: str) -> str:
     settings = get_settings()
     sessionmaker = ctx["sessionmaker"]
@@ -188,7 +206,12 @@ async def execute_run_task(ctx: dict[str, Any], run_id: str) -> str:
 
 class WorkerSettings:
     functions = [execute_run_task]
-    cron_jobs = [cron(prune_run_traces_task, hour=3, minute=0)]  # once daily, off-peak
+    cron_jobs = [
+        cron(prune_run_traces_task, hour=3, minute=0),  # once daily, off-peak
+        # Every 5 minutes: the recovery window for a Run whose enqueue was lost is bounded by
+        # this interval plus LZT_FLOW_PENDING_SWEEP_GRACE_S, not by the next process restart.
+        cron(sweep_pending_runs_task, minute={0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55}),
+    ]
     on_startup = startup
     on_shutdown = shutdown
     redis_settings = RedisSettings.from_dsn(get_settings().redis_url)

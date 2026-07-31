@@ -311,6 +311,23 @@ class RunRepository(BaseSessionmakerRepo[Run, RunId]):
             orm = (await session.execute(stmt)).scalar_one_or_none()
         return _run_from_orm(orm) if orm else None
 
+    async def list_stale_pending(self, cutoff: datetime, limit: int) -> list[RunId]:
+        """Runs created before ``cutoff`` and still PENDING — the ones whose enqueue never landed.
+
+        Worker-global (no ``tenant_id`` filter): ``firing.sweep_stale_pending_runs`` recovers across
+        every tenant and has no per-request tenant context to scope by. Ids only — the sweep
+        enqueues by id and never needs the row's body.
+        """
+        stmt = (
+            select(RunORM.id)
+            .where(RunORM.status == RunStatus.PENDING.value, RunORM.created_at < cutoff)
+            .order_by(RunORM.created_at)
+            .limit(limit)
+        )
+        async with session_scope(self._sm) as session:
+            rows = (await session.execute(stmt)).scalars().all()
+        return [RunId(row) for row in rows]
+
     async def claim(self, run_id: RunId, expected_version: int, worker_id: str) -> int | None:
         """Optimistic pickup: bump version iff it still matches. Returns the new version, or None if
         another executor already advanced it (caller treats None as RunAlreadyClaimed)."""

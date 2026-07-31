@@ -13,10 +13,12 @@ against the very bug it exists to catch.
 
 from __future__ import annotations
 
+from uuid import uuid4
+
 import pytest
 
 from app.domain.flow_engine.errors import RunFailed
-from app.domain.flow_engine.model import Run, RunStatus
+from app.domain.flow_engine.model import Run, RunId, RunStatus
 from app.worker.runtime import execute_run
 from tests.fixtures.flow_fakes import (
     FakeFlowIrStore,
@@ -121,3 +123,37 @@ async def test_a_successful_run_records_no_error() -> None:
     assert status is RunStatus.COMPLETED
     assert stored is not None
     assert stored.error is None
+
+
+class _RefusingMarket(FakeMarket):
+    """A node-level refusal that is ALREADY the typed failure this boundary produces."""
+
+    async def bump_via_pool(self, tenant_id: object, item_id: int) -> object:
+        raise RunFailed(RunId(uuid4()), "bump1", "лот снят с продажи")
+
+
+async def test_a_typed_node_failure_is_not_wrapped_in_a_second_one() -> None:
+    """`_run_node` re-wrapped everything, `RunFailed` included, so the operator read the real
+    message out of `RunFailed(repr(RunFailed(...)))` — a nested repr inside the run's error
+    column."""
+    ir = build_single_bump_ir(item_id=42, entry="bump1")
+    run = build_run(ir)
+    runs, steps, flows = FakeRunRepo(), FakeRunStepRepo(), FakeFlowIrStore(ir)
+    await runs.create_if_absent(run)
+
+    with pytest.raises(RunFailed):
+        await execute_run(
+            run.id,
+            runs=runs,
+            steps=steps,
+            flows=flows,
+            registry=node_classes(),
+            node_deps=build_node_deps(_RefusingMarket(), FakeGuard()),
+            worker_id="w1",
+        )
+
+    stored = await runs.get(run.id)
+    assert stored is not None and stored.error is not None
+    assert "RunFailed(" not in stored.error, (
+        f"nested failure surfaced to the operator: {stored.error}"
+    )
