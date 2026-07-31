@@ -21,7 +21,7 @@ from app.domain.flow_engine.repo import FlowTemplateRepository
 from app.domain.flow_engine.service import TemplateService
 from app.domain.flow_engine.spec import NodeSpec
 
-router = APIRouter(prefix="/composites", tags=["composites"])
+router = APIRouter(prefix="/composites", tags=["composites"], dependencies=protect())
 
 
 class TemplateParamDTO(BaseSchema):
@@ -73,7 +73,7 @@ def _to_response(template: FlowTemplate) -> CompositeResponse:
     )
 
 
-@router.post("/create", status_code=201, dependencies=protect())
+@router.post("/create", status_code=201)
 async def create_composite(
     body: CreateCompositeRequest,
     tenant_id: TenantId = Depends(tenant_id_dep),

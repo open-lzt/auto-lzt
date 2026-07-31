@@ -14,6 +14,7 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable, Coroutine
 from dataclasses import dataclass, field
 from enum import StrEnum
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Final
 
 from redis.asyncio import Redis
@@ -39,12 +40,43 @@ class PluginProcess(StrEnum):
 
 
 class PluginSource(StrEnum):
-    """How a plugin was discovered. Governs the collision policy: an ENTRY_POINT plugin (deliberate
-    `pip install`) keeps fail-closed on a node-key collision; a FOLDER plugin (from the bot)
-    is quarantined on collision so a bad install can never brick the boot (D-4)."""
+    """How a plugin was discovered. Governs the REACTION to a failed gate — one gate, two answers:
+    an ENTRY_POINT plugin (deliberate `pip install`) fails the boot closed on a node-key collision
+    or a broken hook; a FOLDER plugin (from the bot) is quarantined instead, so a bad install can
+    never brick the boot the admin needs in order to remove it (D-4)."""
 
     ENTRY_POINT = "entry_point"
     FOLDER = "folder"
+
+
+@dataclass(slots=True, frozen=True)
+class PluginSettings:
+    """The configuration a plugin is HANDED — a named projection of ``Settings``, not ``Settings``.
+
+    The trap this avoids is not privilege: a plugin runs in-process and can import ``get_settings``
+    itself, so this is not a sandbox and must not be described as one. It is about what the runtime
+    *offers*. The full object carries ``master_key``, ``api_key``, ``database_url`` and the catalog
+    PAT, and handing it over makes every one of those a documented part of the plugin contract —
+    logged by any plugin that logs its context, and unremovable once a plugin depends on it.
+
+    A field belongs here when a plugin has a reason to read it. Adding one is a deliberate act.
+    """
+
+    plugin_dir: Path
+    default_tenant_id: str
+    worker_id: str
+    market_base_url: str | None
+    egress_allowed_hosts: frozenset[str]
+
+    @classmethod
+    def from_settings(cls, settings: Settings) -> PluginSettings:
+        return cls(
+            plugin_dir=settings.plugin_dir,
+            default_tenant_id=settings.default_tenant_id,
+            worker_id=settings.worker_id,
+            market_base_url=settings.market_base_url,
+            egress_allowed_hosts=settings.egress_allowed_hosts,
+        )
 
 
 PRE_INIT_ATTR: Final = "PRE_INIT"  # list[PreInitHook]
@@ -59,7 +91,7 @@ class PluginLoadContext:
 
     process: PluginProcess  # the process running discovery — for plugins that branch on it
     plugin_name: str  # the entry-point name (== origin stamped onto its nodes)
-    settings: Settings
+    settings: PluginSettings
     logger: BoundLogger  # already bound with plugin=plugin_name
 
 
@@ -99,7 +131,7 @@ class PluginReadyContext:
 
     process: PluginProcess
     plugin_name: str
-    settings: Settings
+    settings: PluginSettings
     logger: BoundLogger
     node_registry: NodeRegistry
     redis: Redis | None  # API/WORKER only; None in BOT

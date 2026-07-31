@@ -155,7 +155,13 @@ async def test_delete_blocked_by_nested_children_reference(sqlite_app: Any) -> N
     assert account_id in {r["id"] for r in list_resp.json()}
 
 
-async def test_delete_allowed_when_trigger_inactive(sqlite_app: Any) -> None:
+async def test_delete_refused_when_trigger_inactive(sqlite_app: Any) -> None:
+    """A paused flow still holds the reference, so deleting the account is still refused.
+
+    The guard used to join on an ACTIVE trigger and allow this. The flow's JSONB spec kept its
+    ``account_ref`` pointing at a row that no longer existed, and the next manual run failed on it
+    instead of the delete failing here, in front of the person doing it.
+    """
     app = create_app()
     async with LifespanManager(app):
         transport = httpx.ASGITransport(app=app)
@@ -169,9 +175,9 @@ async def test_delete_allowed_when_trigger_inactive(sqlite_app: Any) -> None:
             delete_resp = await client.post(f"/accounts/{account_id}/delete")
             list_resp = await client.get("/accounts/list")
 
-    assert delete_resp.status_code == 200, delete_resp.text
-    assert delete_resp.json()["deleted"] is True
-    assert account_id not in {r["id"] for r in list_resp.json()}
+    assert delete_resp.status_code == 409, delete_resp.text
+    assert "Спящая задача" in delete_resp.json()["message"]
+    assert account_id in {r["id"] for r in list_resp.json()}
 
 
 async def test_delete_succeeds_when_unreferenced(sqlite_app: Any) -> None:

@@ -25,22 +25,24 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.alter_column(
-        "accounts",
-        "created_at",
-        type_=sa.DateTime(timezone=True),
-        existing_type=sa.DateTime(),
-        existing_nullable=False,
-        postgresql_using="created_at AT TIME ZONE 'UTC'",
-    )
+    # batch_alter_table: SQLite has no ALTER COLUMN TYPE, so the unwrapped alter_column failed
+    # there outright. Batch mode rebuilds the table on SQLite and is a pass-through on Postgres.
+    with op.batch_alter_table("accounts") as batch:
+        batch.alter_column(
+            "created_at",
+            type_=sa.DateTime(timezone=True),
+            existing_type=sa.DateTime(),
+            existing_nullable=False,
+            postgresql_using="created_at AT TIME ZONE 'UTC'",
+        )
 
 
 def downgrade() -> None:
-    op.alter_column(
-        "accounts",
-        "created_at",
-        type_=sa.DateTime(),
-        existing_type=sa.DateTime(timezone=True),
-        existing_nullable=False,
-        postgresql_using="created_at AT TIME ZONE 'UTC'",
-    )
+    with op.batch_alter_table("accounts") as batch:
+        batch.alter_column(
+            "created_at",
+            type_=sa.DateTime(),
+            existing_type=sa.DateTime(timezone=True),
+            existing_nullable=False,
+            postgresql_using="created_at AT TIME ZONE 'UTC'",
+        )

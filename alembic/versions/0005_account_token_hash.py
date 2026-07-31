@@ -21,12 +21,14 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.add_column("accounts", sa.Column("token_hash", sa.String(length=64), nullable=True))
-    op.create_unique_constraint(
-        "uq_accounts_tenant_token_hash", "accounts", ["tenant_id", "token_hash"]
-    )
+    # batch_alter_table: SQLite has no ADD CONSTRAINT, so an unwrapped create_unique_constraint
+    # dies there. On Postgres batch mode passes the ALTERs straight through.
+    with op.batch_alter_table("accounts") as batch:
+        batch.add_column(sa.Column("token_hash", sa.String(length=64), nullable=True))
+        batch.create_unique_constraint("uq_accounts_tenant_token_hash", ["tenant_id", "token_hash"])
 
 
 def downgrade() -> None:
-    op.drop_constraint("uq_accounts_tenant_token_hash", "accounts", type_="unique")
-    op.drop_column("accounts", "token_hash")
+    with op.batch_alter_table("accounts") as batch:
+        batch.drop_constraint("uq_accounts_tenant_token_hash", type_="unique")
+        batch.drop_column("token_hash")

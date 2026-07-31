@@ -57,3 +57,20 @@ def test_modules_menu_note() -> None:
 def test_module_install_callback_fits() -> None:
     packed = ModCb(action=_ModAction.INSTALL, arg="lzt-flow-some-module", page=0).pack()
     assert len(packed.encode()) <= 64
+
+
+def test_node_card_escapes_a_hostile_key() -> None:
+    """A node key with `<`/`&` (a plugin's own naming, not this bot's) must not break Telegram's
+    HTML entity parser — it renders as literal text, not a broken/absent tag."""
+    node = NodeView(key="a<b>&c", capabilities=[])
+    text = NodeCardScreen.text(node)
+    assert "<b>&c" not in text
+    assert "a&lt;b&gt;&amp;c" in text
+
+
+def test_module_card_escapes_a_hostile_name() -> None:
+    module = ModuleView(name="mod<script>&x", version="1.0<0")
+    text = ModuleCardScreen.text(module)
+    assert "<script>" not in text
+    assert "mod&lt;script&gt;&amp;x" in text
+    assert "1.0&lt;0" in text

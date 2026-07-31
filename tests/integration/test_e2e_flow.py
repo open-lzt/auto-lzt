@@ -34,9 +34,13 @@ class _RecordingPool:
 
     def __init__(self) -> None:
         self.jobs: list[tuple[str, tuple[Any, ...]]] = []
+        self.job_ids: list[str | None] = []
 
-    async def enqueue_job(self, name: str, *args: Any) -> None:
+    async def enqueue_job(self, name: str, *args: Any, _job_id: str | None = None) -> None:
+        # Real arq drops a duplicate id outright; the recorder keeps every call so a test can
+        # assert on the id the producer chose, which is the part this stand-in has to model.
         self.jobs.append((name, args))
+        self.job_ids.append(_job_id)
 
     async def aclose(self) -> None:
         """Lifespan teardown calls this on the pool it owns; the recorder no-ops."""
@@ -164,7 +168,7 @@ async def test_duplicate_account_token_rejected(
     sqlite_db: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """The same plaintext token added twice for a tenant -> 409 ERR-1011, not two accounts."""
-    monkeypatch.setenv("LZT_FLOW_MASTER_KEY", "dGVzdC1tYXN0ZXIta2V5LTEyMzQ1Njc4OTAxMg==")
+    monkeypatch.setenv("LZT_FLOW_MASTER_KEY", "dGVzdC1tYXN0ZXIta2V5LTEyMzQ1Njc4OTAxMjM0NTY=")
     get_settings.cache_clear()
     app = create_app()
     async with LifespanManager(app):
@@ -193,7 +197,7 @@ async def test_a_token_the_marketplace_rejects_is_never_stored(
     at registration, where someone is watching.
     """
     mock_lzt.route(host=MARKET_HOST).mock(return_value=httpx.Response(401, json={"error": "bad"}))
-    monkeypatch.setenv("LZT_FLOW_MASTER_KEY", "dGVzdC1tYXN0ZXIta2V5LTEyMzQ1Njc4OTAxMg==")
+    monkeypatch.setenv("LZT_FLOW_MASTER_KEY", "dGVzdC1tYXN0ZXIta2V5LTEyMzQ1Njc4OTAxMjM0NTY=")
     get_settings.cache_clear()
     app = create_app()
     async with LifespanManager(app):

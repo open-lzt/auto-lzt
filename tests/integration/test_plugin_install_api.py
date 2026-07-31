@@ -6,6 +6,7 @@ the routes are exercised for real without a network or a live pip.
 
 from __future__ import annotations
 
+import hashlib
 import io
 import zipfile
 from pathlib import Path
@@ -39,6 +40,7 @@ def _index() -> PluginIndexClient:
                 "name": "demo",
                 "version": "1.0.0",
                 "source_url": "https://ex/demo.zip",
+                "sha256": hashlib.sha256(_zip()).hexdigest(),
                 "description": "D",
             }
         ],

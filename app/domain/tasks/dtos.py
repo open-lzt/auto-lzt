@@ -11,7 +11,7 @@ from __future__ import annotations
 import base64
 import binascii
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from uuid import UUID
 
 from app.core.schema import BaseSchema
@@ -39,9 +39,17 @@ class Cursor:
         try:
             decoded = base64.urlsafe_b64decode(raw.encode()).decode()
             stamp, _, ident = decoded.partition(_CURSOR_SEP)
-            return Cursor(created_at=datetime.fromisoformat(stamp), id=UUID(ident))
+            stamped = datetime.fromisoformat(stamp)
+            # A naive timestamp reaching the keyset comparison against a tz-aware column raises
+            # TypeError deep in the repo, so it is pinned to UTC here rather than rejected: the
+            # server issues naive cursors itself wherever the driver reads `timezone=True` back
+            # without a tzinfo (SQLite does), and rejecting them refuses our own next_cursor.
+            if stamped.tzinfo is None:
+                stamped = stamped.replace(tzinfo=UTC)
+            cursor = Cursor(created_at=stamped, id=UUID(ident))
         except (ValueError, binascii.Error, UnicodeDecodeError) as exc:
             raise InvalidCursor(raw) from exc
+        return cursor
 
 
 class TaskDTO(BaseSchema):

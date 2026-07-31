@@ -18,9 +18,14 @@ from __future__ import annotations
 
 import asyncio
 import json
+from collections.abc import Callable
+
+from pydantic import ValidationError
 
 from app.core.schema import BaseSchema
 from app.domain.catalog.capabilities import MARKET_MUTATE_MONEY, NodeCategory
+from app.domain.catalog.nodes.fast_buy import as_int
+from app.domain.catalog.nodes.relist import as_price
 from app.domain.flow_engine.base_node import BaseNode, RunContext
 from app.domain.flow_engine.dtos import StepResultDTO
 from app.domain.flow_engine.env_input import resolve_env
@@ -34,6 +39,33 @@ _BATCHABLE_NODE_TO_CALL: dict[str, tuple[str, str]] = {
     "market.reprice": ("market", "managing_edit"),
     "market.relist": ("market", "publishing_add"),
 }
+
+# A batch child bypasses its node's `execute`, so it bypasses the port validators that live there.
+# `RelistNode` refuses a fractional price — the marketplace prices lots in whole units and a
+# rounded one publishes a lot at a number nobody chose — while the same FlowSpec run through a
+# batch sent `100.5` straight to the paid call. The validators are the node's own, imported rather
+# than restated, so the two paths cannot drift into two different contracts.
+_Scalar = str | int | float | bool | None
+_CHILD_PORT_VALIDATORS: dict[str, dict[str, Callable[[_Scalar], object]]] = {
+    "market.bump": {"item_id": lambda v: as_int(v, "item_id")},
+    "market.reprice": {"item_id": lambda v: as_int(v, "item_id"), "price": as_price},
+    "market.relist": {"price": as_price, "category_id": lambda v: as_int(v, "category_id")},
+}
+
+
+# A child calls the marketplace facade by reflection, so a mis-wired batch surfaces as an ordinary
+# Python error at the call — a wrong kwarg name is TypeError, a missing enum member ValueError. Left
+# inside the per-item handler those became `{"ok": false, "error": "..."}` for every child, and a
+# node that was simply broken read as a marketplace that declined the whole batch. These fail the
+# run instead, via runtime.py's documented catch-all, with the traceback intact.
+_PROGRAMMING_ERRORS: tuple[type[BaseException], ...] = (
+    TypeError,
+    AttributeError,
+    ValueError,
+    KeyError,
+    IndexError,
+    NameError,
+)
 
 
 class BatchSubmitOutput(BaseSchema):
@@ -68,6 +100,33 @@ def _resolve_child_inputs(child: IRNode, ctx: RunContext) -> dict[str, object]:
     return resolved
 
 
+def _validated_child_inputs(
+    child: IRNode, raw: dict[str, object], ctx: RunContext
+) -> dict[str, object]:
+    """Apply the owning node's own port validators to a batch child's resolved literals."""
+    validators = _CHILD_PORT_VALIDATORS.get(child.type, {})
+    checked = dict(raw)
+    for port, validate in validators.items():
+        if port not in checked:
+            continue
+        value = checked[port]
+        if not isinstance(value, str | int | float | bool) and value is not None:
+            raise RunFailed(
+                ctx.run_id,
+                ctx.node.id,
+                f"batch child '{_local_child_id(child)}' port '{port}' is not a scalar",
+            )
+        try:
+            checked[port] = validate(value)
+        except ValueError as exc:
+            raise RunFailed(
+                ctx.run_id,
+                ctx.node.id,
+                f"batch child '{_local_child_id(child)}' port '{port}': {exc}",
+            ) from exc
+    return checked
+
+
 async def _run_child(
     client: object, child: IRNode, ctx: RunContext
 ) -> tuple[str, dict[str, object]]:
@@ -75,6 +134,13 @@ async def _run_child(
     mapping = _BATCHABLE_NODE_TO_CALL.get(child.type)
     if mapping is None:
         return child_id, {"ok": False, "error": f"node type '{child.type}' has no batch mapping"}
+
+    # Resolved and validated BEFORE the guard: consuming the key is a claim that the paid call was
+    # ATTEMPTED. Both of these steps can refuse the run without going anywhere near the
+    # marketplace (a `ref` input, a fractional price), and doing that after check_and_set burned
+    # the key — so every later attempt reported "already submitted … reconcile manually" about an
+    # item that was never submitted. `fast_buy` already had this order right.
+    kwargs = _validated_child_inputs(child, _resolve_child_inputs(child, ctx), ctx)
 
     # The guard is HERE, per child, because the EFFECT is here. A child calls the pylzt client
     # directly, so BumpNode/RelistNode.execute never runs — and neither does the check_and_set they
@@ -92,14 +158,25 @@ async def _run_child(
         }
 
     facade_name, method_name = mapping
-    kwargs = _resolve_child_inputs(child, ctx)
     facade = getattr(client, facade_name)
     method = getattr(facade, method_name)
     try:
         value = await method(**kwargs)
-    except Exception as exc:  # noqa: BLE001 — a child's own failure is DATA (per-item outcome),
-        # never an exception that fails the whole batch/run (wave-06 decision).
-        return child_id, {"ok": False, "error": str(exc)}
+    except ValidationError as exc:
+        # Listed before the programming errors because it IS one of them by inheritance
+        # (ValidationError subclasses ValueError) and is not one in fact: it means the upstream
+        # answered this item with a shape pylzt could not parse — an upstream outcome, per-item.
+        return child_id, {"ok": False, "error": repr(exc)}
+    except _PROGRAMMING_ERRORS:
+        raise
+    except Exception as exc:  # noqa: BLE001 — a child's own MARKETPLACE failure is DATA (per-item
+        # outcome), never an exception that fails the whole batch/run (wave-06 decision). The
+        # pylzt error tree cannot be named here (only market/adapter.py may import pylzt), so the
+        # split is stated the other way round: everything is per-item data EXCEPT the shapes that
+        # can only be OUR bug. `repr`, not `str`: pylzt errors carry args rather than
+        # pre-formatted text, so `str(Forbidden(...))` is the empty string — the same defect
+        # runtime.py already fixed for itself.
+        return child_id, {"ok": False, "error": repr(exc)}
     return child_id, {"ok": True, "value": str(value)}
 
 

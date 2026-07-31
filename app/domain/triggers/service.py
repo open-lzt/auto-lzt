@@ -31,12 +31,17 @@ class TriggerService:
         if flow is None:
             raise EntityNotFound("flow", str(flow_id))
 
+        if kind is TriggerKind.MANUAL:
+            raise InvalidTriggerDefinition("kind=manual is not a stored trigger; use POST /runs")
         if kind is TriggerKind.SCHEDULE and not schedule_cron:
             raise InvalidTriggerDefinition("schedule_cron is required for kind=schedule")
         if kind is TriggerKind.EVENT and event_type is None:
             raise InvalidTriggerDefinition("event_type is required for kind=event")
-        if kind is TriggerKind.MANUAL:
-            raise InvalidTriggerDefinition("kind=manual is not a stored trigger; use POST /runs")
+        # The model documents "exactly one of schedule_cron/event_type" as enforced at creation, so
+        # it is enforced: a SCHEDULE trigger that also carries an event_type is registered as a
+        # cron job AND matched by the event router, firing the flow twice per occurrence.
+        if schedule_cron is not None and event_type is not None:
+            raise InvalidTriggerDefinition("exactly one of schedule_cron/event_type may be set")
 
         return await self._triggers.create(
             tenant_id, flow_id, kind, schedule_cron=schedule_cron, event_type=event_type

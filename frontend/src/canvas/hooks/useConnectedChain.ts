@@ -29,7 +29,7 @@ function walk(startId: string, edges: Edge[], direction: "upstream" | "downstrea
 
 /** Highlights the full chain reachable from `hoveredId` in either direction (upstream sources +
  * downstream targets), for the hover-highlight effect on the canvas. Cycle-safe via visited sets. */
-export function useConnectedChain(nodes: Node[], edges: Edge[], hoveredId: string | null): ConnectedChain {
+export function useConnectedChain(_nodes: Node[], edges: Edge[], hoveredId: string | null): ConnectedChain {
   return useMemo(() => {
     if (!hoveredId) {
       return { highlightedNodeIds: new Set<string>(), highlightedEdgeIds: new Set<string>() };
@@ -40,5 +40,8 @@ export function useConnectedChain(nodes: Node[], edges: Edge[], hoveredId: strin
       highlightedNodeIds: new Set<string>([...upstream.nodeIds, ...downstream.nodeIds]),
       highlightedEdgeIds: new Set<string>([...upstream.edgeIds, ...downstream.edgeIds]),
     };
-  }, [nodes, edges, hoveredId]);
+    // `nodes` deliberately excluded: only `edges`/`hoveredId` are read here, and `nodes` is a
+    // fresh array reference on every drag frame — including it recomputed this BFS per pixel.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [edges, hoveredId]);
 }

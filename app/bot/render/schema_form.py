@@ -21,6 +21,8 @@ from enum import StrEnum
 from typing import Any
 from uuid import UUID
 
+from app.bot.render.reply import safe
+
 
 class UiKind(StrEnum):
     """The frozen ``ui`` vocabulary. Anything outside it renders as TEXT."""
@@ -146,12 +148,16 @@ def build_form(node_key: str, input_schema: dict[str, Any]) -> NodeForm:
 
 
 def render_prompt(field: FormField) -> str:
-    """What to ask the operator for one field. Русский — это язык продукта."""
-    lines = [f"<b>{field.label}</b>"]
+    """What to ask the operator for one field. Русский — это язык продукта.
+
+    Label/description/choices come from a node's own JSON Schema — a built-in node's own titles,
+    but also whatever a plugin author wrote — so they are escaped before landing in HTML text.
+    """
+    lines = [f"<b>{safe(field.label)}</b>"]
     if field.description:
-        lines.append(field.description)
+        lines.append(safe(field.description))
     if field.ui is UiKind.SELECT and field.choices:
-        lines.append("Варианты: " + ", ".join(field.choices))
+        lines.append("Варианты: " + ", ".join(safe(c) for c in field.choices))
     elif field.ui is UiKind.BOOL:
         lines.append("Ответьте: да / нет")
     elif field.ui is UiKind.LOT_REF:

@@ -1,6 +1,8 @@
 """``lzt-flow`` — operator CLI for the flow API: install modules, run flows, watch and trace them.
 
-Non-interactive by design: no command ever prompts (nothing here blocks on stdin), and there is no
+Mostly non-interactive: no command blocks on stdin except a secret an operator omitted from the
+command line (``--api-key``, ``accounts add --token``), which falls back to a no-echo prompt on a
+real terminal and stays empty otherwise (service/CI runs never hang on a read). There is no
 destructive delete in this command set, so no ``--yes`` gate is needed yet — add one if a delete
 command is added later.
 
@@ -12,6 +14,7 @@ subcommand, e.g. ``lzt-flow --json list``.
 from __future__ import annotations
 
 import argparse
+import getpass
 import sys
 from pathlib import Path
 
@@ -46,7 +49,13 @@ def build_parser() -> argparse.ArgumentParser:
         prog="lzt-flow", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
     parser.add_argument("--api", help=f"Flow API base URL (default {DEFAULT_BASE_URL})")
-    parser.add_argument("--api-key", help="Overrides $LZT_FLOW_API_KEY and .env's FLOW_API_KEY")
+    parser.add_argument(
+        "--api-key",
+        help=(
+            "Fallback only — visible in `ps` and shell history. Prefer $LZT_FLOW_API_KEY or "
+            "FLOW_API_KEY in --env-file; omit both and this to be prompted (no echo) on a TTY."
+        ),
+    )
     parser.add_argument("--env-file", help=f"Root .env to read (default {DEFAULT_ENV_FILE})")
     parser.add_argument("--json", action="store_true", help="Machine-readable JSON output")
 
@@ -91,7 +100,10 @@ def build_parser() -> argparse.ArgumentParser:
     p_accounts = sub.add_parser("accounts", help="List accounts, or `accounts add`")
     accounts_sub = p_accounts.add_subparsers(dest="accounts_command")
     p_accounts_add = accounts_sub.add_parser("add", help="Register a new account token")
-    p_accounts_add.add_argument("--token", required=True)
+    p_accounts_add.add_argument(
+        "--token",
+        help=("Fallback only — visible in `ps` and shell history. Omit to be prompted (no echo)."),
+    )
     p_accounts_add.add_argument("--label")
 
     return parser
@@ -116,7 +128,14 @@ def _dispatch(args: argparse.Namespace, client: FlowClient, env_file: Path) -> N
         cmd_runs(client, args.flow_id, args.json)
     elif args.command == "accounts":
         if args.accounts_command == "add":
-            cmd_accounts_add(client, args.token, args.label, args.json)
+            # Same gate as `resolve_api_key`: an ungated getpass on a piped stdin either reads
+            # the pipe (a token pulled out of unrelated input) or blocks a non-interactive
+            # caller forever. With no tty and no --token the value stays empty and the usage
+            # error below fires, which is what the help text already promises.
+            token = args.token or (getpass.getpass("Account token: ") if sys.stdin.isatty() else "")
+            if not token:
+                raise CliUsageError("no token given (pass --token or type one at the prompt)")
+            cmd_accounts_add(client, token, args.label, args.json)
         else:
             cmd_accounts(client, args.json)
 
@@ -143,6 +162,9 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     except ValidationError as exc:
         print(f"error: unexpected response shape from the API: {exc}", file=sys.stderr)
+        return 1
+    except Exception as exc:  # noqa: BLE001 — CLI boundary: an operator gets a message, not a traceback
+        print(f"error: unexpected failure: {exc!r}", file=sys.stderr)
         return 1
     return 0
 

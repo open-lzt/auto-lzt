@@ -21,6 +21,7 @@ from app.domain.account.model import TenantId
 from app.domain.flow_engine.errors import FlowNotCompiled
 from app.domain.flow_engine.model import FlowId, Run, RunId, RunStatus
 from app.domain.flow_engine.repo import FlowIrRepository, RunRepository
+from app.domain.triggers.firing import create_and_enqueue_run
 
 log = structlog.get_logger()
 
@@ -83,14 +84,9 @@ async def run_scheduled_flow(trigger_id: str, flow_id: str, tenant_id: str) -> N
         created_at=now,
         updated_at=now,
     )
-    inserted = await runs.create_if_absent(run)
-    stored = await runs.get_by_key(tid, fid, run_key)
-    if stored is None:  # pragma: no cover — the row exists by construction after DO NOTHING
-        raise RuntimeError(f"schedule fire lost its row: run_key={run_key}")
-
+    stored, inserted = await create_and_enqueue_run(runs, run, _runtime.enqueue_run)
     log.info(
         "schedule_trigger.run_created" if inserted else "schedule_trigger.run_deduped",
         run_id=str(stored.id),
         run_key=run_key,
     )
-    await _runtime.enqueue_run(stored.id)

@@ -19,7 +19,7 @@ from aiogram.types import CallbackQuery, InlineKeyboardMarkup, Message
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from app.bot.api_client import FlowApiClient
-from app.bot.render.reply import edit
+from app.bot.render.reply import edit, safe
 from app.plugin_runtime.dtos import PluginCatalogView, PluginTogglesView
 
 router = Router(name="plugins")
@@ -77,14 +77,15 @@ class PluginCardScreen:
     def text(name: str, catalog: PluginCatalogView) -> str:
         installed = next((p for p in catalog.installed if p.name == name), None)
         available = next((p for p in catalog.available if p.name == name), None)
-        lines = [f"<b>{name}</b>"]
+        lines = [f"<b>{safe(name)}</b>"]
         if available is not None:
-            lines.append(available.description or "—")
-            lines.append(f"В каталоге: {available.version}")
+            lines.append(safe(available.description) if available.description else "—")
+            lines.append(f"В каталоге: {safe(available.version)}")
         if installed is not None:
-            lines.append(f"Установлено: {installed.version}")
+            lines.append(f"Установлено: {safe(installed.version)}")
             if installed.broken:
-                lines.append(f"Сломан: {installed.reason or 'неизвестно'}")
+                reason = safe(installed.reason) if installed.reason else "неизвестно"
+                lines.append(f"Сломан: {reason}")
         return "\n".join(lines)
 
     @staticmethod
@@ -181,7 +182,7 @@ async def show_settings(c: CallbackQuery, api: FlowApiClient) -> EditMessageText
 
 @router.callback_query(PluginCb.filter(F.action.in_({_Action.TOGGLE_AUTO, _Action.TOGGLE_ALERTS})))
 async def toggle(c: CallbackQuery, callback_data: PluginCb, api: FlowApiClient) -> EditMessageText:
-    current = PluginTogglesView.model_validate(await api.get_plugin_settings())
+    current = await api.get_plugin_settings()
     auto = (
         not current.auto_update
         if callback_data.action is _Action.TOGGLE_AUTO

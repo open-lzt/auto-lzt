@@ -16,6 +16,8 @@ account_id → TokenId map anyway so ``quarantine_account`` validates the accoun
 from __future__ import annotations
 
 import asyncio
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 
 import structlog
@@ -38,11 +40,30 @@ class _TenantPool:
     pool: RoundRobinTokenPool
     client: Client
     token_ids: dict[AccountId, TokenId] = field(default_factory=dict)
+    # How many `lease`/`lease_client` blocks are currently inside this entry. The pool may only be
+    # closed at zero.
+    leases: int = 0
+    # Dropped from the cache; waiting for the last lease to leave before aclose().
+    retired: bool = False
 
 
 class TokenPool:
     """Process-wide cache of one (RoundRobinTokenPool, Client) per tenant. Rebuilt on any account
-    add / reactivate / exclude — each rebuild re-derives quarantine from Postgres."""
+    add / reactivate / exclude — each rebuild re-derives quarantine from Postgres.
+
+    **Lifecycle.** There is exactly one way to take a Client out of here — a scoped lease::
+
+        async with pool.lease(tenant_id) as adapter:
+            ...
+
+    That single shape is what makes closing safe. ``invalidate`` used to close the pool
+    immediately, while the same ``Client`` was already out in the hands of a running task — adding,
+    excluding or deleting an account mid-run closed the transport underneath that run
+    (use-after-close). Closing is now reference-counted: ``invalidate`` drops the entry from the
+    cache so the next lease rebuilds, marks it retired, and the aclose happens when the last holder
+    leaves. A borrow with no observable end would make that count meaningless, so no such borrow
+    exists.
+    """
 
     def __init__(
         self,
@@ -54,31 +75,81 @@ class TokenPool:
         self._cipher = cipher
         self._market_base_url = market_base_url
         self._cache: dict[TenantId, _TenantPool] = {}
-        self._lock = asyncio.Lock()
+        # One lock per tenant, not one for the process: a build does DB I/O plus a Client
+        # construction, and under a single lock every other tenant's lease waited behind it.
+        self._locks: dict[TenantId, asyncio.Lock] = {}
 
-    async def acquire(self, tenant_id: TenantId) -> MarketAdapter:
-        """A MarketAdapter bound to the tenant's cached, quarantine-seeded Client."""
-        entry = await self._get_or_build(tenant_id)
-        return MarketAdapter(client=entry.client)
+    def _lock_for(self, tenant_id: TenantId) -> asyncio.Lock:
+        # No await between the miss and the insert, so this cannot interleave on the event loop.
+        return self._locks.setdefault(tenant_id, asyncio.Lock())
 
-    async def acquire_client(self, tenant_id: TenantId) -> Client:
-        """The tenant's cached, quarantine-seeded Client itself — for callers
-        (``NodeDeps.get_client``'s pooled branch) that need the raw pylzt Client rather than a
-        MarketAdapter wrapper. No new lifecycle: the pool still owns closing it via
-        ``invalidate``."""
+    @asynccontextmanager
+    async def lease(self, tenant_id: TenantId) -> AsyncIterator[MarketAdapter]:
+        """A MarketAdapter on the tenant's cached Client, valid for the body of the block.
+
+        The Client is guaranteed not to be closed while the block runs, even if the account set
+        changes underneath it. Do not stash the adapter past the block — that is exactly the borrow
+        the reference count cannot see.
+        """
+        async with self._lease_entry(tenant_id) as entry:
+            yield MarketAdapter(client=entry.client)
+
+    @asynccontextmanager
+    async def lease_client(self, tenant_id: TenantId) -> AsyncIterator[Client]:
+        """``lease`` for callers needing the raw pylzt Client (``NodeDeps.get_client``'s pooled
+        branch) rather than a MarketAdapter wrapper."""
+        async with self._lease_entry(tenant_id) as entry:
+            yield entry.client
+
+    @asynccontextmanager
+    async def _lease_entry(self, tenant_id: TenantId) -> AsyncIterator[_TenantPool]:
         entry = await self._get_or_build(tenant_id)
-        return entry.client
+        try:
+            yield entry
+        finally:
+            async with self._lock_for(tenant_id):
+                entry.leases -= 1
+                closeable = entry.retired and entry.leases == 0
+            if closeable:
+                await entry.pool.aclose()
+                self._drop_lock_if_idle(tenant_id)
 
     async def invalidate(self, tenant_id: TenantId) -> None:
-        """Drop the cached pool/Client so the next acquire rebuilds from Postgres."""
-        async with self._lock:
+        """Drop the cached pool/Client so the next lease rebuilds from Postgres.
+
+        Closes the retired pool only once nobody holds it — never under a live lease.
+        """
+        async with self._lock_for(tenant_id):
             entry = self._cache.pop(tenant_id, None)
-        if entry is not None:
+            if entry is None:
+                return
+            entry.retired = True
+            closeable = entry.leases == 0
+        if closeable:
             await entry.pool.aclose()
+            self._drop_lock_if_idle(tenant_id)
+
+    def _drop_lock_if_idle(self, tenant_id: TenantId) -> None:
+        """Forget a tenant's lock once its last pool is closed — otherwise ``_locks`` is a leak that
+        grows with every tenant the process has ever served and never shrinks.
+
+        Only when the lock is free: an asyncio.Lock can only have waiters while it is held, so an
+        unheld lock is one nobody can still be queued on. Dropping a held one would let the next
+        arrival build a second Lock for the same tenant and stand both of them in the critical
+        section at once.
+        """
+        lock = self._locks.get(tenant_id)
+        if lock is not None and not lock.locked() and tenant_id not in self._cache:
+            del self._locks[tenant_id]
 
     def quarantine_account(self, tenant_id: TenantId, account_id: AccountId) -> None:
         """Runtime-sync an already-durable EXCLUDED into the live pool (no rebuild). No-op if the
-        tenant has no cached pool or the account is not in it — Postgres already holds the truth."""
+        tenant has no cached pool or the account is not in it — Postgres already holds the truth.
+
+        Synchronous on purpose, which is also what makes it safe without the tenant lock: there is
+        no await between reading the entry and quarantining on it, so no other coroutine can retire
+        the entry in between.
+        """
         entry = self._cache.get(tenant_id)
         if entry is None:
             return
@@ -87,11 +158,19 @@ class TokenPool:
             entry.pool.quarantine(token_id)
 
     async def _get_or_build(self, tenant_id: TenantId) -> _TenantPool:
-        async with self._lock:
+        """The tenant's entry with the caller's lease ALREADY counted on it.
+
+        The count is taken under the same lock hold that reads or publishes the entry, and that is
+        the whole point of the method. Returning the entry uncounted and letting the caller take the
+        lock a second time leaves a gap in which an ``invalidate`` queued on that lock runs, reads
+        ``leases == 0``, and closes the pool this call is about to hand out.
+        """
+        async with self._lock_for(tenant_id):
             entry = self._cache.get(tenant_id)
             if entry is None:
                 entry = await self._build(tenant_id)
                 self._cache[tenant_id] = entry
+            entry.leases += 1
             return entry
 
     async def _build(self, tenant_id: TenantId) -> _TenantPool:

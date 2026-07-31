@@ -16,6 +16,19 @@ permissions:
   contents: read
 
 jobs:
+  secrets:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      # Full-history scan for committed credentials/tokens. Runs first and standalone — no build
+      # dependency, so a leaked secret fails fast before any install/build step executes.
+      - name: gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   build:
     runs-on: ubuntu-latest
     steps:
@@ -34,6 +47,12 @@ jobs:
         run: uv run mypy app
       - name: Pytest
         run: uv run pytest --cov=app --cov-report=term-missing
+      # Fails the build on a known-vulnerable dependency in the locked resolution — the same
+      # `uv.lock` that ships to prod, not a fresh unlocked resolve.
+      - name: Export locked requirements
+        run: uv export --extra dev --frozen --no-emit-project --format requirements-txt -o requirements-audit.txt
+      - name: pip-audit
+        run: uvx pip-audit --strict -r requirements-audit.txt
 
   frontend:
     runs-on: ubuntu-latest
@@ -67,6 +86,37 @@ jobs:
         run: pnpm test
       - name: Build
         run: pnpm build
+
+  # `@pytest.mark.pg` tests (migrations, run-key races) need a real Postgres — pyproject.toml's
+  # addopts excludes them from the default `build` run, so this is the only place they execute.
+  pg-tests:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: lzt
+          POSTGRES_PASSWORD: lzt
+          POSTGRES_DB: lztflow
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+      - name: Set up Python
+        run: uv python install 3.12
+      - name: Sync deps
+        run: uv sync --extra dev --frozen
+      - name: Pytest (pg)
+        env:
+          LZT_FLOW_DATABASE_URL: postgresql+asyncpg://lzt:lzt@localhost:5432/lztflow
+        run: uv run pytest -m pg -q
 
   # Final gate: the no-Docker core loop against the mock market. No live token, no external
   # services — proves compile -> run -> completed on every commit (closes the open CI question).

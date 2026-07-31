@@ -221,3 +221,45 @@ async def test_shutdown_hook_raise_is_logged_and_continues(monkeypatch: pytest.M
     await mgr.post_init(node_registry=NodeRegistry([]))
     await mgr.shutdown()  # must not raise
     assert events == ["second"]
+
+
+@pytest.mark.asyncio
+async def test_a_folder_plugin_failing_post_init_is_actually_quarantined(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The docstring promised quarantine and the code only logged: the plugin stayed in the active
+    set, so a task its half-completed POST_INIT had already spawned kept running for the life of the
+    process, and `shutdown` later ran SHUTDOWN hooks for a plugin that never finished starting."""
+    events: list[str] = []
+    started = asyncio.Event()
+
+    async def _loop() -> None:
+        started.set()
+        try:
+            await asyncio.sleep(3600)
+        except asyncio.CancelledError:
+            events.append("task_cancelled")
+            raise
+
+    async def _start(ctx: object) -> None:
+        ctx.spawn(_loop(), "loop")  # type: ignore[attr-defined]
+        await started.wait()
+        raise RuntimeError("half-initialised")
+
+    async def _stop(ctx: object) -> None:
+        events.append("shutdown_hook")
+
+    module = SimpleNamespace(PRE_INIT=[], POST_INIT=[_start], SHUTDOWN=[_stop])
+    folder = SimpleNamespace(name="folder-plugin", module=module)
+    monkeypatch.setattr(
+        "app.plugin_runtime.manager.load_folder_plugins", lambda _dir: ([folder], [])
+    )
+    mgr = _mgr(monkeypatch, [], PluginProcess.WORKER)
+    mgr.discover()
+    mgr.pre_init()
+
+    await mgr.post_init(node_registry=NodeRegistry([]))  # quarantines, never raises
+
+    assert events == ["task_cancelled", "shutdown_hook"]
+    await mgr.shutdown()
+    assert events == ["task_cancelled", "shutdown_hook"], "a quarantined plugin was torn down twice"

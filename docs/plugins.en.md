@@ -169,14 +169,40 @@ endpoint, under a lock), not at startup: the three processes (API/worker/bot) sh
 a parallel `pip` at startup would corrupt site-packages. Startup only **verifies** that the
 dependencies import.
 
+⚠️ An old catalog entry with no `sha256` fails validation — the bot's plugin list comes back
+**empty**, with no error shown. Below is what an entry must carry now.
+
 **Catalog** — `plugins.json` at `LZT_FLOW_PLUGIN_INDEX_URL` (empty → install-from-bot is
 disabled). A trusted repository owned by you, **separate from `lzt-flows`** (which holds
 FLOW-module data): reference — [`open-lzt/lzt-plugins`](https://github.com/open-lzt/lzt-plugins).
-Each entry: `name`, `version`, `description`, `source_url` (a zip archive), `requirements`. The
-downloaded archive is unpacked with protection against zip-slip and symlink entries. For a private
-catalog, set `LZT_FLOW_PLUGIN_INDEX_TOKEN` (a GitHub PAT, repo read scope); note that a private
+Each entry:
+
+- `name`, `version`, `description`;
+- `source_url` — a zip archive, `https://` only, host must be the catalog's own host or one of
+  `github.com` / `codeload.github.com` / `raw.githubusercontent.com` / `objects.githubusercontent.com`;
+- `sha256` — **required**: the sha256 of the zip archive, 64 lowercase hex characters. An archive
+  whose hash doesn't match is refused outright — the same check the module registry runs on
+  FLOW-modules, except here the hash pins executable code, not data;
+- `requirements` — exact pins only, `name==version` (extras allowed): no URL, no range, no
+  environment marker, no pip option (`-i`, `--find-links`, etc.) — otherwise `requirements` would
+  be a second code-delivery channel bypassing the hash and the host allow-list.
+
+Computing the archive's `sha256`:
+
+```bash
+sha256sum plugin.zip
+```
+
+The downloaded archive is unpacked with protection against zip-slip, symlink entries, and a zip
+bomb — the extracted tree is capped at 64 MiB. For a private catalog, set
+`LZT_FLOW_PLUGIN_INDEX_TOKEN` (a GitHub PAT, repo read scope); note that a private
 `raw.githubusercontent` redirects to a different host and httpx drops the header — for a private
 GitHub catalog it's simpler to use a public repo or an `api.github.com/.../contents` URL.
+
+The `manifest.json` written at install time must have `manifest.name` matching both the plugin's
+folder name and the name the catalog entry declared, or the install is refused. Both `name` and
+`entry` in the manifest are regex-checked: `entry` must be a flat `*.py` filename with no
+separators and no `..` — it gets joined onto the plugin folder and executed.
 
 **The bot** — `/plugins` opens an inline menu: available + installed, a card with
 `Install/Update/Remove`, a settings screen with **Auto-update** and **New-version alerts** toggles

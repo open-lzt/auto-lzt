@@ -15,7 +15,7 @@ from pydantic import Field
 
 from app.api.deps import node_registry_dep
 from app.core.auth import protect
-from app.core.config import get_settings
+from app.core.config import Settings, get_settings
 from app.core.schema import BaseSchema
 from app.core.tenant import tenant_id_dep
 from app.domain.account.model import TenantId
@@ -109,10 +109,10 @@ async def invoke_flow(
     tenant_id: TenantId = Depends(tenant_id_dep),
     svc: RunService = Depends(_run_service),
     registry: NodeRegistry = Depends(node_registry_dep),
+    settings: Settings = Depends(get_settings),
 ) -> FlowInvokeResponse:
     """Run a flow synchronously and return its terminal output. Bounded by
     ``flow_invoke_timeout_s``; long flows should use the async ``POST /runs`` path instead."""
-    settings = get_settings()
     sm = request.app.state.sessionmaker
     run = await svc.prepare_run(tenant_id, FlowId(flow_id), None, body.params)
     node_deps = build_invoke_node_deps(

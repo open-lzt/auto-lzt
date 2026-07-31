@@ -38,6 +38,9 @@ class AccountORM(Base):
 
     __table_args__ = (
         Index("ix_accounts_tenant_id", "tenant_id"),
+        # count_active runs on the flow-status endpoint every five seconds; the tenant-only index
+        # left it filtering every row of the tenant to reach a number.
+        Index("ix_accounts_tenant_status", "tenant_id", "status"),
         UniqueConstraint("tenant_id", "token_hash", name="uq_accounts_tenant_token_hash"),
         UniqueConstraint("tenant_id", "label", name="uq_accounts_tenant_label"),
     )

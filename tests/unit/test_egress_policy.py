@@ -11,6 +11,7 @@ import asyncio
 import socket
 from collections.abc import Iterator
 from typing import Any
+from urllib.parse import urlsplit
 
 import pytest
 
@@ -57,19 +58,39 @@ async def test_cloud_metadata_is_blocked(resolves_to: Any) -> None:
 
 async def test_the_unauthenticated_redis_is_blocked(resolves_to: Any) -> None:
     """The one that turns an SSRF into RCE: Redis holds the idem:* money guards and the arq queue,
-    so reaching it means duplicating paid effects or running code in the worker."""
+    so reaching it means duplicating paid effects or running code in the worker.
+
+    Refused on the port now, before a name is even resolved: an allow-list entry means 443 unless
+    it says otherwise, so no allow-listed name reaches 56379 at all."""
     resolves_to("127.0.0.1")
     blocked = await _blocked(EgressPolicy(ALLOWED), "https://api.telegram.org:56379/")
-    assert blocked.reason is EgressBlockReason.LOOPBACK
+    assert blocked.reason is EgressBlockReason.PORT_NOT_ALLOWED
 
 
 @pytest.mark.parametrize("port", [55432, 27543, 8000, 8765, 8770])
 async def test_every_service_on_this_host_is_blocked(resolves_to: Any, port: int) -> None:
-    """The fence is about the address, not the port — a private address is refused wherever it
-    listens, so a new service on a new port is covered without anyone updating a list."""
+    """Two independent refusals cover this, and the test pins both. The port is not on the
+    allow-list, so the request dies before DNS; and even when an operator DOES list the port, the
+    resolved address is still judged, so a private one is refused wherever it listens."""
     resolves_to("127.0.0.1")
     blocked = await _blocked(EgressPolicy(ALLOWED), f"https://api.telegram.org:{port}/")
+    assert blocked.reason is EgressBlockReason.PORT_NOT_ALLOWED
+
+    with_port = EgressPolicy(frozenset({f"api.telegram.org:{port}"}))
+    blocked = await _blocked(with_port, f"https://api.telegram.org:{port}/")
     assert blocked.reason is EgressBlockReason.LOOPBACK
+
+
+async def test_an_explicitly_listed_port_is_reachable(resolves_to: Any) -> None:
+    """``host:port`` in the allow-list is how a non-443 endpoint is opened — deliberately, one
+    port at a time, rather than by leaving every port of an allowed name open."""
+    resolves_to("149.154.167.220")
+    policy = EgressPolicy(frozenset({"api.telegram.org:8443"}))
+    target = await policy.resolve_and_check("https://api.telegram.org:8443/x")
+    assert target.host == "api.telegram.org"
+
+    blocked = await _blocked(policy, "https://api.telegram.org/x")
+    assert blocked.reason is EgressBlockReason.PORT_NOT_ALLOWED
 
 
 async def test_a_public_name_resolving_private_is_blocked(resolves_to: Any) -> None:
@@ -194,3 +215,30 @@ async def test_the_error_never_leaks_the_internal_address_to_a_client(resolves_t
     blocked = await _blocked(EgressPolicy(ALLOWED), "https://api.telegram.org/x")
     assert "10.1.2.3" not in blocked.client_message
     assert "api.telegram.org" in blocked.client_message
+
+
+@pytest.mark.parametrize(
+    ("entry", "url"),
+    [
+        ("[2001:db8::1]", "https://[2001:db8::1]/x"),
+        ("::1", "https://[::1]/x"),
+        ("[2001:db8::1]:8443", "https://[2001:db8::1]:8443/x"),
+    ],
+)
+def test_an_ipv6_allow_list_entry_matches_the_url_it_was_written_for(entry: str, url: str) -> None:
+    """The allow-list used to be split with ``entry.rpartition(":")``, which cannot see an IPv6
+    literal: ``::1`` became host ``::`` on port 1, and ``[2001:db8::1]`` kept its brackets so it
+    could never equal the unbracketed hostname ``urlsplit`` returns from a URL. Either way an
+    operator who allow-listed a v6 host got a fence that refused it — and, for ``::1``, an entry
+    silently opening port 1 on a host they never named."""
+    policy = EgressPolicy(frozenset({entry}))
+
+    assert policy.check_host(url) == urlsplit(url).hostname
+
+
+def test_an_ipv6_entrys_port_is_still_part_of_what_is_allowed() -> None:
+    policy = EgressPolicy(frozenset({"[2001:db8::1]:8443"}))
+
+    with pytest.raises(EgressBlocked) as exc:
+        policy.check_host("https://[2001:db8::1]/x")
+    assert exc.value.reason is EgressBlockReason.PORT_NOT_ALLOWED

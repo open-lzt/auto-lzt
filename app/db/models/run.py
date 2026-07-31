@@ -6,7 +6,16 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import JSON, DateTime, Index, Integer, String, UniqueConstraint, Uuid
+from sqlalchemy import (
+    JSON,
+    DateTime,
+    Index,
+    Integer,
+    String,
+    UniqueConstraint,
+    Uuid,
+    text,
+)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -41,6 +50,17 @@ class RunORM(Base):
     __table_args__ = (
         UniqueConstraint("flow_id", "run_key", name="uq_runs_flow_id_run_key"),
         Index("ix_runs_tenant_id", "tenant_id"),
+        # The stale-pending sweep runs every 5 minutes and filters on status + created_at, and the
+        # only index here was on tenant_id — which that query does not touch at all, so it was a
+        # sequential scan of the hottest table in the schema on a fixed schedule. Partial, because
+        # PENDING is a transient state: the index covers the handful of rows currently in it
+        # instead of every run ever executed.
+        Index(
+            "ix_runs_pending_created_at",
+            "created_at",
+            postgresql_where=text("status = 'pending'"),
+            sqlite_where=text("status = 'pending'"),
+        ),
     )
 
 

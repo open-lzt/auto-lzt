@@ -9,6 +9,7 @@ import {
   type FlowSummary,
   type ImportError,
 } from "../api/flowClient";
+import { downloadFlowSpec } from "../api/downloadFlow";
 import { CloseIcon, DownloadIcon, PencilIcon } from "./icons";
 import { useResizablePane } from "./ResizablePane";
 import { ImportErrorReport } from "./ImportErrorReport";
@@ -25,16 +26,6 @@ interface FlowListProps {
    * exports them — reads — but shows no control that would write. Export stays because it is a
    * GET plus a local download. */
   canAuthor?: boolean;
-}
-
-function downloadFlowSpec(spec: FlowSpec, fileName: string): void {
-  const blob = new Blob([JSON.stringify(spec, null, 2)], { type: "application/json" });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = fileName;
-  link.click();
-  URL.revokeObjectURL(url);
 }
 
 /** Sidebar panel listing every saved flow so the operator can switch between them, rename,

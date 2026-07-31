@@ -7,7 +7,9 @@ beyond what the installer itself writes.
 
 from __future__ import annotations
 
+import getpass
 import os
+import sys
 from pathlib import Path
 from typing import Final
 
@@ -37,13 +39,26 @@ def resolve_env_file(cli_value: str | None) -> Path:
 
 
 def resolve_api_key(env_file: Path, cli_value: str | None) -> str:
-    """Precedence: ``--api-key`` > ``LZT_FLOW_API_KEY`` env > ``FLOW_API_KEY`` in ``env_file``."""
+    """Precedence: ``--api-key`` > ``LZT_FLOW_API_KEY`` env > ``FLOW_API_KEY`` in ``env_file`` > an
+    interactive no-echo prompt.
+
+    ``--api-key`` stays supported for scripting, but it is a shell-history and ``ps`` leak — the
+    env var / ``.env`` are the channel the help text points operators at. The prompt only fires
+    when nothing else resolved AND stdin is a real terminal, so a systemd unit or CI job with no
+    key configured still fails the same way it always has (empty key, server rejects it) instead
+    of hanging on a read.
+    """
     if cli_value:
         return cli_value
     override = os.environ.get("LZT_FLOW_API_KEY")
     if override:
         return override
-    return read_env_value(env_file, "FLOW_API_KEY") or ""
+    from_file = read_env_value(env_file, "FLOW_API_KEY")
+    if from_file:
+        return from_file
+    if sys.stdin.isatty():
+        return getpass.getpass("Flow API key (LZT_FLOW_API_KEY not set): ")
+    return ""
 
 
 def resolve_base_url(cli_value: str | None) -> str:

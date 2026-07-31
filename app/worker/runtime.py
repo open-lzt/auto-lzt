@@ -429,6 +429,53 @@ async def _publish_task_event(
         log.exception("task_event.publish_failed", run_id=str(run.id))
 
 
+async def _record_step_completion(
+    trace_sink: TraceSink | None,
+    event_transport: EventTransport | None,
+    run: Run,
+    tenant_id: TenantId | None,
+    node: IRNode,
+    iteration_key: str | None,
+    results: Mapping[str, StepResultDTO],
+    result: StepResultDTO,
+    started_at: datetime,
+    elapsed_s: float,
+) -> None:
+    """The trace write plus the two wave-07 events that ride on it.
+
+    One StepCompletedEvent + one summary LogEvent per real trace write, tied to the same
+    trace_sink/tenant_id gate as the trace itself (production wiring always supplies both together
+    via arq_settings.py). Emitted alongside the trace write rather than by hooking every individual
+    structlog call-site — the simplest option that doesn't duplicate log-emission logic.
+    """
+    if trace_sink is None or tenant_id is None:
+        return
+    await _capture_trace(
+        trace_sink, run, tenant_id, node, iteration_key, results, result, started_at, elapsed_s
+    )
+    duration_ms = round(elapsed_s * 1000)
+    await _publish_run_event(
+        event_transport,
+        run,
+        StepCompletedEvent(
+            run_id=str(run.id),
+            node_id=node.id,
+            node_type=node.type,
+            iteration_key=iteration_key,
+            duration_ms=duration_ms,
+        ),
+    )
+    await _publish_run_event(
+        event_transport,
+        run,
+        LogEvent(
+            run_id=str(run.id),
+            level="info",
+            message=f"step '{node.id}' ({node.type}) completed in {duration_ms}ms",
+        ),
+    )
+
+
 def _require_ownership(new_version: int | None, run_id: RunId, expected: int) -> int:
     if new_version is None:
         raise RunAlreadyClaimed(run_id, expected)
@@ -453,6 +500,7 @@ async def _run_chain(
     step_budget: list[int] | None = None,
     stop_before_types: frozenset[str] = frozenset(),
     event_transport: EventTransport | None = None,
+    abort_box: list[bool] | None = None,
 ) -> tuple[StepResultDTO | None, str | None]:
     """Walk nodes following edges until exhausted. ``runs`` set (top level only) persists
     ``Run.current_node_id``/``version`` per node (F-1); nested fan-out iterations (``runs=None``)
@@ -467,13 +515,22 @@ async def _run_chain(
     ``stop_before_types`` (wave-06 fork/join) halts the walk, WITHOUT executing it, the moment the
     next node's type is in this set — used by ``_run_fork`` so each branch's isolated walk stops
     right at the join point instead of racing to execute it. Returns ``(last_result, stopped_at)``
-    — ``stopped_at`` is the id the walk halted before (None if it ran off the end normally)."""
+    — ``stopped_at`` is the id the walk halted before (None if it ran off the end normally).
+
+    ``abort_box`` (shared with every concurrent fork branch) is how a ``StopCondition``-driven stop
+    reaches the SIBLINGS. Cancelling them mid-node is not an option — a cancelled node never
+    reaches ``complete_step`` and leaves its RunStep RUNNING forever — but neither is letting them
+    run their chain to the end: after "stop this run" was asked for, a sibling branch went on to
+    execute its remaining nodes, MONEY nodes included. So the flag is checked at the node boundary:
+    a sibling finishes the node it is already inside and then stops, executing nothing further."""
     budget = step_budget if step_budget is not None else [_DEFAULT_MAX_STEPS_PER_RUN]
     current = start_id
     active_iteration_key = iteration_key
     visit_counts: dict[str, int] = {}
     last_result: StepResultDTO | None = None
     while current is not None:
+        if abort_box is not None and abort_box[0]:
+            return last_result, current
         node = nodes_by_id.get(current)
         if node is None:
             raise RunFailed(run.id, current, f"node '{current}' absent from FlowIR")
@@ -529,45 +586,18 @@ async def _run_chain(
             raise
         results[node.id] = result
         last_result = result
-        if trace_sink is not None and tenant_id is not None:
-            elapsed_s = time.monotonic() - step_started
-            await _capture_trace(
-                trace_sink,
-                run,
-                tenant_id,
-                node,
-                active_iteration_key,
-                results,
-                result,
-                started_at,
-                elapsed_s,
-            )
-            # wave-07: one StepCompletedEvent + one summary LogEvent per real trace write — tied
-            # to the same trace_sink/tenant_id gate as _capture_trace (production wiring always
-            # supplies both together via arq_settings.py). Emitting alongside the trace write,
-            # rather than hooking every individual structlog call-site, is the simplest option
-            # that doesn't duplicate log-emission logic (deliberate choice, see wave-07 task doc).
-            duration_ms = round(elapsed_s * 1000)
-            await _publish_run_event(
-                event_transport,
-                run,
-                StepCompletedEvent(
-                    run_id=str(run.id),
-                    node_id=node.id,
-                    node_type=node.type,
-                    iteration_key=active_iteration_key,
-                    duration_ms=duration_ms,
-                ),
-            )
-            await _publish_run_event(
-                event_transport,
-                run,
-                LogEvent(
-                    run_id=str(run.id),
-                    level="info",
-                    message=f"step '{node.id}' ({node.type}) completed in {duration_ms}ms",
-                ),
-            )
+        await _record_step_completion(
+            trace_sink,
+            event_transport,
+            run,
+            tenant_id,
+            node,
+            active_iteration_key,
+            results,
+            result,
+            started_at,
+            time.monotonic() - step_started,
+        )
 
         goto_target = _check_stop_condition(node, result)
         if goto_target is not None:
@@ -590,6 +620,7 @@ async def _run_chain(
                 version_box,
                 budget,
                 event_transport,
+                abort_box,
             )
             continue
 
@@ -615,6 +646,7 @@ async def _run_chain(
                 version_box,
                 budget,
                 event_transport,
+                abort_box,
             )
             current = node.edges.get(_AFTER_EDGE)
         else:
@@ -651,12 +683,17 @@ async def _run_fanout_body(
     version_box: list[int],
     step_budget: list[int],
     event_transport: EventTransport | None,
+    abort_box: list[bool] | None = None,
 ) -> None:
     body_entry = node.edges.get(_BODY_EDGE)
     if body_entry is None:
         raise RunFailed(run.id, node.id, "fan-out node missing 'body' edge")
     port = _fanout_port(result)
     for item in items:
+        # Checked per item, not only on the enclosing chain: a sibling fork branch that asked to
+        # stop must not watch this loop keep buying the remaining lots.
+        if abort_box is not None and abort_box[0]:
+            return
         child_key = _compose_iteration_key(iteration_key, item)
         results[node.id] = StepResultDTO(node_id=node.id, output={**result.output, port: item})
         child_account = _resolve_fanout_account(run, node, port, item, active_account)
@@ -676,6 +713,7 @@ async def _run_fanout_body(
             version_box=version_box,
             step_budget=step_budget,
             event_transport=event_transport,
+            abort_box=abort_box,
         )
 
 
@@ -694,6 +732,7 @@ async def _run_fork(
     version_box: list[int],
     step_budget: list[int],
     event_transport: EventTransport | None,
+    outer_abort_box: list[bool] | None = None,
 ) -> str | None:
     """Wave-06 fork/join, D2-1-fixed: every branch walks against its OWN shallow-copied results
     dict seeded from the pre-fork snapshot — concurrent branches never share or race on one
@@ -702,30 +741,54 @@ async def _run_fork(
     already gives "wait for all, fail loud if any raises" for free — no manual arrival barrier
     needed. Each branch's *terminal* result (right before the join) becomes visible outside the
     branch only via the join's own merged output, under a per-branch labelled key — a branch's
-    other internal node results never leak to its siblings or past the join."""
+    other internal node results never leak to its siblings or past the join.
+
+    Known limitation, not a bug to be surprised by later: a branch raising ``RunFailed`` still
+    cancels its siblings mid-node (fail-fast is deliberate — the run is over either way), and a
+    node cancelled inside ``instance.execute()`` leaves its ``RunStep`` row RUNNING with no
+    compensation. The next executor of that run reconciles it (``_run_node``'s "RUNNING orphan"
+    path re-admits the step under the idempotency guard), but nothing rewrites the row in place,
+    so a failed run can keep a RUNNING step in its history. ``StopCondition(action="abort")`` does
+    NOT have this problem — it is drained without cancelling anyone, see ``_run_one``."""
     branches = list(node.edges.items())
     branch_results: list[StepResultDTO | None] = [None] * len(branches)
     branch_stopped_at: list[str | None] = [None] * len(branches)
+    branch_aborted = [False] * len(branches)
+    # A nested fork shares its parent's box rather than opening a private one: with a box per
+    # level, an abort raised deep inside one branch stopped only its own level and left the outer
+    # fork's siblings running — including their money nodes.
+    abort_box = outer_abort_box if outer_abort_box is not None else [False]
 
     async def _run_one(i: int, label: str, target: str) -> None:
-        result, stopped_at = await _run_chain(
-            run,
-            target,
-            iteration_key=_compose_iteration_key(iteration_key, f"fork:{label}"),
-            active_account=active_account,
-            nodes_by_id=nodes_by_id,
-            steps=steps,
-            registry=registry,
-            node_deps=node_deps,
-            results=dict(results),
-            runs=None,
-            version_box=version_box,
-            trace_sink=trace_sink,
-            tenant_id=tenant_id,
-            step_budget=step_budget,
-            stop_before_types=frozenset({_JOIN_NODE_TYPE}),
-            event_transport=event_transport,
-        )
+        # `_AbortRun` is caught HERE rather than allowed out of the task. Letting it leave makes
+        # TaskGroup cancel the sibling branches mid-`instance.execute()`, and a cancelled node
+        # never reaches `complete_step` — its RunStep row stays RUNNING forever with no
+        # compensation. A deliberate stop is not an emergency: the siblings finish the node they
+        # are on, then the fork raises the abort itself, below.
+        try:
+            result, stopped_at = await _run_chain(
+                run,
+                target,
+                iteration_key=_compose_iteration_key(iteration_key, f"fork:{label}"),
+                active_account=active_account,
+                nodes_by_id=nodes_by_id,
+                steps=steps,
+                registry=registry,
+                node_deps=node_deps,
+                results=dict(results),
+                runs=None,
+                version_box=version_box,
+                trace_sink=trace_sink,
+                tenant_id=tenant_id,
+                step_budget=step_budget,
+                stop_before_types=frozenset({_JOIN_NODE_TYPE}),
+                event_transport=event_transport,
+                abort_box=abort_box,
+            )
+        except _AbortRun:
+            branch_aborted[i] = True
+            abort_box[0] = True
+            return
         branch_results[i] = result
         branch_stopped_at[i] = stopped_at
 
@@ -749,6 +812,12 @@ async def _run_fork(
         if cause is None:
             raise  # a genuine bug in a branch — do not disguise it as a business failure
         raise cause from group
+
+    if any(branch_aborted):
+        # A branch asked to stop the whole run: there is no join output to merge, so the abort is
+        # re-raised now that every sibling has come to rest. `execute_run` suppresses it and marks
+        # the run COMPLETED, exactly as for an abort on the linear path.
+        raise _AbortRun()
 
     join_ids = {j for j in branch_stopped_at if j is not None}
     if len(join_ids) != 1:
@@ -802,16 +871,6 @@ async def _run_node(
         raise RunFailed(run.id, node.id, f"unknown node type '{node.type}'")
 
     idem_key = _idempotency_key(run.id, node.id, iteration_key)
-    ctx = RunContext(
-        run_id=run.id,
-        tenant_id=run.tenant_id,
-        node=node,
-        idempotency_key=idem_key,
-        resolve_input=_make_resolver(node, results, run.vars),
-        deps=node_deps,
-        active_account_id=active_account,
-        loop_iteration=loop_iteration,
-    )
     instance = node_cls()
 
     claimed = await steps.claim_step(
@@ -831,7 +890,21 @@ async def _run_node(
             if existing.result is None:
                 raise RunFailed(run.id, node.id, "completed step missing result")
             return existing.result
-        # RUNNING orphan from our own crashed attempt — reconcile (node guard dedups the effect).
+        # RUNNING orphan from our own crashed attempt — reconcile. The node's redis guard dedups
+        # the effect while its key lives; `step_replay` carries the same fact durably, because
+        # this row is in Postgres and the key is not.
+
+    ctx = RunContext(
+        run_id=run.id,
+        tenant_id=run.tenant_id,
+        node=node,
+        idempotency_key=idem_key,
+        resolve_input=_make_resolver(node, results, run.vars),
+        deps=node_deps,
+        active_account_id=active_account,
+        step_replay=not claimed,
+        loop_iteration=loop_iteration,
+    )
 
     try:
         if node.timeout_s is not None:
@@ -841,6 +914,11 @@ async def _run_node(
                 raise NodeTimeoutError(node.id, node.timeout_s) from exc
         else:
             result = await instance.execute(ctx)
+    except RunFailed:
+        # Already the typed failure this boundary produces, already carrying this run and node.
+        # Re-wrapping it built `RunFailed(repr(RunFailed(...)))`, and the operator read the real
+        # message nested inside a second one.
+        raise
     except Exception as exc:  # noqa: BLE001 — node.execute() boundary: any node failure (typed
         # or not) must become one typed RunFailed here; this is the single documented catch-all.
         # `repr`, not `str`: this project's own convention is that exceptions carry ARGS rather

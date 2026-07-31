@@ -34,7 +34,11 @@ class ErrorEnvelope(BaseSchema):
 
 
 def _envelope(request: Request, code: ErrorCode, message: str, status: int) -> JSONResponse:
-    request_id = request.headers.get(REQUEST_ID_HEADER, "")
+    # request_id_middleware puts its id (incoming or generated) on request.state; the header is the
+    # fallback for a request that never reached the middleware (e.g. a middleware-level failure).
+    request_id = getattr(request.state, "request_id", "") or request.headers.get(
+        REQUEST_ID_HEADER, ""
+    )
     body = ErrorEnvelope(code=code, message=message, request_id=request_id)
     return JSONResponse(status_code=status, content=body.model_dump(mode="json"))
 

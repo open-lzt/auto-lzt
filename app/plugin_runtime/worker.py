@@ -42,7 +42,7 @@ class Worker(ABC):
             await asyncio.sleep(self._interval_s)
             try:
                 await self.tick()
-            except Exception:  # noqa: BLE001 — one bad tick is logged; the worker must not die
+            except Exception:  # one bad tick is logged; the worker must not die
                 log.exception("worker.tick_failed", worker=self._name)
 
     @abstractmethod
