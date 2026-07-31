@@ -56,14 +56,15 @@ jobs:
         run: uv run pytest --cov=app --cov-report=term-missing
       # Fails the build on a known-vulnerable dependency in the locked resolution — the same
       # `uv.lock` that ships to prod, not a fresh unlocked resolve.
-      # Every editable dependency is dropped, matched by the `-e ` marker rather than by package
-      # name: pip-audit installs with hashes required and a directory has no single file to hash.
-      # These are local test fixtures carrying no third-party code, so auditing them would report
-      # nothing — and matching the whole class means a new fixture package cannot break this job.
+      # Anything pip cannot hash is dropped: editable paths (a directory has no single file to
+      # hash) and git requirements (no way to hash a revision). pip-audit installs with hashes
+      # required, so either one fails the whole job. What is left is the PyPI set, which is the
+      # only thing advisories are published against anyway — the sibling projects pinned by git
+      # are audited in their own repositories.
       - name: Export locked requirements
         run: |
           uv export --extra dev --frozen --no-emit-project --format requirements-txt \
-            | grep -v '^-e ' > requirements-audit.txt
+            | grep -vE '^-e |git\+|file://' > requirements-audit.txt
       - name: pip-audit
         run: uvx pip-audit --strict -r requirements-audit.txt
 
