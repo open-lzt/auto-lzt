@@ -10,7 +10,7 @@ import hashlib
 import io
 import zipfile
 from pathlib import Path
-from typing import Any
+from typing import Any, Final
 
 import httpx
 import pytest
@@ -25,11 +25,23 @@ from app.plugin_runtime.install_service import PluginInstallService
 from app.plugin_runtime.state import PluginState
 
 
-def _zip() -> bytes:
+def _build_zip() -> bytes:
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w") as zf:
-        zf.writestr("plugin.py", "PRE_INIT = []\n")
+        # Fixed timestamp: `writestr` with a plain name stamps ZipInfo with time.localtime(), which
+        # zip stores at 2-second resolution. Calling this twice — once for the catalog digest, once
+        # to serve the bytes — then produces two different archives whenever the calls straddle a
+        # 2-second boundary, and the install fails on a checksum mismatch that is purely the clock.
+        entry = zipfile.ZipInfo("plugin.py", date_time=(1980, 1, 1, 0, 0, 0))
+        zf.writestr(entry, "PRE_INIT = []\n")
     return buf.getvalue()
+
+
+_ARCHIVE: Final = _build_zip()
+
+
+def _zip() -> bytes:
+    return _ARCHIVE
 
 
 def _index() -> PluginIndexClient:

@@ -24,10 +24,17 @@ jobs:
           fetch-depth: 0
       # Full-history scan for committed credentials/tokens. Runs first and standalone — no build
       # dependency, so a leaked secret fails fast before any install/build step executes.
+      #
+      # The gitleaks CLI, not gitleaks/gitleaks-action: the action refuses to run for an
+      # organization without a paid GITLEAKS_LICENSE secret and exits non-zero, which fails the
+      # job for a licensing reason rather than a finding. The binary itself is MIT.
       - name: gitleaks
-        uses: gitleaks/gitleaks-action@v2
+        run: |
+          curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" \
+            | tar -xz -C /usr/local/bin gitleaks
+          gitleaks detect --source . --redact --no-banner --exit-code 1
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_VERSION: 8.21.2
 
   build:
     runs-on: ubuntu-latest
