@@ -28,7 +28,7 @@ from app.api import (
     task_routes,
     trigger_routes,
 )
-from app.core.config import get_settings
+from app.core.config import GENERATE_KEY_HINT, get_settings
 from app.core.errors import register_error_handlers
 from app.core.logging import configure_logging, request_id_middleware
 from app.core.streaming import StreamLimiter
@@ -56,14 +56,14 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         "api.unauthenticated",
         detail="no request auth — keep bound to loopback / behind an auth proxy",
     )
-    # Fail loud at boot, not three days later on the first account-token write. Empty master_key is
-    # still a valid config for a deployment that never stores account tokens, so this warns rather
-    # than aborting — EnvelopeCipher raises MasterKeyMissing at actual use if it's needed and unset.
+    # This app mounts account_routes, so POST /accounts is reachable the moment it starts. With an
+    # empty master key that endpoint accepts a live marketplace token over the wire and THEN dies
+    # on MasterKeyMissing — the credential has already left the operator's hands by then. A warning
+    # here was not a lesser version of refusing; it was the credential-leaking version of it.
     if not settings.master_key:
-        log.warning(
-            "crypto.master_key_missing",
-            detail="LZT_FLOW_MASTER_KEY is empty — account-token encryption fails at first use; "
-            "set it before storing any account token",
+        raise RuntimeError(
+            "LZT_FLOW_MASTER_KEY is empty and this process serves the account endpoints. "
+            "Set it before starting the API. " + GENERATE_KEY_HINT
         )
     # Owner-only plugin runtime, in the lifespan (not create_app): discovery imports plugin code —
     # arbitrary owner code — which must run at startup, not on every `import app.main`. PRE_INIT is

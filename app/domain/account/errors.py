@@ -52,8 +52,9 @@ class AccountNotFound(AppError):
 
 
 class AccountInUse(AppError):
-    """Delete refused: a flow with a LIVE schedule trigger still pins this account somewhere in
-    its spec (possibly nested under a batch node's children)."""
+    """Delete refused: one of the tenant's flows still pins this account somewhere in its spec
+    (possibly nested under a batch node's children). Any flow counts, not only live-triggered ones
+    -- a paused flow keeps its spec, so deleting the account would leave it dangling."""
 
     status_code = 409
     code = ErrorCode.CONFLICT
@@ -65,4 +66,4 @@ class AccountInUse(AppError):
 
     @property
     def client_message(self) -> str:
-        return f"Аккаунт используется в активных задачах: {', '.join(self.flow_names)}"
+        return f"Аккаунт используется в задачах: {', '.join(self.flow_names)}"

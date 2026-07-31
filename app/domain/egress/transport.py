@@ -47,6 +47,12 @@ import httpx
 from app.domain.egress.policy import EgressBlocked, EgressBlockReason, EgressPolicy, ResolvedTarget
 
 _MAX_RESPONSE_BYTES = 1 * 1024 * 1024
+# A ceiling on how long one request node may hold a worker slot. `timeout_s` reaches here from a
+# FlowSpec, which is untrusted registry-published data validated only as `gt=0` -- so `86400` is a
+# legal spec that parks a worker for a day without ever erroring. Clamped rather than rejected:
+# a node asking for more gets the maximum, which is what it would have got from a healthy endpoint
+# anyway, and the spec stays loadable.
+_MAX_TIMEOUT_S = 120.0
 
 
 class HttpMethod(StrEnum):
@@ -118,7 +124,7 @@ class PolicedHttpTransport:
             pinned,
             headers={**dict(spec.headers), "Host": target.host},
             json=dict(spec.json_body) if spec.json_body is not None else None,
-            timeout=spec.timeout_s,
+            timeout=min(spec.timeout_s, _MAX_TIMEOUT_S),
             # Verifies the certificate against the real hostname and sends it as SNI, even though
             # the URL names an IP. Without this the request either fails verification or, if
             # someone "fixes" it by disabling verify, silently accepts any certificate.

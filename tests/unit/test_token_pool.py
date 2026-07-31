@@ -7,6 +7,7 @@ rebuild, so it never silently returns to rotation when the Client is rebuilt.
 
 from __future__ import annotations
 
+import asyncio
 from dataclasses import replace
 from datetime import UTC, datetime
 from types import SimpleNamespace
@@ -43,12 +44,13 @@ class _FakePool:
     def __init__(self, tokens: object, **kwargs: object) -> None:
         self.tokens = list(tokens)  # type: ignore[arg-type]
         self.quarantined: list[str] = []
+        self.closed = False
 
     def quarantine(self, token_id: str) -> None:
         self.quarantined.append(token_id)
 
     async def aclose(self) -> None:
-        return None
+        self.closed = True
 
 
 def _account(tenant_id: TenantId, status: AccountStatus) -> Account:
@@ -100,7 +102,8 @@ async def test_no_active_accounts_raises(
     pool = _token_pool()
 
     with pytest.raises(NoAvailableAccount):
-        await pool.acquire(tenant_id)
+        async with pool.lease(tenant_id):
+            pass
 
 
 async def test_excluded_account_is_quarantined_on_build(
@@ -112,7 +115,8 @@ async def test_excluded_account_is_quarantined_on_build(
     _patch_repo(monkeypatch, [active, excluded])
     pool = _token_pool()
 
-    await pool.acquire(tenant_id)
+    async with pool.lease(tenant_id):
+        pass
 
     built = patched_lztforge[-1]
     assert str(excluded.id) in built.quarantined
@@ -128,7 +132,8 @@ async def test_excluded_account_survives_client_rebuild(
     _patch_repo(monkeypatch, accounts)
     pool = _token_pool()
 
-    await pool.acquire(tenant_id)
+    async with pool.lease(tenant_id):
+        pass
     first_pool = patched_lztforge[-1]
     assert first_pool.quarantined == []  # A is active on first build
 
@@ -136,7 +141,8 @@ async def test_excluded_account_survives_client_rebuild(
     accounts[0] = replace(account_a, status=AccountStatus.EXCLUDED)
     accounts.append(_account(tenant_id, AccountStatus.ACTIVE))
     await pool.invalidate(tenant_id)
-    await pool.acquire(tenant_id)
+    async with pool.lease(tenant_id):
+        pass
 
     rebuilt = patched_lztforge[-1]
     assert rebuilt is not first_pool
@@ -150,7 +156,8 @@ async def test_quarantine_account_syncs_cached_pool(
     active = _account(tenant_id, AccountStatus.ACTIVE)
     _patch_repo(monkeypatch, [active])
     pool = _token_pool()
-    await pool.acquire(tenant_id)
+    async with pool.lease(tenant_id):
+        pass
 
     pool.quarantine_account(tenant_id, active.id)
 
@@ -175,7 +182,8 @@ async def test_market_base_url_reaches_pooled_client_config(
     cipher.decrypt = MagicMock(return_value="decrypted-token")
     testnet = "http://127.0.0.1:8765"
     pool = TokenPool(_fake_sessionmaker, cipher, testnet)  # type: ignore[arg-type]
-    await pool.acquire(tenant_id)
+    async with pool.lease(tenant_id):
+        pass
 
     assert captured, "Client was never constructed"
     config = captured[-1].get("config")
@@ -206,8 +214,84 @@ async def test_the_pooled_client_does_not_carry_a_purchase_ceiling(
     cipher = MagicMock()
     cipher.decrypt = MagicMock(return_value="decrypted-token")
     pool = TokenPool(_fake_sessionmaker, cipher)  # type: ignore[arg-type]
-    await pool.acquire(tenant_id)
+    async with pool.lease(tenant_id):
+        pass
 
     assert captured[-1].get("config") is None, (
         "a pooled Client built with a config against prod hosts is the purchase ceiling coming back"
     )
+
+
+async def test_invalidate_does_not_close_a_pool_a_lease_still_holds(
+    monkeypatch: pytest.MonkeyPatch, patched_lztforge: list[_FakePool]
+) -> None:
+    """The use-after-close: adding or excluding an account mid-run used to aclose() the very Client
+    the running task was already holding."""
+    tenant_id = TenantId(uuid4())
+    _patch_repo(monkeypatch, [_account(tenant_id, AccountStatus.ACTIVE)])
+    pool = _token_pool()
+
+    async with pool.lease(tenant_id):
+        built = patched_lztforge[-1]
+        await pool.invalidate(tenant_id)
+        assert not built.closed, "closed underneath a live lease"
+
+    assert built.closed, "the last lease to leave must close the retired pool"
+
+
+async def test_invalidate_racing_a_build_must_not_close_the_pool_the_lease_receives(
+    monkeypatch: pytest.MonkeyPatch, patched_lztforge: list[_FakePool]
+) -> None:
+    """The lease counter has to be incremented under the SAME lock hold that publishes the entry.
+
+    ``_get_or_build`` used to publish the entry, release the tenant lock, and only then take it a
+    second time to count the lease. An ``invalidate`` queued on that lock runs in the gap, sees
+    ``leases == 0``, retires the entry and ``aclose()``s it — and the lease it was racing then hands
+    its caller an already-closed Client. That is precisely the invariant the reference count exists
+    to hold, and no test that leases and invalidates in sequence can reach it.
+    """
+    tenant_id = TenantId(uuid4())
+    accounts = [_account(tenant_id, AccountStatus.ACTIVE)]
+    building = asyncio.Event()
+    finish_build = asyncio.Event()
+
+    async def _list(_tenant_id: TenantId) -> list[Account]:
+        building.set()
+        await finish_build.wait()
+        return list(accounts)
+
+    repo = MagicMock()
+    repo.list = _list
+    monkeypatch.setattr(pool_mod, "AccountRepository", MagicMock(return_value=repo))
+    pool = _token_pool()
+
+    closed_at_lease: list[bool] = []
+
+    async def _lease() -> None:
+        async with pool.lease(tenant_id):
+            closed_at_lease.append(patched_lztforge[-1].closed)
+
+    leasing = asyncio.create_task(_lease())
+    await building.wait()
+    # Queued on the tenant lock the build is holding: it is woken the instant the build releases.
+    invalidating = asyncio.create_task(pool.invalidate(tenant_id))
+    await asyncio.sleep(0)
+    finish_build.set()
+    await asyncio.gather(leasing, invalidating)
+
+    assert closed_at_lease == [False], "the lease was handed a Client invalidate had already closed"
+
+
+async def test_invalidate_closes_immediately_when_nobody_holds_it(
+    monkeypatch: pytest.MonkeyPatch, patched_lztforge: list[_FakePool]
+) -> None:
+    tenant_id = TenantId(uuid4())
+    _patch_repo(monkeypatch, [_account(tenant_id, AccountStatus.ACTIVE)])
+    pool = _token_pool()
+
+    async with pool.lease(tenant_id):
+        pass
+    built = patched_lztforge[-1]
+    await pool.invalidate(tenant_id)
+
+    assert built.closed

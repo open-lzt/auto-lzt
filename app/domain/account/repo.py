@@ -11,8 +11,8 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 
 from app.db.base import BaseRepo
-from app.db.models import AccountORM, FlowORM, TriggerORM
-from app.domain.account.errors import DuplicateAccountToken
+from app.db.models import AccountORM, FlowORM
+from app.domain.account.errors import AccountNotFound, DuplicateAccountToken
 from app.domain.account.model import Account, AccountId, AccountStatus, TenantId
 
 
@@ -83,14 +83,16 @@ class AccountRepository(BaseRepo[Account, AccountId]):
         try:
             await self._session.flush()
         except IntegrityError as exc:
-            # Only unique constraint besides the PK; rollback is session_scope's job, not ours.
+            # create() only writes token_hash, so the only unique this insert can hit is
+            # uq_accounts_tenant_token_hash -- uq_accounts_tenant_label is set later, by
+            # set_label, which maps its own IntegrityError. Rollback is session_scope's job.
             raise DuplicateAccountToken(tenant_id) from exc
         return doc
 
     async def update(self, tenant_id: TenantId, doc: Account) -> Account:
         orm = await self._session.get(AccountORM, doc.id)
         if orm is None or orm.tenant_id != tenant_id:
-            raise KeyError(f"account {doc.id} not found for tenant {tenant_id}")
+            raise AccountNotFound(doc.id)
         orm.encrypted_token = doc.encrypted_token
         orm.status = doc.status.value
         await self._session.flush()
@@ -99,11 +101,28 @@ class AccountRepository(BaseRepo[Account, AccountId]):
     async def update_status(
         self, tenant_id: TenantId, account_id: AccountId, status: AccountStatus
     ) -> None:
-        """Flip an account's durable status. Postgres is the source of truth for pool quarantine."""
+        """Flip an account's durable status. Postgres is the source of truth for pool quarantine.
+
+        Raises ``AccountNotFound`` if absent."""
         orm = await self._session.get(AccountORM, account_id)
         if orm is None or orm.tenant_id != tenant_id:
-            raise KeyError(f"account {account_id} not found for tenant {tenant_id}")
+            raise AccountNotFound(account_id)
         orm.status = status.value
+        await self._session.flush()
+
+    async def set_token_hash(
+        self, tenant_id: TenantId, account_id: AccountId, token_hash: str
+    ) -> None:
+        """Write the fingerprint of a row that has none. Raises ``AccountNotFound`` if absent.
+
+        Exists for the one-way backfill behind the tenant-scoped fingerprint change (revision 0014):
+        the digests could not be recomputed by a migration, which holds neither the master key nor a
+        plaintext token, so the service refills them from the stored ciphertext instead.
+        """
+        orm = await self._session.get(AccountORM, account_id)
+        if orm is None or orm.tenant_id != tenant_id:
+            raise AccountNotFound(account_id)
+        orm.token_hash = token_hash
         await self._session.flush()
 
     async def save_profile(
@@ -116,10 +135,10 @@ class AccountRepository(BaseRepo[Account, AccountId]):
         currency: str,
         synced_at: datetime,
     ) -> Account:
-        """Store the profile fetched from the marketplace. Raises KeyError if absent."""
+        """Store the profile fetched from the marketplace. Raises ``AccountNotFound``."""
         orm = await self._session.get(AccountORM, account_id)
         if orm is None or orm.tenant_id != tenant_id:
-            raise KeyError(f"account {account_id} not found for tenant {tenant_id}")
+            raise AccountNotFound(account_id)
         orm.username = username
         orm.balance = balance
         orm.balance_currency = currency
@@ -130,11 +149,11 @@ class AccountRepository(BaseRepo[Account, AccountId]):
     async def set_label(
         self, tenant_id: TenantId, account_id: AccountId, label: str | None
     ) -> Account:
-        """Raises KeyError if absent. A duplicate label raises IntegrityError from the flush —
-        left uncaught here, the caller (service) maps it to the domain Conflict error."""
+        """Raises ``AccountNotFound`` if absent. A duplicate label raises IntegrityError from the
+        flush — left uncaught here, the caller (service) maps it to the domain Conflict error."""
         orm = await self._session.get(AccountORM, account_id)
         if orm is None or orm.tenant_id != tenant_id:
-            raise KeyError(f"account {account_id} not found for tenant {tenant_id}")
+            raise AccountNotFound(account_id)
         orm.label = label
         await self._session.flush()
         return _to_domain(orm)
@@ -151,21 +170,17 @@ class AccountRepository(BaseRepo[Account, AccountId]):
     async def flows_referencing(
         self, tenant_id: TenantId, account_id: AccountId
     ) -> tuple[str, ...]:
-        """Names of flows with a LIVE schedule trigger that still pin this account in their spec.
+        """Names of the tenant's flows whose spec still pins this account.
 
-        The trigger join runs in SQL; the JSONB spec is then walked in Python rather than with a
-        dialect-specific JSON operator, because Postgres (prod) and SQLite (this test suite) don't
-        share one JSON-path syntax — a Python walk is the only version testable on both.
+        EVERY flow, not only ones carrying a live schedule trigger. The join on
+        ``TriggerORM.active`` that used to be here made deleting an account look safe while a
+        paused or manually-run flow still named it, and that flow's spec kept a dangling
+        ``account_ref``.
+
+        The JSONB spec is walked in Python rather than with a dialect-specific JSON operator,
+        because Postgres (prod) and SQLite (this test suite) don't share one JSON-path syntax --
+        a Python walk is the only version testable on both.
         """
-        stmt = (
-            select(FlowORM.name, FlowORM.spec)
-            .distinct()
-            .join(TriggerORM, TriggerORM.flow_id == FlowORM.id)
-            .where(
-                FlowORM.tenant_id == tenant_id,
-                TriggerORM.tenant_id == tenant_id,
-                TriggerORM.active.is_(True),
-            )
-        )
+        stmt = select(FlowORM.name, FlowORM.spec).where(FlowORM.tenant_id == tenant_id)
         rows = (await self._session.execute(stmt)).all()
         return tuple(name for name, spec in rows if _spec_references(spec, account_id))

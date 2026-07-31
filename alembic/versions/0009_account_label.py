@@ -18,14 +18,18 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.add_column("accounts", sa.Column("label", sa.String(100), nullable=True))
-    op.add_column("accounts", sa.Column("last_seen_at", sa.DateTime(timezone=True), nullable=True))
-    # Columns land as NULL first — NULLs never collide in a unique index, so backfill is safe
-    # before the constraint goes on.
-    op.create_unique_constraint("uq_accounts_tenant_label", "accounts", ["tenant_id", "label"])
+    # batch_alter_table: SQLite cannot ADD CONSTRAINT; batch mode rebuilds the table there and
+    # passes plain ALTERs through on Postgres.
+    with op.batch_alter_table("accounts") as batch:
+        batch.add_column(sa.Column("label", sa.String(100), nullable=True))
+        batch.add_column(sa.Column("last_seen_at", sa.DateTime(timezone=True), nullable=True))
+        # Columns land as NULL first - NULLs never collide in a unique index, so backfill is safe
+        # before the constraint goes on.
+        batch.create_unique_constraint("uq_accounts_tenant_label", ["tenant_id", "label"])
 
 
 def downgrade() -> None:
-    op.drop_constraint("uq_accounts_tenant_label", "accounts", type_="unique")
-    op.drop_column("accounts", "last_seen_at")
-    op.drop_column("accounts", "label")
+    with op.batch_alter_table("accounts") as batch:
+        batch.drop_constraint("uq_accounts_tenant_label", type_="unique")
+        batch.drop_column("last_seen_at")
+        batch.drop_column("label")
