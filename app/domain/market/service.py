@@ -51,9 +51,9 @@ class MarketService:
         quarantine) picks the token. A surfaced AuthFailed excludes the offending account."""
         if self._pool is None:
             raise RuntimeError("MarketService.bump_via_pool requires a TokenPool")
-        adapter = await self._pool.acquire(tenant_id)
         try:
-            return await adapter.bump(item_id)
+            async with self._pool.lease(tenant_id) as adapter:
+                return await adapter.bump(item_id)
         except TokenInvalid as exc:
             if self._excluder is not None:
                 await self._excluder.exclude_account(tenant_id, exc.account_id)
@@ -90,9 +90,9 @@ class MarketService:
         """Reprice using the tenant's pooled Client (Wave 4)."""
         if self._pool is None:
             raise RuntimeError("MarketService.reprice_via_pool requires a TokenPool")
-        adapter = await self._pool.acquire(tenant_id)
         try:
-            return await adapter.edit(item_id, price=price, currency=currency)
+            async with self._pool.lease(tenant_id) as adapter:
+                return await adapter.edit(item_id, price=price, currency=currency)
         except TokenInvalid as exc:
             if self._excluder is not None:
                 await self._excluder.exclude_account(tenant_id, exc.account_id)
@@ -102,7 +102,7 @@ class MarketService:
         self,
         account: Account,
         *,
-        price: float,
+        price: int,
         category_id: int,
         currency: Currency,
         item_origin: ItemOrigin,
@@ -135,29 +135,53 @@ class MarketService:
         """Search using the tenant's pooled Client — a read, so any token in the pool will do."""
         if self._pool is None:
             raise RuntimeError("MarketService.search_category_via_pool requires a TokenPool")
-        adapter = await self._pool.acquire(tenant_id)
         try:
-            return await adapter.search_category(category=category, pmax=pmax)
+            async with self._pool.lease(tenant_id) as adapter:
+                return await adapter.search_category(category=category, pmax=pmax)
         except TokenInvalid as exc:
             if self._excluder is not None:
                 await self._excluder.exclude_account(tenant_id, exc.account_id)
             raise
 
-    async def fast_buy(self, item_id: int, account: Account, *, dry_run: bool) -> FastBuyResult:
+    async def fast_buy(
+        self,
+        item_id: int,
+        account: Account,
+        *,
+        dry_run: bool,
+        max_price: int | None = None,
+        max_price_currency: str | None = None,
+    ) -> FastBuyResult:
         """Buy one lot on behalf of one explicit account — the money path is always pinned."""
         token = self._cipher.decrypt(account.encrypted_token, account.tenant_id)
         adapter = MarketAdapter(token=token, account_id=account.id, base_url=self._market_base_url)
-        return await adapter.fast_buy(item_id, dry_run=dry_run)
+        return await adapter.fast_buy(
+            item_id,
+            dry_run=dry_run,
+            max_price=max_price,
+            max_price_currency=max_price_currency,
+        )
 
     async def fast_buy_via_pool(
-        self, tenant_id: TenantId, item_id: int, *, dry_run: bool
+        self,
+        tenant_id: TenantId,
+        item_id: int,
+        *,
+        dry_run: bool,
+        max_price: int | None = None,
+        max_price_currency: str | None = None,
     ) -> FastBuyResult:
         """Buy using the tenant's pooled Client — whichever token pays, pays."""
         if self._pool is None:
             raise RuntimeError("MarketService.fast_buy_via_pool requires a TokenPool")
-        adapter = await self._pool.acquire(tenant_id)
         try:
-            return await adapter.fast_buy(item_id, dry_run=dry_run)
+            async with self._pool.lease(tenant_id) as adapter:
+                return await adapter.fast_buy(
+                    item_id,
+                    dry_run=dry_run,
+                    max_price=max_price,
+                    max_price_currency=max_price_currency,
+                )
         except TokenInvalid as exc:
             if self._excluder is not None:
                 await self._excluder.exclude_account(tenant_id, exc.account_id)

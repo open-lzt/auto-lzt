@@ -13,6 +13,7 @@ from pylzt.types import Currency
 
 from app.core.schema import BaseSchema
 from app.domain.catalog.capabilities import MARKET_MUTATE, NodeCategory
+from app.domain.catalog.nodes.relist import as_price
 from app.domain.flow_engine.base_node import BaseNode, RunContext
 from app.domain.flow_engine.dtos import StepResultDTO
 from app.domain.flow_engine.errors import RunFailed
@@ -53,11 +54,13 @@ class RepriceOutput(BaseSchema):
 def _target_price(ctx: RunContext) -> int:
     price = ctx.resolve_optional("price")
     if price is not None:
-        if isinstance(price, bool) or not isinstance(price, int | float):
-            raise RunFailed(
-                ctx.run_id, ctx.node.id, f"reprice 'price' must be numeric, got {price!r}"
-            )
-        return int(price)
+        # `as_price`, not `int(price)`: truncating 100.9 to 100 reprices the lot at a number nobody
+        # chose. The batch path already validates this port with the same function, so the node and
+        # its reflective sibling stay one contract instead of two.
+        try:
+            return as_price(price)
+        except ValueError as exc:
+            raise RunFailed(ctx.run_id, ctx.node.id, f"reprice 'price': {exc}") from exc
 
     decay_pct = ctx.resolve_optional("decay_pct")
     current_price = ctx.resolve_optional("current_price")

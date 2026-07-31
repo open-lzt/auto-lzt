@@ -18,11 +18,16 @@ so no committed RunStep holds it). Echoing a placeholder id would silently poiso
 ``${relist.item_id}`` reference, so a detected replay fails the run instead — the lot exists and is
 paid for, and a human must reconcile it. Failing loudly is the honest trade for money.
 
-The guard's TTL bounds this: a resume after ``check_and_set``'s TTL sees an expired key and will
-republish. That window is inherent to the redis-TTL design and applies to every guarded node.
+The redis guard alone did NOT bound this: its key expires (and dies with a flush or a restart of a
+Redis with no persistence), and past that point a resume republished a paid lot. So the check reads
+``ctx.step_replay`` as well — the ``RunStep`` row in Postgres, written before the node runs and
+outliving the key. It is coarser (it also fires for a crash BEFORE ``publishing_add``), so a resume
+can be refused with nothing having been published; that is the cheap direction to be wrong in.
 """
 
 from __future__ import annotations
+
+from decimal import Decimal, InvalidOperation
 
 from pydantic import Field
 from pylzt.types import Currency, ItemOrigin
@@ -36,7 +41,7 @@ from app.domain.flow_engine.errors import RunFailed
 
 
 class RelistInput(BaseSchema):
-    price: float = Field(title="Цена", json_schema_extra={"x-ui": {"widget": "number"}}, gt=0)
+    price: int = Field(title="Цена", json_schema_extra={"x-ui": {"widget": "number"}}, gt=0)
     category_id: int = Field(
         title="Категория", json_schema_extra={"x-ui": {"widget": "select"}}, gt=0
     )
@@ -63,6 +68,34 @@ def _str_or_none(value: str | int | float | bool | None) -> str | None:
     return value if isinstance(value, str) else None
 
 
+def as_price(value: str | int | float | bool | None) -> int:
+    """The lot's asking price as an exact whole number.
+
+    Public because ``batch_submit`` runs its children's literals through the same gate: a batch
+    child reaches ``publishing_add`` by reflection and never executes this node, so a validator
+    that lives only in ``execute`` guards one of the two paths to the same paid call.
+
+    This port used to be ``float`` — the one money value in the module that was not exact, on the
+    call that actually charges for a listing. It is ``int`` rather than ``Decimal`` because the
+    marketplace prices lots in whole units: every price it reads back is ``int``, so a fractional
+    price here would be published as something other than what was asked for. A wired value that
+    is not whole is refused rather than rounded — rounding money silently is how you publish a lot
+    at a price nobody chose.
+    """
+    if isinstance(value, bool) or not isinstance(value, int | float | str):
+        raise ValueError(f"price must be numeric, got {value!r}")
+    try:
+        number = Decimal(str(value))
+    except InvalidOperation as exc:
+        raise ValueError(f"price must be numeric, got {value!r}") from exc
+    whole = int(number)
+    if number != whole:
+        raise ValueError(f"price must be a whole number of currency units, got {value!r}")
+    if whole <= 0:
+        raise ValueError(f"price must be positive, got {value!r}")
+    return whole
+
+
 class RelistNode(BaseNode):
     node_type = "market.relist"
     category = NodeCategory.ACTION
@@ -74,12 +107,13 @@ class RelistNode(BaseNode):
     batchable = True
 
     async def execute(self, ctx: RunContext) -> StepResultDTO:
-        price = ctx.resolve_input("price")
         category_id = ctx.resolve_input("category_id")
         currency_raw = ctx.resolve_input("currency")
         origin_raw = ctx.resolve_input("item_origin")
-        if isinstance(price, bool) or not isinstance(price, int | float):
-            raise RunFailed(ctx.run_id, ctx.node.id, f"price must be numeric, got {price!r}")
+        try:
+            price = as_price(ctx.resolve_input("price"))
+        except ValueError as exc:
+            raise RunFailed(ctx.run_id, ctx.node.id, str(exc)) from exc
         if isinstance(category_id, bool) or not isinstance(category_id, int):
             raise RunFailed(
                 ctx.run_id, ctx.node.id, f"category_id must be an int, got {category_id!r}"
@@ -93,7 +127,7 @@ class RelistNode(BaseNode):
         account = await ctx.deps.load_account(ctx.tenant_id, account_ref)
 
         first = await ctx.deps.guard.check_and_set(ctx.idempotency_key)
-        if not first:
+        if not first or ctx.step_replay:
             raise RunFailed(
                 ctx.run_id,
                 ctx.node.id,
@@ -103,7 +137,7 @@ class RelistNode(BaseNode):
 
         result = await ctx.deps.market.relist(
             account,
-            price=float(price),
+            price=price,
             category_id=category_id,
             currency=Currency(currency_raw),
             item_origin=ItemOrigin(origin_raw),

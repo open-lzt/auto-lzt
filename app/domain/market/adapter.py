@@ -25,6 +25,7 @@ import httpx
 import structlog
 from pydantic import ValidationError
 from pylzt import AuthFailed, Client, ClientConfig, Forbidden, RateLimited, TransportError
+from pylzt.errors import LztError
 from pylzt.transport.base import RequestOptions
 from pylzt.types import Currency, ItemOrigin, OrderBy
 
@@ -114,6 +115,31 @@ _CATEGORY_METHODS: Final[dict[SearchableCategory, Callable[[Client], Any]]] = {
 }
 
 
+async def _declining[T](item_id: int, call: Awaitable[T]) -> T:
+    """Run one lot-scoped marketplace call; turn every refusal OF THAT LOT into ``LotUnavailable``.
+
+    403 was the only status mapped, and it is not the only one the marketplace refuses a purchase
+    with: a lot repriced between ``purchasing_check`` and ``purchasing_fast_buy`` comes back
+    ``BadRequest`` (our pinned price no longer matches), a lot pulled from sale comes back
+    ``NotFound``. Both escaped raw past the node's ``except LotUnavailable`` and killed the run —
+    the opposite of what the ceiling was added to do.
+
+    The three errors re-raised untouched are the ones that are about US, not about this lot: a
+    dead token, a rate limit and a 5xx are run-level facts, and ``_call_with`` owns their mapping.
+    """
+    try:
+        return await call
+    except (AuthFailed, RateLimited, TransportError):
+        raise
+    except Forbidden as exc:
+        # 403 is the marketplace declining THIS lot, not rejecting us: already queued by another
+        # buyer, already sold, or not purchasable by this account. On cheap lots that is the
+        # normal case, not the exception.
+        raise LotUnavailable(item_id, exc.reason or "") from exc
+    except LztError as exc:
+        raise LotUnavailable(item_id, f"маркет отказал: {exc.code.value}") from exc
+
+
 class MarketAdapter:
     """Wraps pylzt for one marketplace call. Either pinned (``token`` + ``account_id``, builds
     and closes its own Client) or pooled (``client`` — a shared Client it does not own)."""
@@ -154,14 +180,23 @@ class MarketAdapter:
     async def publish(
         self,
         *,
-        price: float,
+        price: int,
         category_id: int,
         currency: Currency,
         item_origin: ItemOrigin,
         title: str | None = None,
         description: str | None = None,
     ) -> RelistResult:
-        """Wraps ``publishing_add`` (Wave 4) — publish a new lot."""
+        """Wraps ``publishing_add`` (Wave 4) — publish a new lot.
+
+        ``price`` is ``int``, not ``float``: this is money leaving on a paid call, and a binary
+        float does not represent it exactly. Not ``Decimal`` either, because this marketplace
+        prices lots in whole units — every price it hands BACK is typed ``int``
+        (``PurchasingCheckItem.price``, ``ListUserItem.price``) and ``managing_edit`` takes
+        ``price: int``. ``publishing_add``'s generated ``float`` is the odd one out of the five;
+        matching it would have made this the only price in the module with a different type and a
+        different exactness story.
+        """
         response = await self._call(
             lambda client: client.market.publishing_add(
                 price=price,
@@ -205,18 +240,46 @@ class MarketAdapter:
             )
         )
 
-    async def fast_buy(self, item_id: int, *, dry_run: bool) -> FastBuyResult:
+    async def fast_buy(
+        self,
+        item_id: int,
+        *,
+        dry_run: bool,
+        max_price: int | None = None,
+        max_price_currency: str | None = None,
+    ) -> FastBuyResult:
         """Wraps ``purchasing_fast_buy`` — checks and buys one lot.
 
         ``dry_run`` short-circuits before the call: the node still runs, still consumes its
         idempotency key, and reports what it would have bought. Money only moves on the false path.
+
+        ``max_price`` (optional, and meaningless without ``max_price_currency``) buys the caller a
+        price ceiling AT PURCHASE TIME, which ``search``'s ``pmax`` cannot give: that one filtered
+        at search time and the seller is free to reprice afterwards. One extra call
+        (``purchasing_check``) reads the lot's price now; a lot above the ceiling is declined as
+        ``LotUnavailable``, so the sniper skips it and keeps going instead of failing the run. The
+        price it read is then pinned onto the buy call — ``purchasing_fast_buy(price=...)`` is the
+        marketplace's own "current price of account" guard, so a reprice landing between our check
+        and our buy is refused server-side rather than paid. Without it this would be a
+        check-then-act race on money.
+
+        The cost is named because this is a snipe path where a millisecond decides the lot: with a
+        ceiling set, the pinned adapter opens its own ``Client`` per call, so the check and the buy
+        are TWO separate TLS handshakes, not one connection reused. A ceiling is worth that; an
+        unset ``max_price`` still makes exactly one call, unchanged.
         """
         if dry_run:
             return FastBuyResult(item_id=item_id, price=0, purchased=False)
+        pinned_price = (
+            await self._checked_price(item_id, max_price, max_price_currency) if max_price else None
+        )
         try:
             response = await self._call(
-                lambda client: client.market.purchasing_fast_buy(
-                    item_id=item_id, request_options=_PURCHASE_OPTIONS
+                lambda client: _declining(
+                    item_id,
+                    client.market.purchasing_fast_buy(
+                        item_id=item_id, price=pinned_price, request_options=_PURCHASE_OPTIONS
+                    ),
                 ),
             )
         except httpx.TimeoutException as exc:
@@ -224,15 +287,56 @@ class MarketAdapter:
             # below and reached the worker as a bare ReadTimeout(''). On a non-idempotent POST that
             # is the worst thing to be vague about: the purchase may well have completed.
             raise PurchaseOutcomeUnknown(item_id, PURCHASE_TIMEOUT_S) from exc
-        except Forbidden as exc:
-            # 403 here is the marketplace declining THIS lot, not rejecting us: already queued by
-            # another buyer, already sold, or not purchasable by this account. Surfacing it as a
-            # transport error made a sniper abort its whole run on the first contested lot — and on
-            # cheap lots that is the normal case, not the exception.
-            raise LotUnavailable(item_id, exc.reason or "") from exc
         return FastBuyResult(
             item_id=response.item.item_id, price=response.item.price, purchased=True
         )
+
+    async def _checked_price(
+        self, item_id: int, max_price: int, max_price_currency: str | None
+    ) -> int:
+        """The lot's price right now, or ``LotUnavailable`` if we cannot pay it.
+
+        ``purchasing_check`` is NOT a read — it is ``POST /{item_id}/check-account``, the
+        marketplace's own validity check on the lot — so a timeout here is not the unambiguous
+        "nothing happened" a GET would be. It moves no money either way, and every failure of it
+        means the same thing to the caller: we could not establish a price we are willing to pay
+        for THIS lot, so skip the lot and keep sniping rather than kill the run.
+
+        The ceiling is compared only against a price in the SAME currency. ``item.price`` is
+        denominated in ``item.price_currency``; a ceiling stated in another unit compared against
+        it is not a ceiling. No conversion is attempted — a rate guessed on the money path is
+        worse than a skipped lot.
+        """
+        try:
+            response = await self._call(
+                lambda client: _declining(item_id, client.market.purchasing_check(item_id=item_id))
+            )
+        except (httpx.HTTPError, MarketApiError) as exc:
+            # The transport half of the promise above. `_declining` maps the marketplace's own
+            # refusals, but a timeout or a 5xx on the check reached the worker bare and killed the
+            # whole run on the first slow lot — the one outcome this path exists to avoid.
+            logger.info("fast_buy_ceiling_check_failed", item_id=item_id, error=repr(exc))
+            raise LotUnavailable(item_id, "цену лота проверить не удалось") from exc
+        price = response.item.price
+        listed_currency = response.item.price_currency
+        if listed_currency is None or max_price_currency is None:
+            logger.info("fast_buy_ceiling_currency_unknown", item_id=item_id)
+            raise LotUnavailable(item_id, "валюта лота или потолка неизвестна — сравнить нельзя")
+        if listed_currency.strip().upper() != max_price_currency.strip().upper():
+            logger.info(
+                "fast_buy_ceiling_currency_mismatch",
+                item_id=item_id,
+                listed=listed_currency,
+                ceiling=max_price_currency,
+            )
+            raise LotUnavailable(
+                item_id,
+                f"лот в {listed_currency}, потолок в {max_price_currency} — сравнить нельзя",
+            )
+        if price > max_price:
+            logger.info("fast_buy_above_ceiling", item_id=item_id, price=price, ceiling=max_price)
+            raise LotUnavailable(item_id, f"цена {price} выше потолка {max_price}")
+        return price
 
     async def profile(self) -> ProfileResult:
         """Wraps ``profile_get`` — the account's own nickname and balance in one call.
@@ -330,6 +434,12 @@ class MarketAdapter:
             raise MarketApiError(status=429) from exc
         except TransportError as exc:
             raise MarketApiError(status=exc.status) from exc
+        except LztError as exc:
+            # The closing map. Three of pylzt's ~ten wire errors were named above and the rest —
+            # BadRequest, NotFound, CaptchaRequired, ProxyChallenge — left this boundary wearing
+            # their own type, which is exactly what this class exists to prevent: the domain must
+            # never have to know pylzt's tree. `code.value` is a fixed enum string, never a token.
+            raise MarketApiError(status=502, body=exc.code.value) from exc
 
     def _resolve_account(self, exc: AuthFailed) -> AccountId | None:
         """Which account owned the rejected token, or None when that cannot be known.
