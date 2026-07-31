@@ -18,6 +18,7 @@ from app.plugin_runtime.contracts import (
     PluginLoadedContext,
     PluginProcess,
     PluginReadyContext,
+    PluginSettings,
 )
 from app.plugin_runtime.errors import PluginHookError, PluginLoadError
 from app.plugin_runtime.manager import PluginManager
@@ -30,4 +31,5 @@ __all__ = [
     "PluginManager",
     "PluginProcess",
     "PluginReadyContext",
+    "PluginSettings",
 ]

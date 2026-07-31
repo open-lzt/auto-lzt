@@ -153,3 +153,40 @@ async def test_manager_quarantines_folder_key_collision(tmp_path: Path) -> None:
     mgr.discover()
     contributions = mgr.pre_init()  # must not raise
     assert "market.bump" not in {reg.node_type.key for reg in contributions.nodes}
+
+
+def test_entry_escaping_the_folder_is_quarantined(tmp_path: Path) -> None:
+    """`entry` is joined onto the folder and then EXECUTED — a traversing value must never load."""
+    (tmp_path.parent / "outside.py").write_text("raise RuntimeError('escaped')\n", encoding="utf-8")
+    _make_plugin(
+        tmp_path,
+        "esc",
+        key="x",
+        manifest=json.dumps(
+            {
+                "schema_version": 1,
+                "name": "esc",
+                "version": "1.0.0",
+                "entry": "../outside.py",
+                "requirements": [],
+            }
+        ),
+    )
+    loaded, broken = load_folder_plugins(tmp_path)
+    assert loaded == []
+    assert len(broken) == 1 and broken[0].broken
+
+
+def test_manifest_name_must_match_the_folder(tmp_path: Path) -> None:
+    """The name becomes the plugin's origin, stamped onto its nodes — it cannot be self-declared."""
+    _make_plugin(
+        tmp_path,
+        "real",
+        key="x",
+        manifest=json.dumps(
+            {"schema_version": 1, "name": "impostor", "version": "1.0.0", "requirements": []}
+        ),
+    )
+    loaded, broken = load_folder_plugins(tmp_path)
+    assert loaded == []
+    assert len(broken) == 1 and broken[0].broken

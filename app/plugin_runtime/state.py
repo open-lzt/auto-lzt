@@ -10,9 +10,12 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Final
 
+import structlog
 from pydantic import ValidationError
 
 from app.core.schema import BaseSchema
+
+log = structlog.get_logger()
 
 _STATE_FILENAME: Final = "state.json"
 
@@ -27,10 +30,17 @@ class PluginState:
         self._path = plugin_dir / _STATE_FILENAME
 
     def read(self) -> PluginToggles:
-        """The stored toggles, or the both-OFF default if the file is absent or unreadable."""
+        """The stored toggles, or the both-OFF default if the file is absent or unreadable.
+
+        A CORRUPT file falls back to the same default as a missing one, which is safe and silent —
+        and silence is how "auto-update stopped working" stays unexplained. A file that exists but
+        does not parse is logged; an absent one is the normal first-run state and is not.
+        """
         try:
             return PluginToggles.model_validate_json(self._path.read_text(encoding="utf-8"))
-        except (OSError, ValidationError):
+        except (OSError, ValidationError) as exc:
+            if self._path.exists():
+                log.warning("plugin.state_unreadable", path=str(self._path), error=repr(exc))
             return PluginToggles()
 
     def write(self, toggles: PluginToggles) -> None:
