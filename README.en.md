@@ -301,7 +301,7 @@ And DNS rebinding has nothing to re-resolve: the address is already pinned.
 Redirects are rejected, not followed.
 
 ```bash
-LZT_FLOW_EGRESS_ALLOWED_HOSTS=api.telegram.org   # comma-separated; empty means "can't reach anything"
+LZT_FLOW_EGRESS_ALLOWED_HOSTS=api.telegram.org   # comma-separated; empty means "can't reach anything"; an entry is port 443, else host:port
 ```
 
 Unconfigured means unreachable — deliberately.

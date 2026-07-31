@@ -107,6 +107,19 @@ scripts/install.sh                   # docker + compose, .env из .env.example,
 - `LZT_FLOW_*` — собственные настройки lzt-flow.
   Здесь `LZT_FLOW_MASTER_KEY` — envelope-ключ, которым шифруются токены аккаунтов.
 
+  Ловушка: это **не пароль**. Ключ обязан быть base64-urlsafe ровно 32 байта — любое другое
+  значение отклоняется на старте. Причина: ключ не растягивается, и слабый открывает
+  оффлайн-перебор всей таблицы токенов.
+
+  Сгенерировать:
+
+  ```bash
+  python -c "from cryptography.fernet import Fernet;print(Fernet.generate_key().decode())"
+  ```
+
+  API-процесс без этого ключа не стартует: он отдаёт `POST /accounts`, а без ключа этот
+  эндпоинт принял бы живой токен и упал уже после этого.
+
 - `LZT_*` — встроенный движок `lzt-eventus`, нужен только для триггера `on-event`.
   Здесь `LZT_TOKENS` (токены для поллинга) и `LZT_TOKEN_ENC_KEY`.
 
@@ -296,7 +309,7 @@ loopback. А DNS rebinding нечего переразрешать: адрес �
 Редиректы отклоняются, а не следуются.
 
 ```bash
-LZT_FLOW_EGRESS_ALLOWED_HOSTS=api.telegram.org   # через запятую; пусто значит "никуда не достучаться"
+LZT_FLOW_EGRESS_ALLOWED_HOSTS=api.telegram.org   # через запятую; пусто значит "никуда не достучаться"; запись = порт 443, иначе host:port
 ```
 
 Ненастроенное значит недостижимое — осознанно.

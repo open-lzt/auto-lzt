@@ -119,6 +119,12 @@ Don't forget to open the host for nodes that need network access:
 LZT_FLOW_EGRESS_ALLOWED_HOSTS=api.telegram.org,discord.com
 ```
 
+An entry opens port 443 only. Another port is named explicitly, as `host:port`:
+
+```bash
+LZT_FLOW_EGRESS_ALLOWED_HOSTS=api.telegram.org,api.example.com:8443
+```
+
 ## See also
 
 - [Plugins](plugins.en.md) — how to write a node

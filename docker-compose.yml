@@ -36,6 +36,10 @@ services:
   api:
     build: .
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+    # Bounds a runaway request handler / plugin from starving postgres+redis on the same host.
+    # Raise if a heavier plugin genuinely needs more; this is a floor, not a measured ceiling.
+    mem_limit: 512m
+    cpus: 1.0
     environment:
       LZT_FLOW_DATABASE_URL: postgresql+asyncpg://lzt:${POSTGRES_PASSWORD:-lzt}@postgres:5432/lztflow
       LZT_FLOW_REDIS_URL: redis://:${REDIS_PASSWORD:-}@redis:6379/0
@@ -90,6 +94,10 @@ services:
   worker:
     build: .
     command: python -m app.worker
+    # Same floor as `api` — arq jobs and the scheduler run in-process here, so a leaked/heavy
+    # plugin job can't take down postgres/redis for the rest of the stack.
+    mem_limit: 512m
+    cpus: 1.0
     environment:
       LZT_FLOW_DATABASE_URL: postgresql+asyncpg://lzt:${POSTGRES_PASSWORD:-lzt}@postgres:5432/lztflow
       LZT_FLOW_REDIS_URL: redis://:${REDIS_PASSWORD:-}@redis:6379/0

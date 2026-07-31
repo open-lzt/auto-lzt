@@ -115,6 +115,12 @@ sudo systemctl restart open-lzt-flow-worker open-lzt-flow-api
 LZT_FLOW_EGRESS_ALLOWED_HOSTS=api.telegram.org,discord.com
 ```
 
+Запись открывает только порт 443. Другой порт — явно, через `host:port`:
+
+```bash
+LZT_FLOW_EGRESS_ALLOWED_HOSTS=api.telegram.org,api.example.com:8443
+```
+
 ## См. также
 
 - [Плагины](plugins.md) — как написать узел

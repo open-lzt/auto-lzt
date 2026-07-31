@@ -333,27 +333,49 @@ class FakeMarket:
         self.bump_pinned_calls: list[tuple[AccountId, int]] = []
         self.reprice_calls: list[tuple[int, int, Currency]] = []
         self.reprice_pinned_calls: list[tuple[AccountId, int, int, Currency]] = []
-        self.relist_calls: list[tuple[float, int, Currency, ItemOrigin]] = []
+        self.relist_calls: list[tuple[int, int, Currency, ItemOrigin]] = []
         self.pages: dict[tuple[AccountId, int], LotsPage] = {}
         # Recorded SEPARATELY, and each keeps the identity it was called with. The money call is
         # the one place "which account paid" is the whole question, so a fake that flattened both
         # paths into one list could not tell a pinned purchase from a pooled one.
         self.fast_buy_pinned_calls: list[tuple[AccountId, int, bool]] = []
         self.fast_buy_pooled_calls: list[tuple[TenantId, int, bool]] = []
+        # Every ceiling the money path was handed, in call order — a test asserts the node passed
+        # one through rather than that the adapter enforced it (the adapter owns enforcement).
+        self.fast_buy_ceilings: list[int | None] = []
+        self.fast_buy_ceiling_currencies: list[str | None] = []
         self.fast_buy_price: int = 100
         self.fast_buy_unavailable: str | None = None
         self.search_calls: list[tuple[SearchableCategory, float]] = []
         self.search_hits: tuple[SearchHit, ...] = ()
 
-    async def fast_buy(self, item_id: int, account: Account, *, dry_run: bool) -> FastBuyResult:
+    async def fast_buy(
+        self,
+        item_id: int,
+        account: Account,
+        *,
+        dry_run: bool,
+        max_price: int | None = None,
+        max_price_currency: str | None = None,
+    ) -> FastBuyResult:
+        self.fast_buy_ceilings.append(max_price)
+        self.fast_buy_ceiling_currencies.append(max_price_currency)
         if self.fast_buy_unavailable is not None:
             raise LotUnavailable(item_id, self.fast_buy_unavailable)
         self.fast_buy_pinned_calls.append((account.id, item_id, dry_run))
         return FastBuyResult(item_id=item_id, price=self.fast_buy_price, purchased=not dry_run)
 
     async def fast_buy_via_pool(
-        self, tenant_id: TenantId, item_id: int, *, dry_run: bool
+        self,
+        tenant_id: TenantId,
+        item_id: int,
+        *,
+        dry_run: bool,
+        max_price: int | None = None,
+        max_price_currency: str | None = None,
     ) -> FastBuyResult:
+        self.fast_buy_ceilings.append(max_price)
+        self.fast_buy_ceiling_currencies.append(max_price_currency)
         if self.fast_buy_unavailable is not None:
             raise LotUnavailable(item_id, self.fast_buy_unavailable)
         self.fast_buy_pooled_calls.append((tenant_id, item_id, dry_run))
@@ -383,7 +405,7 @@ class FakeMarket:
         self,
         account: Account,
         *,
-        price: float,
+        price: int,
         category_id: int,
         currency: Currency,
         item_origin: ItemOrigin,
@@ -446,6 +468,7 @@ def build_ctx(
     load_account: Callable[[TenantId, AccountId], Awaitable[Account]] | None = None,
     get_client: object | None = None,
     loop_iteration: int = 0,
+    step_replay: bool = False,
 ) -> RunContext:
     """A RunContext for a single node's ``execute()``, resolving inputs the same way the real
     interpreter's ``_make_resolver`` does — direct node-level tests don't need the full runtime."""
@@ -472,5 +495,6 @@ def build_ctx(
             get_client=get_client,  # type: ignore[arg-type]
         ),
         active_account_id=active_account,
+        step_replay=step_replay,
         loop_iteration=loop_iteration,
     )

@@ -12,7 +12,7 @@ import pytest
 from arq.connections import ArqRedis
 
 # Every non-live test runs against the respx double, never a live token.
-pytest_plugins = ["tests.fixtures.mock_lzt_server"]
+pytest_plugins = ["tests.fixtures.mock_lzt_server", "tests.fixtures.pg"]
 
 
 @pytest.fixture(autouse=True)
