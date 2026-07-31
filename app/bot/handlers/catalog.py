@@ -20,7 +20,7 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 from app.bot.api_client import FlowApiClient
 from app.bot.dtos import ModuleView, NodeView
 from app.bot.render.pagination import add_nav, page_of
-from app.bot.render.reply import edit
+from app.bot.render.reply import edit, safe
 from app.bot.render.schema_form import build_form, render_prompt
 
 router = Router(name="catalog")
@@ -63,7 +63,7 @@ class _CapabilityLabels:
     def render(cls, capabilities: list[str]) -> str:
         if not capabilities:
             return "—"
-        return ", ".join(cls._LABELS.get(cap, cap) for cap in capabilities)
+        return ", ".join(cls._LABELS.get(cap, safe(cap)) for cap in capabilities)
 
 
 class NodesMenuScreen:
@@ -92,9 +92,10 @@ class NodeCardScreen:
     def text(node: NodeView) -> str:
         caps = _CapabilityLabels.render(node.capabilities)
         form = build_form(node.key, node.input_schema)
+        key = safe(node.key)
         if not form.fields:
-            return f"<code>{node.key}</code> — {caps}\n\nНе принимает параметров."
-        blocks = [f"<code>{node.key}</code> — {caps}", ""]
+            return f"<code>{key}</code> — {caps}\n\nНе принимает параметров."
+        blocks = [f"<code>{key}</code> — {caps}", ""]
         blocks.extend(render_prompt(field) for field in form.fields)
         return "\n\n".join(blocks)
 
@@ -133,7 +134,7 @@ class ModulesMenuScreen:
 class ModuleCardScreen:
     @staticmethod
     def text(module: ModuleView, note: str | None = None) -> str:
-        base = f"<b>{module.name}</b>\nВерсия: {module.version}"
+        base = f"<b>{safe(module.name)}</b>\nВерсия: {safe(module.version)}"
         return f"{base}\n\n{note}" if note else base
 
     @staticmethod
@@ -224,7 +225,7 @@ async def install_module(
     result = await api.import_module(callback_data.arg)
     modules = await api.official_modules()
     _items, total_pages = page_of(modules, 0)
-    note = f"Установлено как флоу <code>{result.flow_id}</code>. Откройте /flows."
+    note = f"Установлено как флоу <code>{safe(result.flow_id)}</code>. Откройте /flows."
     return edit(
         c,
         ModulesMenuScreen.text(modules, 0, total_pages, note=note),

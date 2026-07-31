@@ -20,7 +20,7 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 from app.bot.api_client import FlowApiClient
 from app.bot.dtos import FlowView, InvokeResult, TraceEntry
 from app.bot.render.pagination import add_nav, page_of
-from app.bot.render.reply import edit
+from app.bot.render.reply import edit, safe
 
 router = Router(name="flows")
 
@@ -61,7 +61,7 @@ class FlowsMenuScreen:
 class FlowCardScreen:
     @staticmethod
     def text(flow: FlowView) -> str:
-        return f"<b>{flow.name}</b>\n<code>{flow.flow_id}</code>"
+        return f"<b>{safe(flow.name)}</b>\n<code>{safe(flow.flow_id)}</code>"
 
     @staticmethod
     def keyboard(flow: FlowView) -> InlineKeyboardMarkup:
@@ -75,7 +75,7 @@ class FlowCardScreen:
 class RunResultScreen:
     @staticmethod
     def text(result: InvokeResult) -> str:
-        return f"Готово: <b>{result.status}</b>\nРан: <code>{result.run_id}</code>"
+        return f"Готово: <b>{safe(result.status)}</b>\nРан: <code>{safe(result.run_id)}</code>"
 
     @staticmethod
     def keyboard(result: InvokeResult, flow_id: str) -> InlineKeyboardMarkup:
@@ -94,7 +94,10 @@ class LogsScreen:
     def text(entries: list[TraceEntry]) -> str:
         if not entries:
             return "Логов нет — ран ещё не начал выполняться."
-        lines = [f"<code>{e.node_id}</code> {e.node_type} · {e.duration_ms} мс" for e in entries]
+        lines = [
+            f"<code>{safe(e.node_id)}</code> {safe(e.node_type)} · {e.duration_ms} мс"
+            for e in entries
+        ]
         return "<b>Логи</b>\n" + "\n".join(lines)
 
     @staticmethod

@@ -135,7 +135,7 @@ async def run() -> None:
     plugins.discover()
     contributions = plugins.pre_init()
 
-    api = FlowApiClient(settings.api_base_url, settings.api_key)
+    api = FlowApiClient(settings.api_base_url, settings.api_key.get_secret_value())
     bot = Bot(
         settings.token.get_secret_value(),
         default=DefaultBotProperties(parse_mode=ParseMode.HTML),

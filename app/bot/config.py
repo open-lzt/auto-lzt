@@ -22,7 +22,7 @@ class BotSettings(BaseSettings):
     # client of the same surface the web UI uses, so a capability the bot has is one the API
     # already exposes and audits.
     api_base_url: str = Field(default="http://127.0.0.1:8000")
-    api_key: str = Field(default="")
+    api_key: SecretStr = Field(default=SecretStr(""))
 
     @field_validator("admin_ids", mode="before")
     @classmethod
