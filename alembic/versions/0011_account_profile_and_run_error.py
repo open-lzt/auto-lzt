@@ -24,7 +24,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision = "0011_account_profile_and_run_error"
-down_revision = "0010_accounts_created_at_tz"
+down_revision = "0010b_widen_alembic_version"
 branch_labels = None
 depends_on = None
 

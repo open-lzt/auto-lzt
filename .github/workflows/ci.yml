@@ -56,8 +56,13 @@ jobs:
         run: uv run pytest --cov=app --cov-report=term-missing
       # Fails the build on a known-vulnerable dependency in the locked resolution — the same
       # `uv.lock` that ships to prod, not a fresh unlocked resolve.
+      # The local test-fixture package is dropped: it is an editable path dependency, and pip-audit
+      # installs the file with hashes required, where a directory has no single file to hash. It
+      # carries no third-party code, so auditing it would report nothing anyway.
       - name: Export locked requirements
-        run: uv export --extra dev --frozen --no-emit-project --format requirements-txt -o requirements-audit.txt
+        run: |
+          uv export --extra dev --frozen --no-emit-project --format requirements-txt \
+            | grep -v 'tests/fixtures/plugin_pkg' > requirements-audit.txt
       - name: pip-audit
         run: uvx pip-audit --strict -r requirements-audit.txt
 
