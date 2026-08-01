@@ -27,7 +27,10 @@ from uuid import UUID, uuid4
 
 os.environ.setdefault("LZT_FLOW_DATABASE_URL", "sqlite+aiosqlite:///dev.db")
 os.environ.setdefault("LZT_FLOW_REDIS_URL", "redis://dev-fake/0")
-os.environ.setdefault("LZT_FLOW_MASTER_KEY", "dev-only-master-key-not-secret")
+# A real 32-byte key, not a passphrase: Settings rejects anything else, because HKDF derives from
+# the key and does not stretch it. Fixed rather than generated so a dev database stays readable
+# between runs — it is published in this file, so it protects nothing and must never leave dev.
+os.environ.setdefault("LZT_FLOW_MASTER_KEY", "ZGV2LW9ubHktbm90LXNlY3JldC0zMi1ieXRlcy1rZXk=")
 os.environ.setdefault("LZT_FLOW_ALLOW_UNAUTHENTICATED", "1")
 
 import fakeredis  # noqa: E402
