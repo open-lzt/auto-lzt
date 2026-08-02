@@ -1,366 +1,158 @@
 <p align="right"><a href="README.en.md">English</a> · <b>Русский</b></p>
 
-<p align="center">
-  <strong>lzt-flow</strong>
-</p>
+# auto-lzt
 
-<p align="center">
-  <strong>Серверная no-code автоматизация для маркетплейса lzt.market</strong>
-</p>
+Серверный движок no-code автоматизаций для [lzt.market](https://lzt.market). Задача описывается графом узлов, а не скриптом: «искать Steam дешевле 500 и покупать», «поднимать лоты каждые 4 часа».
 
-<p align="center">
-  <a href="https://github.com/open-lzt/auto-lzt/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/open-lzt/auto-lzt/ci.yml?branch=main&style=for-the-badge" alt="CI status"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge" alt="License"></a>
-</p>
-
-> **Про имя.** Репозиторий на GitHub переименован из `lzt-flow` в **`auto-lzt`**.
-> Пакет, модуль, CLI и почти вся дока по-прежнему зовутся **`flow`** / `lzt-flow`.
-> Это один проект. Менять у себя ничего не нужно.
-
-Опиши флоу → нажми Deploy → закрой вкладку.
-
-Флоу продолжит работать **на сервере**. 24/7, без твоей машины.
-
-**Флоу** — цепочка шагов. Например: по расписанию → взять мои лоты → для каждого аккаунта →
-поднять лот + переставить цену.
-
-**Узел** — один шаг этой цепочки. `market.bump` — узел.
-
-Это и есть референсный флоу, вокруг которого построен весь проект.
-Продавец собирает его один раз, жмёт Deploy — и лоты поднимаются с сервера по расписанию.
-
-Переживает закрытую вкладку. Переживает рестарт воркера: возобновляется с последнего
-закоммиченного шага и **никогда не делает одно действие дважды**.
-
-[Архитектура](ARCHITECTURE.md) · [Плагины](docs/plugins.md) · [Модули](docs/modules.md) · [Флоу](docs/flow-design-guide.md) · [Грабли](docs/runbooks/README.md) · [Доки для AI-агентов](docs/for_ai/) · [Issues](../../issues)
-
-> Здесь должна быть GIF-демка канваса — как её записать, см. [docs/DEMO.md](docs/DEMO.md).
-
-## Авторинг — это текст, а не мышка
-
-Готовые флоу лежат в [официальном реестре](https://github.com/open-lzt/lzt-flows).
-
-Оттуда ставится **модуль** — это готовый флоу, упакованный как **данные**, не код.
-Поставил из реестра, запустил из Telegram.
-
-Сам движок расширяется по-другому — установкой Python-пакета. Два формата:
-
-- **пак узлов** — один новый тип узла;
-- **[плагин](docs/plugins.md)** — узлы + API-роуты + бот-хендлеры + lifecycle.
-
-Владелец ставит и то и другое прямо из меню `/plugins` телеграм-бота.
-
-Бот полностью кнопочный: посмотреть флоу, запустить с чтением логов, поставить модуль или плагин.
-
-Визуальный канвас в репозитории тоже есть, но **выключен по умолчанию** —
-почему именно так, см. *Отложено, не мертво* ниже.
-
-## Быстрый старт
-
-### Dev-режим без Docker
-
-Самый быстрый путь: SQLite + fakeredis + мок-маркет.
-
-Ноль внешних сервисов, весь основной цикл в одном процессе.
+**Репозиторий называется `auto-lzt`, а пакет, CLI и документация — `lzt-flow`.** Это следы переименования, не две разные вещи.
 
 ```bash
 uv sync --extra dev
-uv run python dev.py                 # dev API на http://127.0.0.1:8000
-pnpm --dir frontend dev              # канвас React Flow на http://localhost:5173
+uv run python dev.py --demo
 ```
 
-Проверить цикл end-to-end одной командой:
+## Разработка без Docker
+
+`dev.py` поднимает всё на SQLite, fakeredis и мок-маркете — ни токена, ни базы, ни реальных денег.
 
 ```bash
-uv run python dev.py --demo          # прогоняет один bump-флоу -> печатает FINAL run -> {... 'status': 'completed'}
-# или:  bash scripts/smoke.sh        # тот же гейт, exit 0/1 (это то, что гоняет CI)
+uv sync --extra dev
+uv run python dev.py            # API на 127.0.0.1:8000
+uv run python dev.py --demo     # то же плюс демо-данные
+bash scripts/smoke.sh           # сквозная проверка: создать → скомпилировать → запустить
+pnpm --dir frontend dev         # холст флоу, отдельный процесс
 ```
 
-### Продакшен через Docker
+## Прод
 
 ```bash
-scripts/install.sh                   # docker + compose, .env из .env.example, миграции, стек поднят
-# API на http://localhost:8000 · канвас на http://localhost:5173 · health на /health
+scripts/install.sh    # Docker + compose, .env из .env.example, миграции, запуск
+scripts/update.sh     # подтянуть, мигрировать, перезапустить
+scripts/backup.sh     # дамп БД
+scripts/restore.sh    # накатить дамп обратно
 ```
 
-Поставьте перед ним reverse proxy (nginx/Caddy) для HTTPS.
+`LZT_FLOW_MASTER_KEY` обязателен для процесса API — пустое значение отклоняется на старте, а не всплывает при первом обращении к токену.
 
-Никогда не оставляйте деплой с настоящими токенами маркетплейса на голом HTTP.
+```bash
+LZT_FLOW_MASTER_KEY=$(python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())")
+```
 
-## Управление
+## CLI
 
-| Действие | Команда |
+Пакет ставит две команды: `lzt-flow` для операторских задач и `lzt-flow-validate` для проверки модуля.
+
+Глобальные флаги идут **до** подкоманды:
+
+```bash
+lzt-flow --api http://127.0.0.1:8000 --json list
+```
+
+| Флаг | Что делает |
 |---|---|
-| Статус / здоровье | `curl http://localhost:8000/health` |
-| Логи | `docker compose logs -f api worker` |
-| Обновление | `scripts/update.sh` — тянет, мигрирует, рестартует |
-| Бэкап / восстановление | `scripts/backup.sh` / `scripts/restore.sh` (Postgres) |
-| Управление | UI канваса на `http://localhost:5173` |
-| Удаление | `docker compose down -v` (контейнеры + volumes; отдельного скрипта нет) |
+| `--api URL` | адрес API, по умолчанию `http://127.0.0.1:8000` |
+| `--api-key KEY` | ключ, если не задан в окружении — виден в `ps` и в истории |
+| `--env-file PATH` | откуда читать `.env`, по умолчанию `.env` |
+| `--json` | машинночитаемый вывод |
+
+| Команда | Что делает |
+|---|---|
+| `status` | здоровье сервисов и режим маркета |
+| `modules` | доступные модули из каталога |
+| `list` | флоу: id, имя, скомпилирован ли |
+| `install <MODULE> [--param K=V] [--account ID]` | создать флоу из модуля |
+| `params <FLOW_ID>` | объявленные параметры флоу |
+| `run <FLOW_ID> [--param K=V] [--watch] [--no-dry-run]` | запустить; `dry_run` включён по умолчанию |
+| `runs [--flow ID]` | недавние запуски |
+| `trace <RUN_ID\|FLOW_ID>` | трейс по узлам |
+| `accounts [add --token --label]` | список аккаунтов или добавление |
+
+`run` без `--no-dry-run` ничего не покупает. Выключайте холостой прогон, когда посмотрели трейс.
+
+## REST API
+
+| Префикс | О чём |
+|---|---|
+| `/flows` | создание, обновление, компиляция, запуск, триггеры, экспорт |
+| `/runs` | статус запуска, трейс, поток событий |
+| `/accounts` | токены маркета |
+| `/modules` · `/plugins` | каталог модулей и плагинов, установка |
+| `/catalog` | доступные типы узлов и динамические методы pylzt |
+| `/tasks` | расписания |
+| `/panel` · `/auth` | веб-панель |
+
+Полный цикл целиком:
+
+```bash
+API=http://127.0.0.1:8000
+
+FLOW=$(curl -sX POST $API/flows/create -H 'Content-Type: application/json' -d '{
+  "name": "demo",
+  "entry_node_id": "search",
+  "nodes": [{"id":"search","type":"market.search","inputs":{"category":{"literal":"steam"}}}]
+}' | jq -r .flow_id)
+
+curl -sX POST $API/flows/$FLOW/compile
+RUN=$(curl -sX POST $API/runs/create -H 'Content-Type: application/json' \
+  -d "{\"flow_id\":\"$FLOW\",\"params\":{}}" | jq -r .run_id)
+
+curl -s $API/runs/$RUN/get
+curl -s $API/runs/$RUN/trace
+```
+
+Повесить расписание:
+
+```bash
+curl -sX POST $API/flows/$FLOW/triggers/create -H 'Content-Type: application/json' \
+  -d '{"kind":"schedule","schedule_cron":"*/30 * * * *"}'
+```
+
+Ошибки приходят конвертом `{code, message, request_id}` — `request_id` ищите в логах.
+
+## Готовые флоу и плагины
+
+| Каталог | Что там | Кто публикует |
+|---|---|---|
+| [lzt-flows](https://github.com/open-lzt/lzt-flows) | модули-графы, это данные | любой автор через PR |
+| [lzt-plugins](https://github.com/open-lzt/lzt-plugins) | исполняемый `.py`, работает в процессе движка с вашими токенами, без песочницы | только владелец стенда, из меню бота |
 
 ## Конфигурация
 
-Скопируйте `.env.example` → `.env` и заполните секреты.
+Префикс `LZT_FLOW_`. Главное:
 
-Дальше ловушка, на которой спотыкаются: конфигов **два**, и они разные. Это осознанно.
+| Переменная | По умолчанию | Что это |
+|---|---|---|
+| `LZT_FLOW_MASTER_KEY` | — | Fernet-ключ шифрования токенов, обязателен |
+| `LZT_FLOW_DATABASE_URL` | `postgresql+asyncpg://lzt:lzt@localhost:5432/lztflow` | Postgres |
+| `LZT_FLOW_REDIS_URL` | `redis://localhost:6379/0` | Redis для очереди |
+| `LZT_FLOW_API_KEY` | пусто | общий секрет для `X-API-Key`; пусто — проверка выключена |
+| `LZT_FLOW_EGRESS_ALLOWED_HOSTS` | пусто | куда узлам-запросам можно ходить; пусто означает никуда |
+| `LZT_FLOW_DEFAULT_TENANT_ID` | `00000000-…-0001` | арендатор по умолчанию |
+| `LZT_FLOW_BOT_ENABLED` | `0` | Telegram-бот управления |
+| `LZT_FLOW_BOT_TOKEN` · `LZT_FLOW_BOT_ADMIN_IDS` | — | токен от @BotFather и id администраторов |
+| `LZT_FLOW_PLUGIN_DIR` | `.system/plugins` | куда распаковываются плагины |
+| `LZT_FLOW_PLUGIN_INDEX_URL` | каталог `lzt-plugins` | откуда берётся список плагинов |
+| `LZT_FLOW_WORKER_ID` | `worker-1` | имя воркера |
 
-- `LZT_FLOW_*` — собственные настройки lzt-flow.
-  Здесь `LZT_FLOW_MASTER_KEY` — envelope-ключ, которым шифруются токены аккаунтов.
+Пустой `LZT_FLOW_EGRESS_ALLOWED_HOSTS` закрыт, а не открыт: узел-запрос без списка не сходит никуда.
 
-  Ловушка: это **не пароль**. Ключ обязан быть base64-urlsafe ровно 32 байта — любое другое
-  значение отклоняется на старте. Причина: ключ не растягивается, и слабый открывает
-  оффлайн-перебор всей таблицы токенов.
+Движок событий настраивается своими переменными с префиксом `LZT_` — они отдельные, `LZT_TOKEN_ENC_KEY` не то же самое, что `LZT_FLOW_MASTER_KEY`. Полный список — `.env.example`.
 
-  Сгенерировать:
-
-  ```bash
-  python -c "from cryptography.fernet import Fernet;print(Fernet.generate_key().decode())"
-  ```
-
-  API-процесс без этого ключа не стартует: он отдаёт `POST /accounts`, а без ключа этот
-  эндпоинт принял бы живой токен и упал уже после этого.
-
-- `LZT_*` — встроенный движок `lzt-eventus`, нужен только для триггера `on-event`.
-  Здесь `LZT_TOKENS` (токены для поллинга) и `LZT_TOKEN_ENC_KEY`.
-
-**ФАКТ, который надо запомнить:** `LZT_TOKEN_ENC_KEY` ≠ `LZT_FLOW_MASTER_KEY`. Это два разных ключа.
-
-### Гонять против фейкового маркета
-
-`LZT_FLOW_MARKET_BASE_URL` перенаправляет обращения к маркету на другой бэкенд.
-По умолчанию не задан — значит настоящий `prod-api.lzt.market`.
-
-Зачем: тестировать локально, не трогая реальный маркетплейс.
-
-Сразу убьём неверную модель: это **не** dry-run. Код всё так же выполняет настоящие HTTP-запросы —
-просто в фейковый сервер.
-
-Поднимите его из соседнего репозитория `lzt-testnet` (полный quickstart — в его README):
+## Разработка
 
 ```bash
-cd ../lzt-testnet && scripts/run.sh          # мок-маркет на 127.0.0.1:8765
-# в этом репозитории:
-LZT_FLOW_MARKET_BASE_URL=http://127.0.0.1:8765 uv run python dev.py --demo
+uv run ruff check .
+uv run mypy app --strict
+uv run pytest -q          # e2e и live исключены по умолчанию
+uv run pytest -m e2e
 ```
 
-**Известный пробел.** Переменную видит только эфемерный путь создания `MarketAdapter` — тот, что
-собирается на каждый вызов.
+Документация: [ARCHITECTURE.md](ARCHITECTURE.md) · [дизайн флоу](docs/flow-design-guide.md) · [модули](docs/modules.md) · [плагины](docs/plugins.md) · [ранбуки](docs/runbooks/README.md) · [для AI-агентов](docs/for_ai/)
 
-Путь через пул-клиент (`MarketAdapter(client=...)`, где `httpx.AsyncClient` расшарен) её **не**
-учитывает. Ограничение документированное, а не тихое.
+## Экосистема
 
-## Примеры
-
-Два независимых способа работать с запущенным инстансом.
-
-Не прогрессия «сначала одно, потом другое» — выбирайте по поверхности интеграции.
-
-### REST API — запустить флоу императивно
-
-Когда нужно заскриптовать разовый запуск или свою автоматизацию поверх API.
-
-```bash
-# examples/01_rest_flow.sh
-curl -sS -X POST http://localhost:8000/flows/create \
-  -H 'Content-Type: application/json' \
-  -d '{
-        "name": "bump-once",
-        "entry_node_id": "bump",
-        "nodes": [{"id": "bump", "type": "market.bump", "inputs": {"item_id": {"literal": 123456}}}]
-      }'
-# -> {"flow_id": "..."}
-
-curl -sS -X POST "http://localhost:8000/flows/<flow_id>/compile"
-# -> {"flow_ir_id": "...", "node_count": 1}
-
-curl -sS -X POST http://localhost:8000/runs/create \
-  -H 'Content-Type: application/json' -d '{"flow_id": "<flow_id>"}'
-# -> {"run_id": "...", "status": "pending"}
-
-curl -sS "http://localhost:8000/runs/<run_id>/get"
-# -> {"run_id": "...", "status": "completed"}
-```
-
-`X-API-Key` обязателен на мутирующих вызовах, как только задан `LZT_FLOW_API_KEY`.
-По умолчанию он пуст — это нормально для self-host только на loopback.
-
-#### Параметры и синхронный invoke
-
-Флоу может объявить **поверхность параметров** — плоский набор настроек: задержка, количество,
-категория.
-
-Зачем она: чтобы править их в одной форме, а не искать значения внутри отдельных узлов.
-
-Объявляются под `params`, а из входа узла на них ссылаются литералом `"{{vars.<key>}}"`:
-
-```jsonc
-{
-  "name": "bump-one",
-  "entry_node_id": "bump",
-  "params": [{ "key": "item_id", "label": "ID лота", "control": "number", "required": true, "default": 1 }],
-  "nodes": [{ "id": "bump", "type": "market.bump", "inputs": { "item_id": { "literal": "{{vars.item_id}}" } } }]
-}
-```
-
-Тело `params` принимают оба эндпойнта — `POST /runs/create` и `POST /flows/{id}/invoke`.
-Оба проверяют его против объявленной поверхности.
-
-Разница между ними: `invoke` выполняет флоу **синхронно** и возвращает финальный вывод.
-
-Отсюда потолок: `LZT_FLOW_FLOW_INVOKE_TIMEOUT_S`, по умолчанию `60` секунд.
-Для долгих флоу — асинхронный `/runs/create`.
-
-```bash
-curl -sS -X POST "http://localhost:8000/flows/<flow_id>/invoke" \
-  -H 'Content-Type: application/json' -d '{"params": {"item_id": 123456}}'
-# -> {"run_id": "...", "status": "completed", "output": {...}}
-```
-
-### Триггеры — чтобы флоу запускал себя сам
-
-Тот самый автопилот: после настройки императивных вызовов больше нет.
-
-```bash
-# examples/03_attach_schedule_trigger.sh
-curl -sS -X POST "http://localhost:8000/flows/<flow_id>/triggers/create" \
-  -H 'Content-Type: application/json' \
-  -d '{"kind": "schedule", "schedule_cron": "*/30 * * * *"}'
-
-curl -sS "http://localhost:8000/flows/<flow_id>/status"
-# -> {"running": true, "active_accounts": N, "last_run_at": "..."}
-```
-
-## Архитектура
-
-lzt-flow — тонкий доменный слой над экосистемой `lzt-*`.
-
-`pylzt` (транспорт) и `lzt-eventus` (событийная фабрика) **переиспользуются, а не переписываются**.
-
-Полная сравнительная таблица (vs. клиентский flow-билдер) и диаграмма рантайма —
-в **[ARCHITECTURE.md](ARCHITECTURE.md)**.
-
-> `pylzt` и `lzt-eventus` живут в отдельных публичных репозиториях организации
-> [`open-lzt`](https://github.com/open-lzt) и подключены как git-зависимости в `pyproject.toml`.
-> Отдельно клонировать их не нужно: `uv sync` тянет их сам.
-
-Проектируете флоу из текстового описания? См. **[гайд по проектированию флоу](docs/flow-design-guide.md)**
-и скилл `flow-from-text` (`.claude/skills/flow-from-text/`) — он превращает описание на обычном
-языке в `FlowSpec`, проверенный компиляцией и dry-run.
-
-### Чему на самом деле равен `sha256` модуля
-
-У каждого модуля в `index.json` реестра есть `sha256`. Легко прочитать его неправильно.
-
-Что он значит: **целостность передачи**. Флоу, который вы ставите, байт-в-байт тот, что был отревьюен.
-
-Что он **не** значит: подпись. Об авторе он не говорит ничего.
-
-Между вами и враждебным модулем стоит ровно одно — мейнтейнер прочитал его перед мержем.
-И то, что модуль это *данные*: вы тоже можете его прочитать.
-
-## Плагины узлов
-
-Новый узел добавляется установкой дистрибутива, который объявляет entry point `lzt_flow.nodes`:
-
-```toml
-# в pyproject.toml вашего пакета
-[project.entry-points."lzt_flow.nodes"]
-my_pack = "my_pack.nodes:REGISTRATIONS"
-```
-
-`pip install` — весь шаг установки.
-
-Ни папки плагинов для сканирования, ни пути в конфиге. Отсюда главное свойство: узел **не может
-появиться сам** — кто-то установил пакет.
-
-Дальше узел живёт как встроенный: попадает в `GET /catalog/list`, получает форму в канвасе и в боте
-без единой правки в них, компилируется и выполняется тем же интерпретатором.
-
-Два правила, которые плагину не обойти:
-
-**1. Он никогда не подменит встроенный узел.**
-Плагин, заявивший `market.bump`, роняет старт с `DuplicateNodeType` и называет обе стороны.
-Порядком загрузки не выиграть.
-
-Почему так жёстко: пакет, тихо подменивший денежный узел, заставил бы все флоу на стенде вызывать
-свой код — и не оставил бы следа.
-
-**2. Он не сходит в сеть бесконтрольно.**
-Узел-запрос наследуется от `BaseRequestNode`, чей `execute()` финальный.
-Он ходит через `deps.http`, а тот не конструируется без `EgressPolicy`. Обойти негде.
-
-Каждый узел объявляет свои возможности (`NodeCapability`) — и именно по этому объявлению фильтрует
-валидатор модулей, см. `app/domain/catalog/capabilities.py`.
-
-## Исходящие запросы
-
-`EgressPolicy` из прошлой секции — вот что она делает.
-
-Всё, что говорит не с маркетплейсом, идёт через egress-забор (`app/domain/egress/`):
-
-- только `https`;
-- сверка с **точным** allow-list, который **пуст по умолчанию**;
-- проверяется *разрешённый адрес*, а не хостнейм;
-- подключение идёт ровно к тому адресу, который проверили.
-
-Отсюда два следствия. `2130706433`, `0177.0.0.1` и `::ffff:127.0.0.1` — все распознаются как
-loopback. А DNS rebinding нечего переразрешать: адрес уже зафиксирован.
-
-Редиректы отклоняются, а не следуются.
-
-```bash
-LZT_FLOW_EGRESS_ALLOWED_HOSTS=api.telegram.org   # через запятую; пусто значит "никуда не достучаться"; запись = порт 443, иначе host:port
-```
-
-Ненастроенное значит недостижимое — осознанно.
-
-Почему пустой список по умолчанию: этот процесс сидит рядом с Redis, а Redis держит гарды
-идемпотентности денег и очередь задач. Без забора `http://redis:6379` в модуле сообщества был бы
-выполнением кода в воркере.
-
-## Отложено, не мертво
-
-Визуальный канвас и UI авторинга композитных блоков — за флагом `VITE_BUILDER_ENABLED`,
-**выключены по умолчанию**.
-
-Выключены — но не удалены. Код осознанно остаётся в дереве: это **отсрочка**.
-
-Отсюда ловушка для того, кто чистит репозиторий: снаружи `AuthoringMode` и путь деплоя
-выглядят как мёртвый код. Они не мёртвые — они за флагом. Не вырезайте их.
-
-Соберите с включённым флагом, чтобы вернуть:
-
-```bash
-VITE_BUILDER_ENABLED=1 npm run build
-```
-
-Вторая ловушка: флаг — это **продуктовое решение, а не граница безопасности**.
-Мутирующие эндпойнты всё ещё на месте и всё так же под ключом API — спрятать кнопки
-значит спрятать кнопки, не более.
-
-Честной превью-сборку делает не это, а то, что она **не поставляет ключ**, который
-прятался бы за кнопками. Ключ вводит оператор в рантайме, живёт он в sessionStorage.
-
-## Сообщество
-
-Архитектурное описание и заметки по демке — в [docs/](docs/).
-
-Соглашения по слоям и коду, которым должен соответствовать PR — в [AGENTS.md](AGENTS.md) /
-[CLAUDE.md](CLAUDE.md).
-
-Перед тем как открыть PR, всё это должно пройти:
-
-```bash
-uv sync --extra dev && uv run ruff check . && uv run mypy app --strict && uv run pytest -q
-```
-
-`tests/e2e/` в дефолтный прогон не входит — он поднимает настоящий саб-процесс `dev.py` на реальном
-порту и потому медленнее. Включается отдельно: `uv run pytest -m e2e`.
-
-Баги и запросы фич — в [issues](../../issues).
-
-<a href="https://github.com/open-lzt"><img src="https://github.com/open-lzt.png" width="48" height="48" style="border-radius:50%" alt="open-lzt"/></a>
+[pylzt](https://github.com/open-lzt/pylzt) — SDK маркета · [lzt-eventus](https://github.com/open-lzt/lzt-eventus) — события · [lzt-testnet](https://github.com/open-lzt/lzt-testnet) — мок-маркет · [lzt-mcp](https://github.com/open-lzt/lzt-mcp) — сервер для AI-агентов · [весь стенд](https://github.com/open-lzt/open-lzt)
 
 ## Лицензия
 
-[MIT](LICENSE) © 2026 open-lzt
+[MIT](LICENSE)
