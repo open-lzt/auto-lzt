@@ -66,6 +66,28 @@ async def _supervise(engine: EventEngine | None, arq_worker: Worker, stop: async
             raise result
 
 
+def _eventus_config_if_usable() -> EngineConfig | None:
+    """EngineConfig when the on-event path can actually run, else None.
+
+    The embedded engine polls the marketplace with its OWN tokens (LZT_TOKENS), which a minimal
+    self-host has none of — and `EventEngine.build` raises "Client needs tokens" on an empty list,
+    while pydantic raises earlier still if the variable is unset. Either way the worker used to die
+    in a restart loop, taking arq job execution and the scheduler with it: a default install
+    executed no runs at all, and the traceback pointed at events, which nobody had asked for.
+
+    An optional subsystem that is not configured is switched off, not fatal.
+    """
+    try:
+        config = EngineConfig()
+    except Exception as exc:  # noqa: BLE001 — any config failure means "not set up", never fatal
+        log.warning("eventus_engine.unconfigured", error=str(exc))
+        return None
+    if not config.tokens:
+        log.info("eventus_engine.no_tokens", note="LZT_TOKENS is empty — on-event path stays off")
+        return None
+    return config
+
+
 async def main() -> None:
     settings = get_settings()
     log.info("worker.starting", worker_id=settings.worker_id)
@@ -73,9 +95,11 @@ async def main() -> None:
     app_engine = make_engine(settings.database_url)
     app_sessionmaker = make_sessionmaker(app_engine)
 
-    if settings.embed_eventus:
+    eventus_config = _eventus_config_if_usable() if settings.embed_eventus else None
+
+    if eventus_config is not None:
         log.info("eventus_schema.ensuring")
-        await ensure_eventus_schema(EngineConfig().database_url)
+        await ensure_eventus_schema(eventus_config.database_url)
 
     # One arq pool for this process — both Run producers (scheduler job + event router) enqueue
     # through it instead of opening a fresh Redis connection per fired run.
@@ -88,14 +112,15 @@ async def main() -> None:
     log.info("scheduler.started")
 
     engine: EventEngine | None = None
-    if settings.embed_eventus:
+    if eventus_config is not None:
         engine, _eventus_sessionmaker = build_eventus_engine(
             app_sessionmaker=app_sessionmaker, enqueue_run=enqueue_run
         )
     else:
         log.info(
             "eventus_engine.disabled",
-            note="LZT_FLOW_EMBED_EVENTUS=0 — eventus standalone; worker = arq + scheduler",
+            note="no embedded engine — LZT_FLOW_EMBED_EVENTUS=0 or LZT_TOKENS unset; "
+            "worker = arq + scheduler",
         )
     # WorkerSettings duck-types arq's WorkerSettingsBase (same shape `arq app.worker...` accepts
     # via its CLI string reference) — it doesn't subclass it, so mypy sees a structural mismatch.

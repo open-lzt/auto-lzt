@@ -3,6 +3,13 @@ FROM python:3.12-slim
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1
 
+# git is a BUILD requirement, not a convenience: lzt-eventus is a git dependency (pyproject.toml
+# `lzt-eventus = { git = ... }`), and python:3.12-slim ships without git, so `uv sync` failed with
+# "Git executable not found" on every clean host — the published install path could not build at all.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends git \
+    && rm -rf /var/lib/apt/lists/*
+
 # uv for fast, locked installs.
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 

@@ -28,7 +28,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from app.domain.events.router import FlowEventRouter
 from app.domain.flow_engine.model import RunId
-from app.domain.flow_engine.repo import FlowIrRepository, RunRepository
+from app.domain.flow_engine.repo import FlowIrRepository, FlowRepository, RunRepository
 from app.domain.triggers.repo import TriggerRepository
 
 log = structlog.get_logger()
@@ -66,6 +66,7 @@ def build_eventus_engine(
         triggers=TriggerRepository(app_sessionmaker),
         runs=RunRepository(app_sessionmaker),
         flow_irs=FlowIrRepository(app_sessionmaker),
+        flows=FlowRepository(app_sessionmaker),
         enqueue_run=enqueue_run,
     )
     return EventEngine.build(config, consumers=[router])

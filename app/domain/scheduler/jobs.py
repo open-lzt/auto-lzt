@@ -20,8 +20,8 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from app.domain.account.model import TenantId
 from app.domain.flow_engine.errors import FlowNotCompiled
 from app.domain.flow_engine.model import FlowId, Run, RunId, RunStatus
-from app.domain.flow_engine.repo import FlowIrRepository, RunRepository
-from app.domain.triggers.firing import create_and_enqueue_run
+from app.domain.flow_engine.repo import FlowIrRepository, FlowRepository, RunRepository
+from app.domain.triggers.firing import create_and_enqueue_run, resolve_unattended_vars
 
 log = structlog.get_logger()
 
@@ -70,12 +70,14 @@ async def run_scheduled_flow(trigger_id: str, flow_id: str, tenant_id: str) -> N
 
     now = datetime.now(UTC)
     runs = RunRepository(_runtime.sessionmaker)
+    flow_vars = await resolve_unattended_vars(FlowRepository(_runtime.sessionmaker), tid, fid)
     run = Run(
         id=RunId(uuid4()),
         flow_id=fid,
         flow_ir_id=ir.id,
         tenant_id=tid,
         run_key=run_key,
+        vars=flow_vars,
         status=RunStatus.PENDING,
         current_node_id=None,
         version=0,
