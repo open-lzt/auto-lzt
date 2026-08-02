@@ -147,7 +147,7 @@ uv run pytest -q          # e2e and live excluded by default
 uv run pytest -m e2e
 ```
 
-Docs: [ARCHITECTURE.en.md](ARCHITECTURE.en.md) · [flow design](docs/flow-design-guide.en.md) · [modules](docs/modules.en.md) · [plugins](docs/plugins.en.md) · [runbooks](docs/runbooks/README.en.md) · [AI-agent docs](docs/for_ai/index.en.md)
+Docs: [ARCHITECTURE.en.md](ARCHITECTURE.en.md) · [flow design](docs/flow-design-guide.en.md) · [modules](docs/modules.en.md) · [plugins](docs/plugins.en.md) · [AI-agent docs](docs/for_ai/index.en.md)
 
 ## Ecosystem
 

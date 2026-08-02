@@ -147,7 +147,7 @@ uv run pytest -q          # e2e и live исключены по умолчани
 uv run pytest -m e2e
 ```
 
-Документация: [ARCHITECTURE.md](ARCHITECTURE.md) · [дизайн флоу](docs/flow-design-guide.md) · [модули](docs/modules.md) · [плагины](docs/plugins.md) · [ранбуки](docs/runbooks/README.md) · [для AI-агентов](docs/for_ai/)
+Документация: [ARCHITECTURE.md](ARCHITECTURE.md) · [дизайн флоу](docs/flow-design-guide.md) · [модули](docs/modules.md) · [плагины](docs/plugins.md) · [для AI-агентов](docs/for_ai/)
 
 ## Экосистема
 
