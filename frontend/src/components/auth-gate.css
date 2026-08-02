@@ -1,79 +1,155 @@
+/* The only screen with no interface around it, so the composition has to carry it alone: one card,
+   a lot of air, a single accent on the one action. */
 .auth-gate {
-  height: 100%;
+  min-height: 100vh;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--surface-1);
+  /* Padding, not centering alone: on a short viewport the card must be able to scroll away from
+     the edges instead of being clipped by them. */
+  padding: 32px 16px;
+  background: var(--bg);
 }
 
 .auth-gate__card {
+  width: 100%;
+  max-width: 400px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  width: 320px;
-  padding: 28px;
-  border-radius: var(--radius-md, 14px);
+  gap: 16px;
+  padding: 32px;
   border: 1px solid var(--border);
-  background: var(--surface-2);
+  border-radius: var(--radius-lg, var(--radius-md));
+  background: var(--surface-1);
+}
+
+.auth-gate__head {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .auth-gate__title {
   margin: 0;
-  font-size: 20px;
+  font-size: 22px;
   font-weight: 600;
-  color: var(--text);
   letter-spacing: -0.01em;
-}
-
-.auth-gate__subtitle {
-  margin: -8px 0 4px;
-  font-size: 14px;
-  color: var(--text-faint);
-}
-
-.auth-gate__input {
-  height: 36px;
-  padding: 0 12px;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border-strong);
-  background: var(--surface-1);
   color: var(--text);
+}
+
+.auth-gate__subtitle,
+.auth-gate__hint {
+  margin: 0;
   font-size: 14px;
-  transition: border-color 140ms ease-out;
+  line-height: 1.5;
+  color: var(--text-muted);
 }
 
-.auth-gate__input:focus {
-  border-color: var(--accent);
+.auth-gate__label {
+  font-size: 14px;
+  color: var(--text-muted);
+  /* Pulls the label to its field: with the card's 16px gap it would float equidistant between the
+     paragraph above and the input below, reading as a caption for either. */
+  margin-bottom: -8px;
 }
 
-.auth-gate__input:disabled {
-  opacity: 0.6;
+.auth-gate__field {
+  position: relative;
+  display: flex;
+}
+
+.auth-gate__field input {
+  flex: 1;
+  padding-right: 36px; /* room for the reveal button, which sits inside the field */
+}
+
+/* The kit stacks THREE focus signals on an input: a 2px brand outline (:focus-visible), a 1px
+   inset brand border (:focus) and a background change. Anywhere else they arrive when the operator
+   asked for them; here autofocus fires them all on load, so the first thing the eye meets on an
+   otherwise calm screen is a green halo around an empty field.
+   One signal instead: a quiet accent-tinted border, no halo, no background jump. */
+.auth-gate__field .lzt-input:focus,
+.auth-gate__field .lzt-input:focus-visible {
+  outline: none;
+  background: var(--surface-1);
+  box-shadow: 0 0 0 1px inset color-mix(in srgb, var(--accent) 45%, var(--border-strong));
+}
+
+.auth-gate__reveal {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: none;
+  background: transparent;
+  color: var(--text-faint);
+  border-radius: var(--radius-sm);
+  transition: color 140ms ease-out, background 140ms ease-out;
+}
+
+.auth-gate__reveal:hover {
+  color: var(--text);
+  background: var(--surface-2);
+}
+
+.auth-gate__reveal:active {
+  background: var(--surface-3);
+}
+
+.auth-gate__reveal[aria-pressed="true"] {
+  color: var(--accent);
 }
 
 .auth-gate__error {
   margin: 0;
   font-size: 14px;
+  line-height: 1.45;
   color: var(--danger);
 }
 
-.auth-gate__submit {
-  height: 36px;
+.auth-gate__card code {
+  padding: 1px 5px;
   border-radius: var(--radius-sm);
-  border: 1px solid transparent;
-  background: var(--accent);
-  color: var(--accent-ink);
-  font-weight: 600;
-  font-size: 14px;
-  transition: background 140ms ease-out, opacity 140ms ease-out;
+  background: var(--surface-2);
+  color: var(--text);
+  font-family: var(--lzt-font-mono, ui-monospace, monospace);
+  font-size: 13px;
 }
 
-.auth-gate__submit:hover:not(:disabled) {
-  background: var(--accent-hover);
+/* Each block stands where its real counterpart will, so nothing shifts when the check returns.
+   Heights are the rendered heights of the form's own elements — measured, not guessed.
+
+   The card selector is not decoration: @open-lzt/ui ships its own height on .lzt-skel and its
+   stylesheet loads after this one, so a single-class rule here loses and the skeleton silently
+   keeps the kit's default size. Two classes outrank it. */
+.auth-gate__card .auth-gate__skeleton-title {
+  height: 28px;
+  width: 70%;
 }
 
-.auth-gate__submit:disabled {
-  opacity: 0.6;
-  cursor: default;
+/* The subtitle wraps to two lines at every width the card allows. */
+.auth-gate__card .auth-gate__skeleton-subtitle {
+  height: 42px;
+  width: 100%;
+}
+
+.auth-gate__card .auth-gate__skeleton-label {
+  height: 20px;
+  width: 40%;
+  margin-bottom: -8px;
+}
+
+.auth-gate__card .auth-gate__skeleton-field {
+  height: 36px;
+}
+
+.auth-gate__card .auth-gate__skeleton-button {
+  height: 36px;
 }
 
 /* Deliberately loud and not dismissible: an unprotected stand must not look like a protected
@@ -89,12 +165,21 @@
   padding: 10px 16px;
   font-size: 14px;
   line-height: 1.5;
-  color: #d9a441;
-  background: rgba(217, 164, 65, 0.12);
-  border-bottom: 1px solid rgba(217, 164, 65, 0.3);
+  color: var(--warning);
+  background: color-mix(in srgb, var(--warning) 12%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--warning) 30%, transparent);
 }
 
 .auth-gate__open-banner code {
   font-family: var(--lzt-font-mono, ui-monospace, monospace);
-  font-size: 14px;
+}
+
+@media (max-width: 420px) {
+  .auth-gate__card {
+    padding: 24px 20px;
+  }
+
+  .auth-gate__title {
+    font-size: 20px;
+  }
 }

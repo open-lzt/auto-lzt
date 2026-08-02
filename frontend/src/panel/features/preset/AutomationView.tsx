@@ -1,4 +1,4 @@
-import { Alert, Icon } from "@open-lzt/ui";
+import { Alert, Icon, Skeleton } from "@open-lzt/ui";
 import { useEffect, useState } from "react";
 import { PresetForm } from "./PresetView";
 import { fetchPresets, type PresetSummary } from "./presetClient";
@@ -48,9 +48,16 @@ export function AutomationView({ onDeployed }: AutomationViewProps) {
   }
 
   if (presets === null) {
+    // The tab row is what arrives first and it changes the page height; a line of text where it
+    // will be means the whole form jumps down the moment the presets land.
     return (
-      <div className="panel-view">
-        <p className="preset-form__note">загрузка…</p>
+      <div className="panel-view" aria-busy="true">
+        <div className="preset-switch">
+          {Array.from({ length: 3 }, (_, i) => (
+            <Skeleton key={i} className="preset-switch__item--skeleton" />
+          ))}
+        </div>
+        <Skeleton className="preset-form__skeleton" />
       </div>
     );
   }

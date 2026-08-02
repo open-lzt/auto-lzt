@@ -29,6 +29,15 @@
   text-align: center;
 }
 
+/* 12px is the floor, not a preference: these name the branch a connection leaves by, and the canvas
+   is normally read zoomed out. Below 12px they stop being legible exactly when they are needed. */
+.logic-node__port-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--text-faint);
+}
+
 .logic-node--utility .logic-node__badge--utility {
   width: 22px;
   height: 22px;

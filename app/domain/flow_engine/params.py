@@ -10,9 +10,11 @@ from app.domain.flow_engine.spec import ParamControl, ParamSpec
 
 JsonValue = str | int | float | bool | None
 
-_NUMERIC_CONTROLS = frozenset(
-    {ParamControl.NUMBER, ParamControl.SLIDER, ParamControl.DELAY, ParamControl.CATEGORY}
-)
+# CATEGORY is deliberately NOT here: a category is a slug ("steam", "fortnite" — see
+# catalog/constants.py MARKET_CATEGORIES), so treating it as numeric rejected every value a
+# category picker can produce. The param was unusable rather than lenient, and only surfaced once
+# the UI could declare one.
+_NUMERIC_CONTROLS = frozenset({ParamControl.NUMBER, ParamControl.SLIDER, ParamControl.DELAY})
 
 
 def _coerce_number(spec: ParamSpec, value: JsonValue) -> float | int:

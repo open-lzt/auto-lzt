@@ -10,6 +10,7 @@ from __future__ import annotations
 from pydantic import Field
 
 from app.core.schema import BaseSchema
+from app.domain.account.errors import NoAvailableAccount
 from app.domain.catalog.capabilities import MARKET_MUTATE, NodeCategory
 from app.domain.flow_engine.base_node import BaseNode, RunContext
 from app.domain.flow_engine.dtos import StepResultDTO
@@ -53,9 +54,12 @@ class BumpThreadNode(BaseNode):
                 node_id=ctx.node.id, output={"thread_id": thread_id, "deduplicated": True}
             )
 
+        # A thread is bumped by its owner, so there is no pool fallback here. Same typed error as
+        # the other account-bound nodes: it carries the tenant and maps to a 409 envelope, where a
+        # bare ValueError surfaced as an unhandled 500 with no code the client could act on.
         account_ref = ctx.active_account_id or ctx.node.account_ref
         if account_ref is None:
-            raise ValueError("forum.bump_thread needs an account: a thread is bumped by its owner")
+            raise NoAvailableAccount(ctx.tenant_id)
         account = await ctx.deps.load_account(ctx.tenant_id, account_ref)
         result = await ctx.deps.market.bump_thread(thread_id, account)
 

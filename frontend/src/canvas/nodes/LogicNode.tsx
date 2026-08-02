@@ -1,6 +1,6 @@
 import { Handle, Position, type Node, type NodeProps } from "@xyflow/react";
 import type { ReactNode } from "react";
-import { outputPortsFor } from "../../api/flowClient";
+import { outputPortsFor } from "../buildFlowSpec";
 import type { CanvasNodeData } from "../canvasTypes";
 import { nodeDescription } from "../labels";
 import { NodeShell } from "./shared";
@@ -98,7 +98,7 @@ function DefaultBody({ catalogKey }: { catalogKey: string }) {
         ))
       )}
       {ports.length > 1 ? (
-        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: "var(--text-faint)" }}>
+        <div className="logic-node__port-labels">
           {ports.map((port) => (
             <span key={port}>{port}</span>
           ))}
@@ -143,6 +143,7 @@ export function LogicNode({ data, selected }: NodeProps<Node<CanvasNodeData>>) {
         description={nodeDescription(data.catalogKey)}
         selected={selected}
         errorMessage={data.errorMessage}
+        warning={data.warning}
       >
         {bodyFor(data)}
       </NodeShell>

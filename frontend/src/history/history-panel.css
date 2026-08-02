@@ -147,6 +147,12 @@
     border-color 140ms ease-out;
 }
 
+/* Matches .history__row's own height so the list does not resize when the real runs land. */
+.history__row--skeleton {
+  height: 48px;
+  border-radius: var(--radius-sm);
+}
+
 .history__row:hover {
   background: var(--surface-2);
 }

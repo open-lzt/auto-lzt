@@ -20,7 +20,7 @@ function surface(
 describe("ParamSurface", () => {
   it("shows an empty message when there are no params", () => {
     surface([]);
-    expect(screen.getByText(/no configurable parameters/i)).toBeInTheDocument();
+    expect(screen.getByText(/нет настраиваемых параметров/i)).toBeInTheDocument();
   });
 
   it("renders a labelled slider and emits a numeric value", () => {
@@ -49,7 +49,7 @@ describe("ParamSurface", () => {
 
   it("shows a validation error for a required-empty field", () => {
     surface([{ key: "count", label: "Count", control: "number", required: true }]);
-    expect(screen.getByText("Required")).toBeInTheDocument();
+    expect(screen.getByText("Обязательное поле")).toBeInTheDocument();
   });
 
   it("renders a description under the label", () => {

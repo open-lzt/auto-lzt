@@ -2,12 +2,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   fetchFlows,
   fetchRunTrace,
-  getApiKey,
-  setApiKey,
   streamRun,
   type LogEvent,
   type StepCompletedEvent,
 } from "./flowClient";
+import { getApiKey, setApiKey } from "./httpClient";
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {

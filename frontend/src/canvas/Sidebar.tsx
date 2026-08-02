@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
-import { listComposites, type CatalogNode, type CompositeSummary, type TriggerKind } from "../api/flowClient";
+import type { CatalogNode } from "../api/catalogClient";
+import { listComposites, type CompositeSummary } from "../api/compositeClient";
+import type { TriggerKind } from "../api/flowClient";
 import { useDynamicMethods } from "./hooks/useDynamicMethods";
 import { displayLabel } from "./labels";
 import "./sidebar.css";

@@ -9,7 +9,7 @@ function spec(partial: Partial<ParamSpec>): ParamSpec {
 
 describe("validateParam", () => {
   it("flags a required empty value", () => {
-    expect(validateParam(spec({ required: true }), null)).toBe("Required");
+    expect(validateParam(spec({ required: true }), null)).toBe("Обязательное поле");
   });
 
   it("allows an optional empty value", () => {
@@ -21,12 +21,12 @@ describe("validateParam", () => {
   });
 
   it("rejects a non-numeric number", () => {
-    expect(validateParam(spec({ control: "number" }), "abc")).toBe("Expected a number");
+    expect(validateParam(spec({ control: "number" }), "abc")).toBe("Ожидается число");
   });
 
   it("enforces minimum and maximum", () => {
-    expect(validateParam(spec({ control: "slider", minimum: 1 }), 0)).toBe("Must be ≥ 1");
-    expect(validateParam(spec({ control: "slider", maximum: 10 }), 11)).toBe("Must be ≤ 10");
+    expect(validateParam(spec({ control: "slider", minimum: 1 }), 0)).toBe("Должно быть ≥ 1");
+    expect(validateParam(spec({ control: "slider", maximum: 10 }), 11)).toBe("Должно быть ≤ 10");
   });
 
   it("passes a valid number", () => {
@@ -34,7 +34,7 @@ describe("validateParam", () => {
   });
 
   it("requires a boolean for a toggle", () => {
-    expect(validateParam(spec({ control: "toggle" }), "yes")).toBe("Expected a switch value");
+    expect(validateParam(spec({ control: "toggle" }), "yes")).toBe("Ожидается переключатель");
     expect(validateParam(spec({ control: "toggle" }), true)).toBeNull();
   });
 });

@@ -1,4 +1,5 @@
-import { request, type JsonSchema } from "../../../api/flowClient";
+import { request } from "../../../api/httpClient";
+import type { JsonSchema } from "../../../api/catalogClient";
 
 export interface PresetSummary {
   key: string;

@@ -1,8 +1,8 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { useDynamicMethods } from "./useDynamicMethods";
-import * as flowClient from "../../api/flowClient";
-import type { CatalogNode } from "../../api/flowClient";
+import * as flowClient from "../../api/catalogClient";
+import type { CatalogNode } from "../../api/catalogClient";
 
 describe("useDynamicMethods", () => {
   afterEach(() => {

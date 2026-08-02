@@ -16,6 +16,12 @@
   --accent-ink: var(--lzt-text-on-brand);
   --success: var(--lzt-success);
   --danger: var(--lzt-danger);
+  --warning: var(--lzt-warning);
+  --warning-soft: var(--lzt-warning-soft);
+
+  /* Depth under a canvas node. A raw black alpha reads as a hairline shadow on the dark base and
+     as a black bar on the light one, so the value follows the theme instead of the node rules. */
+  --node-shadow: 0 1px 0 rgba(0, 0, 0, 0.4);
 
   /* trigger = the flow's origin, painted in the brand accent (inherits the --accent alias
      above); action/logic have no kit equivalent, so they stay hand-picked literals. */
@@ -37,6 +43,7 @@
    browser paints native scrollbars/form chrome for the wrong theme. */
 :root[data-theme="light"] {
   color-scheme: light;
+  --node-shadow: 0 1px 0 rgba(0, 0, 0, 0.08);
 }
 
 * {

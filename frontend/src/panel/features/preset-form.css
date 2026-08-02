@@ -60,6 +60,18 @@
   transition: background-color 140ms ease-out, color 140ms ease-out, border-color 140ms ease-out;
 }
 
+/* Pill-shaped like the real tabs, and wide enough that three of them occupy the row they will. */
+.preset-switch__item--skeleton {
+  width: 140px;
+  height: 34px;
+  border-radius: 999px;
+}
+
+.preset-form__skeleton {
+  height: 320px;
+  border-radius: var(--radius-md);
+}
+
 .preset-switch__item:hover {
   color: var(--lzt-text);
   border-color: var(--lzt-border-strong, var(--lzt-border));

@@ -1,4 +1,4 @@
-import { request } from "./flowClient";
+import { request } from "./httpClient";
 
 /** Mirrors `TaskHealth` in app/domain/tasks/model.py. */
 export type TaskHealth = "idle" | "running" | "failing" | "paused";

@@ -10,6 +10,7 @@ import {
   setAccountLabel,
   type Account,
 } from "../../../api/accountsClient";
+import { ConfirmDialog } from "../../../components/ConfirmDialog";
 import "./accounts.css";
 
 function formatLastSeen(iso: string | null): string {
@@ -24,6 +25,8 @@ export function AccountsView() {
   const [token, setToken] = useState("");
   const [adding, setAdding] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<Account | null>(null);
+  const [tokenVisible, setTokenVisible] = useState(false);
   const toast = useToast();
 
   const reload = useCallback(async () => {
@@ -60,9 +63,11 @@ export function AccountsView() {
     setBusyId(account.id);
     try {
       await deleteAccount(account.id);
+      setPendingDelete(null);
       toast.show("Аккаунт удалён");
       await reload();
     } catch (err) {
+      setPendingDelete(null);
       // The 409 already names the flows still pinning this account — showing it verbatim is the
       // payoff of the guard being a typed error rather than a bare refusal.
       toast.show(err instanceof Error ? err.message : "не удалось удалить", { tone: "danger" });
@@ -125,14 +130,28 @@ export function AccountsView() {
           Токен lzt.market
         </label>
         <div className="accounts-add__row">
-          <Input
-            id="account-token"
-            type="password"
-            value={token}
-            placeholder="Вставьте токен"
-            autoComplete="off"
-            onChange={(e) => setToken(e.target.value)}
-          />
+          <div className="accounts-add__field">
+            <Input
+              id="account-token"
+              type={tokenVisible ? "text" : "password"}
+              value={token}
+              placeholder="Вставьте токен"
+              autoComplete="off"
+              onChange={(e) => setToken(e.target.value)}
+            />
+            {/* A pasted token is long and the field is masked: without this the only way to catch a
+                truncated paste is to submit it and read the server's refusal. */}
+            <button
+              type="button"
+              className="accounts-add__reveal"
+              aria-pressed={tokenVisible}
+              aria-label={tokenVisible ? "Скрыть токен" : "Показать токен"}
+              title={tokenVisible ? "Скрыть токен" : "Показать токен"}
+              onClick={() => setTokenVisible((v) => !v)}
+            >
+              <Icon name="eye" size={14} />
+            </button>
+          </div>
           <Button variant="primary" loading={adding} disabled={!token.trim()} onClick={() => void handleAdd()}>
             Добавить
           </Button>
@@ -214,10 +233,10 @@ export function AccountsView() {
                   </Button>
                 ) : null}
                 <Button
-                  variant="ghost"
+                  variant="danger"
                   size="sm"
                   loading={busyId === account.id}
-                  onClick={() => void handleDelete(account)}
+                  onClick={() => setPendingDelete(account)}
                 >
                   Удалить
                 </Button>
@@ -226,6 +245,20 @@ export function AccountsView() {
           ))}
         </div>
       ) : null}
+
+      <ConfirmDialog
+        open={pendingDelete !== null}
+        title="Удалить аккаунт?"
+        confirmLabel="Удалить аккаунт"
+        busy={pendingDelete !== null && busyId === pendingDelete.id}
+        onConfirm={() => {
+          if (pendingDelete) void handleDelete(pendingDelete);
+        }}
+        onCancel={() => setPendingDelete(null)}
+      >
+        Аккаунт {pendingDelete?.username ?? pendingDelete?.id.slice(0, 8)} и его токен будут удалены
+        безвозвратно. Флоу, привязанные к нему, перестанут запускаться.
+      </ConfirmDialog>
     </div>
   );
 }

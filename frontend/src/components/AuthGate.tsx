@@ -1,5 +1,7 @@
+import { Alert, Button, Icon, Input, Skeleton } from "@open-lzt/ui";
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
-import { authRequired, fetchFlows, getApiKey, setApiKey } from "../api/flowClient";
+import { authRequired, fetchFlows } from "../api/flowClient";
+import { getApiKey, setApiKey } from "../api/httpClient";
 import "./auth-gate.css";
 
 interface AuthGateProps {
@@ -25,12 +27,17 @@ type GateStatus = "checking" | "open" | "shut" | "authed" | "prompting" | "valid
  * render a dashboard where every call fails, under a banner announcing the panel was open to
  * anyone — claiming to be unprotected while in fact refusing everything.
  *
+ * Those three server answers become SIX screen states, and each one is drawn: `checking` and
+ * `validating` used to have no appearance of their own, so the first paint flashed nothing and a
+ * submit gave no sign it had been received.
+ *
  * A key already in sessionStorage renders children immediately: no re-validation per reload, the
  * backend rejects a stale key on the first real call and that re-opens this gate.
  */
 export function AuthGate({ children }: AuthGateProps) {
   const [status, setStatus] = useState<GateStatus>("checking");
   const [keyInput, setKeyInput] = useState("");
+  const [keyVisible, setKeyVisible] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -74,10 +81,6 @@ export function AuthGate({ children }: AuthGateProps) {
     }
   }
 
-  if (status === "checking") {
-    return null;
-  }
-
   if (status === "authed") {
     return <>{children}</>;
   }
@@ -94,18 +97,38 @@ export function AuthGate({ children }: AuthGateProps) {
     );
   }
 
+  // Skeleton in the final card's geometry, not a spinner and not nothing: this is the app's first
+  // paint, and a card that appears out of blank space moves everything the eye just settled on.
+  if (status === "checking") {
+    return (
+      <div className="auth-gate">
+        <div className="auth-gate__card" aria-busy="true">
+          {/* Same wrappers and block heights as the form below, not an approximation of them: a
+              shorter skeleton is worse than none — it promises one geometry and delivers another,
+              which is the jump it exists to prevent. */}
+          <div className="auth-gate__head">
+            <Skeleton className="auth-gate__skeleton-title" />
+            <Skeleton className="auth-gate__skeleton-subtitle" />
+          </div>
+          <Skeleton className="auth-gate__skeleton-label" />
+          <Skeleton className="auth-gate__skeleton-field" />
+          <Skeleton className="auth-gate__skeleton-button" />
+        </div>
+      </div>
+    );
+  }
+
   // Rendering the panel here would be a lie: the server refuses every protected request and no key
   // the operator can type will change that. Say what to set instead of showing a dashboard whose
   // every button fails.
   if (status === "shut") {
     return (
       <div className="auth-gate">
-        <div className="auth-gate__card" role="alert">
-          <h2 className="auth-gate__title">Сервер отклоняет все запросы</h2>
-          <p className="auth-gate__subtitle">
+        <div className="auth-gate__card">
+          <Alert tone="danger" title="Сервер отклоняет все запросы">
             Ключ не задан, и вход без ключа не разрешён — панель работать не сможет.
-          </p>
-          <p className="auth-gate__subtitle">
+          </Alert>
+          <p className="auth-gate__hint">
             Задайте <code>LZT_FLOW_API_KEY</code> и перезапустите сервер. Для локальной отладки без
             ключа — <code>LZT_FLOW_ALLOW_UNAUTHENTICATED=1</code>.
           </p>
@@ -114,24 +137,56 @@ export function AuthGate({ children }: AuthGateProps) {
     );
   }
 
+  const busy = status === "validating";
+
   return (
     <div className="auth-gate">
       <form className="auth-gate__card" onSubmit={(e) => void handleSubmit(e)}>
-        <h2 className="auth-gate__title">Доступ к lzt-flow</h2>
-        <p className="auth-gate__subtitle">Введите API-ключ, чтобы продолжить</p>
-        <input
-          className="auth-gate__input"
-          type="password"
-          value={keyInput}
-          onChange={(e) => setKeyInput(e.target.value)}
-          placeholder="API-ключ"
-          autoFocus
-          disabled={status === "validating"}
-        />
-        {error ? <p className="auth-gate__error">{error}</p> : null}
-        <button type="submit" className="auth-gate__submit" disabled={status === "validating"}>
-          {status === "validating" ? "Проверяем…" : "Войти"}
-        </button>
+        <div className="auth-gate__head">
+          <h1 className="auth-gate__title">Панель автоматизации</h1>
+          <p className="auth-gate__subtitle">
+            Введите ключ доступа — тот, что задан в <code>LZT_FLOW_API_KEY</code> на сервере.
+          </p>
+        </div>
+
+        <label className="auth-gate__label" htmlFor="auth-gate-key">
+          Ключ доступа
+        </label>
+        <div className="auth-gate__field">
+          <Input
+            id="auth-gate-key"
+            type={keyVisible ? "text" : "password"}
+            value={keyInput}
+            onChange={(e) => setKeyInput(e.target.value)}
+            placeholder="Вставьте ключ"
+            autoComplete="off"
+            autoFocus
+            invalid={error !== null}
+            disabled={busy}
+          />
+          {/* A pasted key is long and masked: without this the only way to catch a truncated paste
+              is to submit it and read the refusal. */}
+          <button
+            type="button"
+            className="auth-gate__reveal"
+            aria-pressed={keyVisible}
+            aria-label={keyVisible ? "Скрыть ключ" : "Показать ключ"}
+            title={keyVisible ? "Скрыть ключ" : "Показать ключ"}
+            onClick={() => setKeyVisible((v) => !v)}
+          >
+            <Icon name="eye" size={14} />
+          </button>
+        </div>
+
+        {error ? (
+          <p className="auth-gate__error" role="alert">
+            {error}
+          </p>
+        ) : null}
+
+        <Button type="submit" variant="primary" block loading={busy} disabled={busy}>
+          Войти
+        </Button>
       </form>
     </div>
   );

@@ -18,7 +18,7 @@ import {
 } from "../components/form/controls";
 import { MARKET_CATEGORIES, isVisible, validateParam } from "./paramTypes";
 import type { ParamSpec, ParamValue } from "./paramTypes";
-import { fetchCategories } from "../api/flowClient";
+import { fetchCategories } from "../api/catalogClient";
 import type { PickerOption } from "../components/form/controls";
 import "../components/form/autoform.css";
 
@@ -162,7 +162,7 @@ function ParamRow({
 export function ParamSurface({ params, values, onChange, accounts = [] }: ParamSurfaceProps) {
   const categories = useCategories();
   if (params.length === 0) {
-    return <p className="autoform__empty">This flow has no configurable parameters.</p>;
+    return <p className="autoform__empty">У этого флоу нет настраиваемых параметров.</p>;
   }
   const visible = params.filter((spec) => isVisible(spec, values));
   // Preserve declaration order of groups; params without a group render under the empty-key group.

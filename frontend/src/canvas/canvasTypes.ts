@@ -31,6 +31,11 @@ export interface CanvasNodeData {
   triggerConfig?: TriggerConfig;
   errorMessage?: string; // set by DeployButton on a 400 CompileError naming this node
   children?: CanvasChildNodeSpec[]; // "logic.batch" only — nested step specs, see CanvasChildNodeSpec
+  /** The one account pinned to this node → NodeSpec.account_ref (a UUID string). null and undefined
+   * both mean "no pin". Overridden at run time by for_each_account's active_account_id. */
+  accountRef?: string | null;
+  /** Render-only, injected by FlowCanvas while drawing — never part of the saved graph. */
+  warning?: string;
   boundaryKind?: TemplateBoundaryKind; // "templateBoundary" nodes only — which side of the composite surface this marks
   paramName?: string; // "templateBoundary" nodes only — the declared TemplateParam.name
   [key: string]: unknown;

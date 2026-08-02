@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { listComposites, type CompositeSummary } from "../api/flowClient";
+import { listComposites, type CompositeSummary } from "../api/compositeClient";
 import { useResizablePane } from "./ResizablePane";
 import "./composite-list.css";
 

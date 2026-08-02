@@ -1,8 +1,8 @@
+import { Skeleton } from "@open-lzt/ui";
 import { useEffect, useRef, useState } from "react";
 import { fetchRunTrace, streamRun } from "../api/flowClient";
 import type { RunTraceStep, StepCompletedEvent } from "../api/flowClient";
 import { displayLabel } from "../canvas/labels";
-import { Loader } from "../components/Loader";
 import "./run-trace-view.css";
 
 interface RunTraceViewProps {
@@ -115,8 +115,10 @@ export function RunTraceView({ runId, live = false }: RunTraceViewProps) {
 
   if (!steps) {
     return (
-      <div className="run-trace-view__loading">
-        <Loader />
+      <div className="run-trace-view" aria-busy="true">
+        {Array.from({ length: 4 }, (_, i) => (
+          <Skeleton key={i} className="run-trace-view__step--skeleton" />
+        ))}
       </div>
     );
   }

@@ -149,6 +149,14 @@
   color: var(--text);
 }
 
+/* Muted red at rest, full red on hover: the destructive action has to be distinguishable BEFORE
+ * the pointer is already on it. The extra left margin breaks it out of the icon run so a slip from
+ * rename lands on nothing. */
+.flow-list__action--danger {
+  color: color-mix(in srgb, var(--danger) 55%, var(--text-faint));
+  margin-left: 6px;
+}
+
 .flow-list__action--danger:hover:not(:disabled) {
   color: var(--danger);
 }
@@ -165,8 +173,7 @@
  * destructive and not obviously undoable. Keyed on `pointer: coarse`, not on width, so a touch
  * laptop gets it too and a narrow desktop window does not.
  *
- * Deliberately not solved here: delete still sits beside its neighbours rather than behind a
- * confirm or an overflow menu. Size buys margin for error; it does not make the action reversible. */
+ * Size buys margin for error; reversibility comes from ConfirmDialog, which now gates the delete. */
 @media (pointer: coarse) {
   .flow-list__actions {
     gap: 8px;
