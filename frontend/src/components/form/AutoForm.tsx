@@ -208,7 +208,7 @@ export function AutoForm({ schema, values, onChange, varKeys }: AutoFormProps) {
   );
 }
 
-// Rendered under the control, not blocking it — an embedded ref is legal, and typing mid-edit is normal.
+// Under the control, not blocking it: an embedded ref is legal and mid-edit typing is normal.
 function varRefProblem(value: FieldValue | undefined, varKeys: readonly string[] | undefined) {
   if (!varKeys) return null;
   const problem = diagnoseVarRef(value, varKeys);

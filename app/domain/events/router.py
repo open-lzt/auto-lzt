@@ -53,7 +53,18 @@ class FlowEventRouter(BaseConsumer):
     async def handle(self, event: DomainEvent) -> None:
         matches = await self._triggers.list_active_event_triggers(event.event_type)
         for trigger in matches:
-            await self._fire(trigger, event)
+            # Per trigger, because the list spans tenants: one flow whose declared parameter cannot
+            # be resolved used to abort the loop, and every trigger after it — other people's — lost
+            # the event entirely. On `item_sold` that is somebody else's sniping that never fired.
+            try:
+                await self._fire(trigger, event)
+            except Exception:  # noqa: BLE001 — fan-out boundary; one flow must not stop the rest
+                log.exception(
+                    "event_trigger.fire_failed",
+                    trigger_id=str(trigger.id),
+                    flow_id=str(trigger.flow_id),
+                    event_type=str(event.event_type),
+                )
 
     async def _fire(self, trigger: TriggerDefinition, event: DomainEvent) -> None:
         ir = await self._flow_irs.get_latest_for_flow(trigger.tenant_id, trigger.flow_id)

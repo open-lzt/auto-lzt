@@ -1,6 +1,6 @@
 import { exportFlow, type FlowSpec } from "./flowClient";
 
-// Object URL, not `data:` — a large graph exceeds the URL length limits browsers enforce on data URIs.
+// Object URL, not `data:` — a large graph exceeds the browser's data-URI length limit.
 export function downloadFlowSpec(spec: FlowSpec, fileName: string): void {
   const blob = new Blob([JSON.stringify(spec, null, 2)], { type: "application/json" });
   const url = URL.createObjectURL(blob);

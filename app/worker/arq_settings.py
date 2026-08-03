@@ -34,7 +34,7 @@ from app.db.base import make_engine, make_sessionmaker, session_scope
 from app.domain.account.crypto import EnvelopeCipher
 from app.domain.account.errors import NoAvailableAccount
 from app.domain.account.exclusion import AccountExcluder
-from app.domain.account.model import Account, AccountId, TenantId
+from app.domain.account.model import Account, AccountId, AccountStatus, TenantId
 from app.domain.account.pool import TokenPool
 from app.domain.account.repo import AccountRepository
 from app.domain.catalog.plugins import build_registry
@@ -134,7 +134,10 @@ def _build_node_deps(
     async def load_account(tenant_id: TenantId, account_id: AccountId) -> Account:
         async with session_scope(sessionmaker) as session:
             account = await AccountRepository(session).get(tenant_id, account_id)
-        if account is None:
+        # Status checked here too, not only in the pool: pinning is the one path that reaches an
+        # account by id, so an operator who excluded an account (ban, 2FA, freeze) kept trading
+        # through it on every node that carried the pin.
+        if account is None or account.status is not AccountStatus.ACTIVE:
             # No usable account to pin — surfaced as RunFailed by the runtime's per-node wrapper.
             raise NoAvailableAccount(tenant_id)
         return account

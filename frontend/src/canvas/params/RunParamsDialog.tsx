@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { accountName, fetchAccounts } from "../../api/accountsClient";
 import type { ParamSpec, ParamValue } from "../../api/paramSpec";
 import { ParamSurface, type AccountRef } from "../ParamSurface";
-import { validateParam } from "../paramTypes";
+import { isVisible, validateParam } from "../paramTypes";
 
 export interface RunParamsDialogProps {
   params: ParamSpec[];
@@ -55,7 +55,15 @@ export function RunParamsDialog({ params, onSubmit, onCancel }: RunParamsDialogP
 
   // Mirrors the verdict resolve_params reaches server-side, or the refusal reads as a server fault.
   const blocking = useMemo(
-    () => params.filter((spec) => validateParam(spec, values[spec.key] ?? spec.default ?? null) !== null),
+    () =>
+      params.filter(
+        (spec) =>
+          // Hidden by visible_if means neither required nor validated, server-side too. Without
+          // this a hidden required field disabled the button while its error stayed invisible —
+          // the flow could not be published at all.
+          isVisible(spec, values) &&
+          validateParam(spec, values[spec.key] ?? spec.default ?? null) !== null,
+      ),
     [params, values],
   );
 

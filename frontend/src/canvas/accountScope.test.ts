@@ -46,9 +46,18 @@ describe("isInsideAccountLoop", () => {
     expect(isInsideAccountLoop("c", nodes, edges)).toBe(true);
   });
 
-  it("follows any port, not just body", () => {
+  it("does NOT count a node hanging off the `after` port", () => {
+    // The interpreter pins the account for the body subtree and continues at `after` once every
+    // item has run — a node there gets no account, so the canvas must still ask for one.
     const nodes = [loop, node("after", "market.relist")];
-    expect(isInsideAccountLoop("after", nodes, [edge("loop", "after", "after")])).toBe(true);
+    expect(isInsideAccountLoop("after", nodes, [edge("loop", "after", "after")])).toBe(false);
+  });
+
+  it("counts a node reached through body even when the loop also has an `after` branch", () => {
+    const nodes = [loop, node("inside", "market.relist"), node("outside", "market.relist")];
+    const edges = [edge("loop", "inside", "body"), edge("loop", "outside", "after")];
+    expect(isInsideAccountLoop("inside", nodes, edges)).toBe(true);
+    expect(isInsideAccountLoop("outside", nodes, edges)).toBe(false);
   });
 
   it("returns false for a node no loop reaches", () => {

@@ -6,7 +6,7 @@ import { nodeDescription } from "../labels";
 import { NodeShell } from "./shared";
 import "./logic-node.css";
 
-// fork has no known branch count on canvas today (edges/values don't carry it) — 2 static handles, not dynamic
+// Two static handles: nothing on the canvas carries a fork's branch count yet.
 const FORK_BRANCH_HANDLES = ["branch-1", "branch-2"];
 const JOIN_BRANCH_HANDLES = ["branch-1", "branch-2"];
 

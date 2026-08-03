@@ -50,6 +50,33 @@ describe("flowSpecToCanvas", () => {
     ]);
   });
 
+  it("reopens a saved flow with its account pin intact", () => {
+    // Same class as the batch regression above: dropped on load, the pin came back as null on the
+    // next publish — silently back to the token pool, and an outright refusal to publish on the
+    // nodes that require an account.
+    const spec: FlowSpec = {
+      name: "f",
+      entry_node_id: "n1",
+      params: [],
+      nodes: [
+        {
+          id: "n1",
+          type: "market.bump",
+          inputs: {},
+          account_ref: "3f7c1e64-0d2a-4a6f-9b31-8c5e2d4a7f10",
+          edges: {},
+          on_error: null,
+        },
+      ],
+    };
+
+    const { nodes } = flowSpecToCanvas(spec, catalog);
+
+    expect(nodes.find((n) => n.id === "n1")?.data.accountRef).toBe(
+      "3f7c1e64-0d2a-4a6f-9b31-8c5e2d4a7f10",
+    );
+  });
+
   it("round-trips a batch flow back to the same spec", () => {
     const children: CanvasChildNodeSpec[] = [
       { id: "c1", catalogKey: "market.bump", values: { lot_id: 42 } },

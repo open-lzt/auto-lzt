@@ -70,6 +70,10 @@ export function flowSpecToCanvas(
         values: literalValues(nodeSpec.inputs),
         // Dropping this on load made a republish overwrite saved batch steps with nothing.
         children: nodeSpec.children?.length ? nodeSpec.children.map(childNodeSpecToCanvas) : undefined,
+        // Same failure, same fix: without this a reopened flow republishes with the account pin
+        // cleared — silently back to the token pool, or a refusal to publish at all on the nodes
+        // that require an account.
+        accountRef: nodeSpec.account_ref ?? null,
       },
     });
     for (const [port, targetId] of Object.entries(nodeSpec.edges)) {

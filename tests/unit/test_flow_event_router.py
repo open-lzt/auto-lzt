@@ -105,6 +105,51 @@ async def test_same_event_delivered_twice_creates_exactly_one_run() -> None:
     assert enqueued == [stored.id]  # exactly one enqueue — the second handle() only deduped
 
 
+async def test_one_broken_trigger_does_not_swallow_the_others() -> None:
+    """The trigger list spans tenants: an exception raised for one flow used to abort the loop, and
+    every trigger after it lost the event. On `item_sold` that is somebody else's snipe that never
+    fired, with nothing on their screen to say why."""
+    ir = _build_ir()
+    broken_flow = FlowId(uuid.uuid4())
+
+    def _trigger(flow_id: FlowId) -> TriggerDefinition:
+        return TriggerDefinition(
+            id=TriggerId(uuid.uuid4()),
+            tenant_id=TENANT,
+            flow_id=flow_id,
+            kind=TriggerKind.EVENT,
+            schedule_cron=None,
+            event_type=EventType.ITEM_SOLD,
+            active=True,
+            created_at=datetime.now(UTC),
+        )
+
+    class _ExplodingIrRepo(_FakeFlowIrRepo):
+        async def get_latest_for_flow(self, tenant_id: TenantId, flow_id: FlowId) -> FlowIR | None:
+            if flow_id == broken_flow:
+                raise RuntimeError("this flow's parameters cannot be resolved")
+            return await super().get_latest_for_flow(tenant_id, flow_id)
+
+    runs = FakeRunRepo()
+    enqueued: list[RunId] = []
+
+    async def enqueue_run(run_id: RunId) -> None:
+        enqueued.append(run_id)
+
+    router = FlowEventRouter(
+        triggers=_FakeTriggerRepo([_trigger(broken_flow), _trigger(ir.flow_id)]),  # type: ignore[arg-type]
+        runs=runs,  # type: ignore[arg-type]
+        flow_irs=_ExplodingIrRepo(ir),  # type: ignore[arg-type]
+        flows=_FakeFlowRepo(),  # type: ignore[arg-type]
+        enqueue_run=enqueue_run,
+    )
+
+    await router.handle(_event(event_type=EventType.ITEM_SOLD, seq=7))
+
+    assert len(enqueued) == 1, "the healthy trigger did not fire"
+    assert await runs.get_by_key(TENANT, ir.flow_id, f"{ir.flow_id}:7") is not None
+
+
 async def test_unmatched_event_type_creates_no_run() -> None:
     ir = _build_ir()
     runs = FakeRunRepo()

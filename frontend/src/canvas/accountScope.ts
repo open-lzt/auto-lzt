@@ -29,9 +29,17 @@ export function isInsideAccountLoop(
     else targetsBySource.set(edge.source, [edge.target]);
   }
 
-  const queue = nodes
-    .filter((node) => node.data.catalogKey === ACCOUNT_LOOP_KEY)
-    .map((node) => node.id);
+  // Seeded with the targets of the loop's `body` edges, not with the loop itself: the interpreter
+  // pins the account for the body subtree only and continues at `after` once every item has run
+  // (runtime.py, `_run_fanout_body`). Walking every port marked a node hanging off `after` as
+  // covered, so the canvas skipped its "needs an account" warning and the flow failed at runtime.
+  const loopIds = new Set(
+    nodes.filter((node) => node.data.catalogKey === ACCOUNT_LOOP_KEY).map((node) => node.id),
+  );
+  const queue = edges
+    .filter((edge) => loopIds.has(edge.source) && (edge.sourceHandle ?? "next") === "body")
+    .map((edge) => edge.target);
+  if (queue.includes(nodeId)) return true;
   const visited = new Set<string>(queue);
 
   while (queue.length > 0) {

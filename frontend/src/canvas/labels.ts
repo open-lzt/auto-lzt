@@ -21,7 +21,7 @@ const LABELS: Record<string, string> = {
   batch_submit: "Отправить пакет",
   batch_status: "Статус пакета",
   batch_list_pending: "Список ожидающих",
-  // dotted "logic.*" keys are the actual registered NodeType.key values, distinct from bare aliases above
+  // dotted "logic.*" keys are the registered NodeType.key values, not the bare aliases above
   "logic.fork": "Разветвление",
   "logic.join": "Слияние",
   "logic.batch": "Пакет шагов",
@@ -67,7 +67,7 @@ function humanize(raw: string): string {
     .join(" ");
 }
 
-// facade method (e.g. "market.bump") takes priority over node type when both known — user-recognized label
+// The facade method wins over the node type: it is the name the operator recognises.
 export function displayLabel(nodeType: string, facadeMethod?: string): string {
   const key = facadeMethod ?? nodeType;
   return LABELS[key] ?? LABELS[nodeType] ?? humanize(key);
