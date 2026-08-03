@@ -8,11 +8,8 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  /* Without min-width:0 a flex child refuses to shrink below its own text, so one long balance
-     string pushed this row — and with it the whole page — past the viewport on a phone (measured
-     487px against a 390px screen). The cardinal responsive bug. */
+  /* Without min-width:0 a flex child refuses to shrink below its own text and overflows the viewport. */
   min-width: 0;
-  /* >=8px vertical so the hover target is a comfortable band, not a hairline. */
   padding: 8px 10px;
   border-radius: var(--radius-sm, 8px);
   cursor: pointer;
@@ -22,12 +19,6 @@
 .data-picker__row:hover {
   background: var(--surface-2);
 }
-
-/* `.data-picker__check` is styled with `.autoform__checkbox` in autoform.css — one checkbox for the
-   whole form system. The rule that stood here declared its own 16px box and `accent-color`, which,
-   loading after autoform.css at equal specificity, quietly won and put a 16px native checkbox next
-   to an 18px custom one on the same form. Deleted rather than out-specified: two rules for one
-   control is what caused the drift. */
 
 .data-picker__name {
   flex: 0 1 auto;
@@ -49,9 +40,7 @@
   color: var(--text-muted);
 }
 
-/* Pushed right and tabular so a column of balances can be compared down the list. Capped and
-   truncating: a currency code is 3–4 characters in reality, but it is free text on the wire, and
-   one long value must never get to size the row. */
+/* Capped and truncating: the currency code is free text on the wire, must not size the row. */
 .data-picker__balance {
   flex: 0 1 auto;
   min-width: 0;

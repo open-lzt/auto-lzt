@@ -1,6 +1,5 @@
 :root {
-  /* Alias layer onto @open-lzt/ui's --lzt-* tokens (loaded before this file, see main.tsx) —
-     every canvas/*.css rule keeps saying var(--bg) etc. unchanged; only this block moved. */
+  /* Aliases @open-lzt/ui's --lzt-* tokens (loaded before this file — see main.tsx). */
   --bg: var(--lzt-bg);
   --surface-1: var(--lzt-surface);
   --surface-2: var(--lzt-raised);
@@ -19,12 +18,8 @@
   --warning: var(--lzt-warning);
   --warning-soft: var(--lzt-warning-soft);
 
-  /* Depth under a canvas node. A raw black alpha reads as a hairline shadow on the dark base and
-     as a black bar on the light one, so the value follows the theme instead of the node rules. */
   --node-shadow: 0 1px 0 rgba(0, 0, 0, 0.4);
 
-  /* trigger = the flow's origin, painted in the brand accent (inherits the --accent alias
-     above); action/logic have no kit equivalent, so they stay hand-picked literals. */
   --cat-trigger: var(--accent);
   --cat-trigger-dim: var(--accent-dim);
   --cat-action: #6e8bff;
@@ -39,8 +34,7 @@
   color-scheme: dark;
 }
 
-/* ThemeProvider (main.tsx) stamps data-theme on <html> — color-scheme must follow it or the
-   browser paints native scrollbars/form chrome for the wrong theme. */
+/* color-scheme must follow data-theme (main.tsx) or native scrollbars/form chrome mismatch. */
 :root[data-theme="light"] {
   color-scheme: light;
   --node-shadow: 0 1px 0 rgba(0, 0, 0, 0.08);
@@ -90,7 +84,6 @@ button {
   background: var(--accent-dim);
 }
 
-/* Shared empty state: a prompt with one action, never a bare line of text. */
 .empty-prompt {
   display: flex;
   flex-direction: column;
@@ -151,23 +144,13 @@ button {
   }
 }
 
-
-/* ─ Floors the design kit does not enforce ─────────────────────────────────
-   The 14px minimum and the 44px tap target are OUR rules; @open-lzt/ui ships
-   12–13px labels and 28–37px controls. Overriding here rather than in the kit
-   keeps the panel's floor a panel decision, and the audit script is what proves
-   it holds (it caught every one of these). */
-
 .lzt-btn,
 .lzt-sidenav__label,
 .lzt-sidenav__item {
   font-size: 14px;
 }
 
-/* Touch input has no hover to disambiguate a near-miss, so the target itself has to be big
-   enough. Keyed on WIDTH as well as pointer type, deliberately: a narrow window is a phone in
-   practice, and `pointer: coarse` is exactly what a headless desktop browser reports as `fine`
-   — so a pointer-only rule cannot be verified by the audit that is supposed to prove it. */
+/* Keyed on width too: `pointer: coarse` is what a headless desktop browser reports as `fine`. */
 @media (pointer: coarse), (max-width: 640px) {
   .lzt-btn,
   .lzt-sidenav__item,
@@ -200,10 +183,7 @@ body {
   overflow-x: clip;
 }
 
-/* ── Touch: every control is thumb-sized ───────────────────────────────────────────────────
-   Keyed on the POINTER, not the width (responsive.md §4). A 34px input is fine for a mouse at
-   any width and wrong for a finger at any width; a breakpoint would get both cases backwards on
-   a touch laptop and a small desktop window. */
+/* Keyed on pointer, not width — a 34px control is fine for a mouse, wrong for a finger. */
 @media (pointer: coarse) {
   .lzt-input,
   .lzt-btn,
@@ -213,8 +193,6 @@ body {
     min-height: 44px;
   }
 
-  /* The row IS the tap target — the box just draws the state. Enlarging the box alone would
-     leave a 44px row with a 20px hit area in the middle of it. */
   .data-picker__row,
   .autoform__field--inline {
     min-height: 44px;
@@ -226,7 +204,6 @@ body {
     height: 22px;
   }
 
-  /* Icon-only buttons are square, so a min-height alone still leaves them 40px wide. */
   .accounts-row__actions .lzt-btn {
     min-width: 44px;
   }

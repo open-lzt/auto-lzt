@@ -1,5 +1,4 @@
-// Undo/redo for the canvas graph. @xyflow/react 12 ships no history of its own, and a third-party
-// stack would be a wrapper with one backend — so the stack lives here.
+// Undo/redo for the canvas graph — @xyflow/react 12 ships no history of its own.
 import type { Edge, Node, NodeChange, EdgeChange } from "@xyflow/react";
 import { useCallback, useReducer, useRef } from "react";
 import type { CanvasNodeData } from "../canvasTypes";
@@ -9,26 +8,21 @@ export interface GraphSnapshot {
   edges: Edge[];
 }
 
-/** Whole-graph snapshots, not deltas: a realistic flow is tens of nodes, so 50 of them stay in the
- * low megabytes and deltas would optimise a problem nobody has measured. */
+// Whole-graph snapshots, not deltas — a realistic flow is tens of nodes, so this stays cheap.
 export const HISTORY_DEPTH = 50;
 
 export interface GraphHistory {
-  /** Snapshots the CURRENT graph. Call it immediately BEFORE a structural mutation, never after. */
+  // Snapshots the CURRENT graph. Call it immediately BEFORE a structural mutation, never after.
   capture: () => void;
   undo: () => void;
   redo: () => void;
-  /** Drops both stacks — for loading another flow, where the previous graph is not a step back. */
   reset: () => void;
   canUndo: boolean;
   canRedo: boolean;
 }
 
-/** True for a change that alters the graph's STRUCTURE, as opposed to its presentation.
- *
- * `select` and `dimensions` are excluded deliberately: clicking a node would otherwise fill the
- * stack with states that look identical, and Ctrl+Z would spend its first ten presses undoing
- * selections. A drag is recorded once, on release — `dragging: true` fires per animation frame. */
+// `select`/`dimensions` excluded — clicking a node would otherwise fill the undo stack with
+// look-alike states. A drag is recorded once on release; `dragging: true` fires per frame.
 export function isStructuralNodeChange(changes: NodeChange<Node<CanvasNodeData>>[]): boolean {
   return changes.some(
     (c) =>
@@ -50,19 +44,18 @@ interface UseGraphHistoryArgs {
   setEdges: (edges: Edge[]) => void;
 }
 
-/** One instance owns one graph. The composite editor (AuthoringMode) holds its own `useNodesState`,
- * so it gets its own instance — a shared stack would make Ctrl+Z inside a composite undo a step on
- * the flow canvas behind it. */
+// One instance owns one graph — a shared stack would make Ctrl+Z inside a composite editor undo a
+// step on the flow canvas behind it.
 export function useGraphHistory({ nodes, edges, setNodes, setEdges }: UseGraphHistoryArgs): GraphHistory {
-  // A ref, not the closure: `capture` is called from event handlers that were created on an older
-  // render, and a stale closure would snapshot a graph two edits behind.
+  // A ref, not the closure: `capture` runs from event handlers built on an older render, and a
+  // stale closure would snapshot a graph two edits behind.
   const latest = useRef<GraphSnapshot>({ nodes, edges });
   latest.current = { nodes, edges };
 
   const past = useRef<GraphSnapshot[]>([]);
   const future = useRef<GraphSnapshot[]>([]);
-  // The stacks are refs (they must not trigger a render when written mid-mutation), so this forces
-  // the re-render that keeps canUndo/canRedo — and the buttons reading them — honest.
+  // Stacks are refs (must not trigger a render mid-mutation); this forces the re-render canUndo/
+  // canRedo need.
   const [, bump] = useReducer((n: number) => n + 1, 0);
 
   const capture = useCallback(() => {

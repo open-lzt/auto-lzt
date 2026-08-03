@@ -40,18 +40,9 @@ function groupByBranch(entries: TraceEntry[]): EntryGroup[] {
   return groups;
 }
 
-/** Renders the ordered step trace of one run. Steps sharing a `branch_id` (fork/join
- * concurrency, wave-06) are visually grouped together via a coloured left border so parallel
- * branches read as distinct lanes rather than one flat sequence.
- *
- * In `live` mode it additionally subscribes to the run's SSE feed and appends each
- * `step_completed` event as it arrives. Dedup heuristic: a per-`node_id` counter is seeded from
- * the static trace fetched at mount (how many times that node had already completed); the first
- * N live events for a given node_id are treated as the same occurrences already rendered by the
- * static fetch and dropped, everything past that renders as a new live row. This is an
- * approximation (it can't match `iteration_key` — `RunTraceStep` doesn't carry one on the wire)
- * but covers the only race that matters: a step finishing in the gap between the static fetch
- * and the SSE subscription opening. */
+// Live dedup: a per-node_id counter seeded from the static trace at mount skips that many live
+// events for the same node before rendering new ones as live rows — an approximation (can't match
+// iteration_key, not on the wire) that covers the race of a step finishing before SSE subscribes.
 export function RunTraceView({ runId, live = false }: RunTraceViewProps) {
   const [steps, setSteps] = useState<RunTraceStep[] | null>(null);
   const [error, setError] = useState<string | null>(null);

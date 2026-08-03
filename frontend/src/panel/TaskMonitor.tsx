@@ -7,9 +7,6 @@ import "./panel.css";
 
 const SKELETON_COUNT = 6;
 
-// Three states, three labels. Collapsing "connecting" into "offline" made a panel that had simply
-// not finished its first handshake announce that the connection was LOST — alarming, and wrong:
-// nothing had been lost, it had never been open. The first seconds of every page load hit this.
 const LIVE_LABEL: Record<StreamState, string> = {
   connecting: "подключение…",
   live: "в реальном времени",
@@ -23,7 +20,6 @@ const LIVE_HINT: Record<StreamState, string> = {
 };
 
 export interface TaskMonitorProps {
-  /** Offered by the empty state — the panel cannot create a flow itself. */
   onGoToBuilder?: () => void;
 }
 
@@ -42,8 +38,6 @@ export function TaskMonitor({ onGoToBuilder }: TaskMonitorProps) {
     setCursor(page.next_cursor);
     setTasks((prev) => {
       if (!append) return page.items;
-      // Keyed by id rather than concatenated: a task that changed position between pages would
-      // otherwise appear twice, which is the classic keyset-paging duplicate.
       const seen = new Set(prev.map((t) => t.id));
       return [...prev, ...page.items.filter((t) => !seen.has(t.id))];
     });
@@ -66,9 +60,7 @@ export function TaskMonitor({ onGoToBuilder }: TaskMonitorProps) {
     };
   }, [applyPage]);
 
-  // A ref, not state: the stream handler needs to know which flows are on screen, and reading that
-  // from state would put `tasks` in the handler's closure — which is what forces a reconnect on
-  // every event. See useTaskStream's note on closure discipline.
+  // Ref, not state: putting tasks in the stream handler's closure forces a reconnect on every event.
   const knownFlowIds = useRef<Set<string>>(new Set());
   useEffect(() => {
     knownFlowIds.current = new Set(tasks.map((t) => t.flow_id));
@@ -76,9 +68,6 @@ export function TaskMonitor({ onGoToBuilder }: TaskMonitorProps) {
 
   const onEvent = useCallback((event: TaskEvent) => {
     if (!knownFlowIds.current.has(event.flow_id)) return;
-    // The event says a card is stale, not what it should now say. Re-reading the page is one
-    // bounded query and keeps the card's several derived fields (health, next fire, last outcome)
-    // consistent with each other, which patching them field-by-field on the client would not.
     void fetchTasks().then((page) => applyPage(page, false));
   }, [applyPage]);
 

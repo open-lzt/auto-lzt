@@ -17,8 +17,7 @@ interface DeployButtonProps {
   edges: Edge[];
   setNodes: (updater: (nodes: Node<CanvasNodeData>[]) => Node<CanvasNodeData>[]) => void;
   onDeployed: (flowId: string) => void;
-  /** Declared by the params panel. Empty for every flow that predates them — such a flow takes the
-   * exact path it took before, dialog included (there is none) and request body unchanged. */
+  /** Empty for flows that predate the params panel — takes the exact deploy path it took before. */
   params?: ParamSpec[];
 }
 
@@ -35,10 +34,8 @@ function clearNodeErrors(nodes: Node<CanvasNodeData>[]): Node<CanvasNodeData>[] 
   return nodes.map((n) => (n.data.errorMessage ? { ...n, data: { ...n.data, errorMessage: undefined } } : n));
 }
 
-/** save (POST /flows) -> compile (POST /flows/{id}/compile) -> attach trigger (POST
- * /flows/{id}/triggers, skipped for kind=manual) -> fire an immediate run so the LiveBadge has
- * something to show within seconds, per the wave-06 acceptance criterion. A 400 CompileError
- * highlights the offending node inline instead of just toasting. */
+/** save -> compile -> attach trigger (skipped for kind=manual) -> fire an immediate run.
+ * A 400 CompileError highlights the offending node inline instead of just toasting. */
 export function DeployButton({
   flowId,
   flowName,
@@ -54,8 +51,7 @@ export function DeployButton({
 
   const busy = stage !== "idle";
 
-  // The graph is validated BEFORE the values dialog opens: filling a form and only then being told
-  // the canvas has two triggers is work thrown away.
+  // Validated before the values dialog opens, so a bad graph doesn't waste a filled-out form.
   function handleClick() {
     setError(null);
     setNodes(clearNodeErrors);

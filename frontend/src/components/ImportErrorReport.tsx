@@ -15,9 +15,6 @@ const STAGE_LABELS: Record<ImportStage, string> = {
 
 const STAGE_ORDER: ImportStage[] = ["schema", "compile", "dry_run"];
 
-/** Grouped, dismissible report of backend-rejected import errors. Node-level canvas highlighting
- * is out of scope here (the imported flow may not even be the one currently open) — this is
- * deliberately a flat, readable list the operator can act on. */
 export function ImportErrorReport({ errors, onDismiss }: ImportErrorReportProps) {
   const groups = STAGE_ORDER.map((stage) => ({
     stage,

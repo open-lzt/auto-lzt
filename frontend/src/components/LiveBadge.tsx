@@ -8,8 +8,7 @@ interface LiveBadgeProps {
   flowId: string | null;
 }
 
-/** Polls GET /flows/{id}/status every 5s (wave-06 §Logic: polling, not a socket — cheap enough at
- * this scale) and renders "running 24/7 · N аккаунтов" once the flow has a live run history. */
+// Polls GET /flows/{id}/status every 5s — cheap enough at this scale, no socket needed.
 export function LiveBadge({ flowId }: LiveBadgeProps) {
   const [status, setStatus] = useState<FlowStatusResponse | null>(null);
   const timerRef = useRef<number | undefined>(undefined);

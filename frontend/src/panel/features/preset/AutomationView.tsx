@@ -8,14 +8,6 @@ export interface AutomationViewProps {
   onDeployed?: () => void;
 }
 
-/** One tab for every preset, not one tab each.
- *
- * Each preset used to own a top-level tab, which meant adding a preset still required editing the
- * tab list — the last piece of per-preset hardcoding left after the forms themselves became
- * server-declared. They are all the same thing (a form that authors a flow), so they are one
- * destination with a switcher, and the switcher is built from whatever `/panel/presets/list`
- * returns. Adding a preset now touches no frontend file at all.
- */
 export function AutomationView({ onDeployed }: AutomationViewProps) {
   const [presets, setPresets] = useState<PresetSummary[] | null>(null);
   const [activeKey, setActiveKey] = useState<string | null>(null);
@@ -48,8 +40,6 @@ export function AutomationView({ onDeployed }: AutomationViewProps) {
   }
 
   if (presets === null) {
-    // The tab row is what arrives first and it changes the page height; a line of text where it
-    // will be means the whole form jumps down the moment the presets land.
     return (
       <div className="panel-view" aria-busy="true">
         <div className="preset-switch">

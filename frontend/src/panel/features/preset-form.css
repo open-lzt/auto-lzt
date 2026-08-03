@@ -1,18 +1,6 @@
-/* Styles for the preset screen (PresetView / AutomationView).
- *
- * This file used to describe `.autobump*` — the hand-written per-preset views that the
- * server-declared preset rework deleted. The markup became `.preset-form*`; the stylesheet was
- * never renamed, so ~170 lines styled classes that no longer existed and the surface that DID
- * exist got nothing at all. That is why the form had no measure and the deploy button sat flush
- * against the card: `.preset-form` was an unstyled `div`. Dead rules removed rather than renamed —
- * most described controls (interval pills, a bespoke checkbox, a numeric field) that AutoForm and
- * the shared form controls now own.
- */
-
 .preset-form {
   display: flex;
   flex-direction: column;
-  /* The gap the deploy button was missing. */
   gap: 16px;
   max-width: var(--panel-column);
 }
@@ -47,7 +35,6 @@
   color: var(--lzt-text-dim);
 }
 
-/* Preset switcher: the one place all presets are offered, built from what the server returns. */
 .preset-switch {
   margin-bottom: 20px;
 }

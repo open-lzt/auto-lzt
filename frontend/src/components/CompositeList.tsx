@@ -7,15 +7,10 @@ interface CompositeListProps {
   activeCompositeId: string | null;
   onSelect: (id: string) => void;
   onCreateNew: () => void;
-  /** Bumped by the parent after a composite is saved — the list is fetched on mount and stays
-   * mounted while the editor works beside it, so a newly saved block never showed up. */
+  /** Bumped by the parent after a composite is saved — this list stays mounted, so it won't refetch on its own. */
   reloadToken?: number;
 }
 
-/** Sidebar panel listing every saved composite template so the operator can open one for
- * editing in AuthoringMode or start a fresh one. Mirrors FlowList's fetch-on-mount /
- * refetch-after-mutation shape, kept as its own component (not a second entity type crammed
- * into FlowList) since composites are a template surface, not a flow. */
 export function CompositeList({ activeCompositeId, onSelect, onCreateNew, reloadToken = 0 }: CompositeListProps) {
   const [composites, setComposites] = useState<CompositeSummary[] | null>(null);
   const [error, setError] = useState<string | null>(null);

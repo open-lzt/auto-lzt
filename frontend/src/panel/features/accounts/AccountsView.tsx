@@ -47,8 +47,6 @@ export function AccountsView() {
     setAdding(true);
     try {
       await addAccount(token.trim());
-      // Cleared on success only: a rejected token stays in the field so the operator can fix a
-      // paste error instead of digging it out again.
       setToken("");
       toast.show("Аккаунт добавлен");
       await reload();
@@ -68,8 +66,6 @@ export function AccountsView() {
       await reload();
     } catch (err) {
       setPendingDelete(null);
-      // The 409 already names the flows still pinning this account — showing it verbatim is the
-      // payoff of the guard being a typed error rather than a bare refusal.
       toast.show(err instanceof Error ? err.message : "не удалось удалить", { tone: "danger" });
     } finally {
       setBusyId(null);
@@ -95,8 +91,6 @@ export function AccountsView() {
       await refreshAccountProfile(account.id);
       await reload();
     } catch (err) {
-      // Named per-account: with several rows on screen, "не удалось обновить" alone leaves the
-      // operator guessing which token is the bad one.
       toast.show(
         err instanceof Error ? err.message : `не удалось обновить ${account.id.slice(0, 8)}`,
         { tone: "danger" },
@@ -139,8 +133,6 @@ export function AccountsView() {
               autoComplete="off"
               onChange={(e) => setToken(e.target.value)}
             />
-            {/* A pasted token is long and the field is masked: without this the only way to catch a
-                truncated paste is to submit it and read the server's refusal. */}
             <button
               type="button"
               className="accounts-add__reveal"
@@ -194,9 +186,6 @@ export function AccountsView() {
                 aria-label="Название аккаунта"
                 onBlur={(e) => void handleRename(account, e.target.value)}
               />
-              {/* The nickname is the account's real name. The id prefix survives only as the
-                  fallback for a token whose profile has never been fetched, so a row is never
-                  anonymous — and the account pickers use the same rule, so the screens agree. */}
               <span className="accounts-row__username" title={account.id}>
                 {account.username ?? account.id.slice(0, 8)}
               </span>

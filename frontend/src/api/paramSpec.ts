@@ -1,10 +1,6 @@
-// Mirror of app/domain/flow_engine/spec.py ParamSpec (source of truth is the backend). Kept in
-// lockstep by hand, the repo's existing DTO-mirroring convention.
-//
-// It lives beside the other wire DTOs and not in canvas/ because FlowSpec.params is typed by it:
-// a transport type defined inside the canvas would force api/ to import from canvas/, which is the
-// inverted dependency this layout exists to prevent. The UI-side helpers that interpret these
-// values (validateParam, isVisible) stay in canvas/paramTypes.ts.
+// Mirrors app/domain/flow_engine/spec.py ParamSpec — keep in lockstep, backend is source of truth.
+// Lives here (not canvas/) because FlowSpec.params is typed by it and api/ must not import from
+// canvas/. UI-side interpretation (validateParam, isVisible) stays in canvas/paramTypes.ts.
 
 export type ParamControl =
   | "text"

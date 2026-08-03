@@ -1,23 +1,13 @@
 .panel-shell {
-  /* svh, not vh: on iOS `100vh` is the TALLEST viewport state, so content hides behind the
-     URL bar until you scroll. svh is the "always fits" one. */
+  /* svh, not vh: iOS `100vh` is the tallest viewport state, hiding content behind the URL bar. */
   min-height: 100svh;
   display: flex;
   flex-direction: column;
   background: var(--lzt-bg);
 }
 
-/* The editor tabs are a FIXED-HEIGHT surface; the list tabs are not.
- *
- * `min-height` above lets the shell grow with its content, which is right for Задачи and Реестр —
- * a long list should scroll the page. It is wrong for the editor: its panes each own an internal
- * `overflow-y: auto`, and an unbounded parent means they never reach it. The node palette grew to
- * 1397px inside a 900px viewport, so it ran off the bottom of the screen mid-item and took the
- * whole page scrolling with it — the editor's height cap used to come from `.app { height: 100% }`,
- * which stopped being an ancestor when the chrome moved into PanelShell.
- *
- * Scoped with `:has()` so the list tabs keep growing, and to wide screens only — below 900px the
- * panes stack and the page is SUPPOSED to scroll past one screen. */
+/* Editor panes own an internal overflow-y:auto; an unbounded parent means they never reach it,
+   so the workspace gets a height cap here. :has() keeps list tabs (Задачи, Реестр) growing. */
 @media (min-width: 901px) {
   .panel-shell:has(.app__workspace) {
     height: 100svh;
@@ -34,13 +24,8 @@
   backdrop-filter: blur(12px);
 }
 
-/* The kit's own wrapper is what was centring the bar.
- *
- * `.panel-shell__topbar-inner` below already asks for full width — but Topbar renders
- * `.lzt-topbar__inner` BETWEEN the bar and our div, and that one carries `max-width: 1180px;
- * margin: 0 auto`. So the brand was inset 161px from the left edge on a wide screen, floating in
- * the middle of nowhere: not on the nav's line, not on the content's, not on the window's. An
- * earlier pass fixed our div and never saw the wrapper in between. */
+/* Topbar renders `.lzt-topbar__inner` between the bar and our div; it carries its own
+   max-width/margin:auto centering that must be neutralized here. */
 .panel-shell__topbar .lzt-topbar__inner {
   max-width: none;
   margin: 0;
@@ -51,15 +36,11 @@
   display: flex;
   align-items: center;
   height: 56px;
-  /* 20px puts the brand on the same vertical line as the nav's own text below it. */
   padding: 0 20px;
   width: 100%;
 }
 
 .panel-shell__brand {
-  /* A wordmark set at body size reads as a label, not as the product's name — it was 14px, the
-     same as every hint on the page. 20px is the next step on the type scale, and the topbar is
-     56px tall, so it costs no height. */
   font-size: 20px;
   font-weight: 600;
   letter-spacing: -0.02em;
@@ -82,11 +63,8 @@
   flex: 1;
   display: flex;
   min-height: 0;
-  /* The rule between nav and content is drawn HERE, not as a border on the nav itself. The nav is
-     `align-self: flex-start` (so it can stick), which makes it exactly as tall as its own items —
-     its border-right therefore stopped partway down the page and left a dangling stub on any
-     screen taller than the menu. A background gradient on the full-height row draws the same
-     hairline for the whole column. */
+  /* Drawn as a gradient, not a border on the nav: the nav is `align-self: flex-start` and only
+     as tall as its own items, so its border-right would leave a dangling stub on a tall screen. */
   background: linear-gradient(
     to right,
     transparent 0,
@@ -114,8 +92,6 @@
 .panel-shell__nav-item {
   display: flex;
   align-items: center;
-  /* 10px, not the 6px the icons sat at before: an icon touching its label reads as one smudged
-     glyph instead of a symbol next to a word. */
   gap: 10px;
   padding: 8px 10px;
   border-radius: var(--radius-sm, 8px);
@@ -177,25 +153,17 @@
   }
 }
 
-/* Narrow screens — a REBUILD, not a reflow (responsive.md §2).
-   Stacking the column on top would put seven full-width rows between the operator and the
-   content: they would scroll past the whole menu on every visit. It becomes a horizontal
-   scrollable strip instead, so the nav costs one row of height at any width. */
 @media (max-width: 900px) {
   .panel-shell__body {
     flex-direction: column;
-    /* No column, no column rule. */
     background: none;
   }
 
-  /* Doubled class on the SAME element (`.lzt-sidenav.panel-shell__nav`): the kit declares
-     `flex-direction: column` at equal specificity and its stylesheet lands after this one, so a
-     single-class rule silently lost the tie — the strip stayed a column while every other rule
-     in this block applied, which is what made the symptom so confusing. */
+  /* Doubled selector: the kit declares `.lzt-sidenav { flex-direction: column }` at equal
+     specificity and loads after this file, so a single-class override loses the tie. */
   .panel-shell__nav.lzt-sidenav {
     width: 100%;
     max-height: none;
-    /* Sticks to the top bar rather than scrolling away — the nav is how you leave a screen. */
     position: sticky;
     top: 56px;
     z-index: 15;
@@ -205,7 +173,6 @@
     gap: 6px;
     padding: 10px 12px;
     overflow-x: auto;
-    /* Momentum scrolling without a visible bar eating 8px of a short strip. */
     scrollbar-width: none;
     background: var(--lzt-bg);
     border-right: none;
@@ -216,9 +183,7 @@
     display: none;
   }
 
-  /* Two classes deep on purpose: the kit's own `.lzt-sidenav__item` stretches the item to full
-     width, and a single-class override loses the specificity tie. This is the whole reason the
-     strip still read as a stack of full-width rows after it was told to be a row. */
+  /* Two classes deep on purpose: `.lzt-sidenav__item` stretches to full width at equal specificity. */
   .panel-shell__nav .panel-shell__nav-item {
     flex: none;
     width: auto;
@@ -229,9 +194,7 @@
   }
 }
 
-/* Phones: icons only. Seven labelled items scroll; seven icons fit one row, so the nav stops
-   being something you drag through and becomes something you aim at. The accessible name moves
-   to aria-label/title on the item (see PanelShell) — an icon alone is not a name. */
+/* Accessible name moves to aria-label/title on the item (see PanelShell) — an icon alone is not a name. */
 @media (max-width: 640px) {
   .panel-shell__nav.lzt-sidenav {
     justify-content: space-between;
@@ -240,7 +203,6 @@
   }
 
   .panel-shell__nav-label {
-    /* Not `display: none` on the item itself — the icon must stay, only its caption goes. */
     display: none;
   }
 
@@ -254,7 +216,6 @@
     gap: 0;
   }
 
-  /* A heading over a row of icons explains nothing. */
   .panel-shell__nav .lzt-sidenav__label {
     display: none;
   }

@@ -26,13 +26,7 @@
   overflow-y: auto;
 }
 
-/* Same stacking as the editor panes (app.css, flow-canvas.css) — this is the third surface built on
- * a fixed-width list beside a flexible pane.
- *
- * Worth stating why this was nearly missed: with no runs recorded, the list pane is not rendered at
- * all, so a width sweep across the tabs comes back clean while the layout is still broken for
- * anyone who actually has history. The defect is in the SHAPE, not in what happened to be on
- * screen at audit time. */
+/* Same stacking as the editor panes (app.css, flow-canvas.css). */
 @media (max-width: 900px) {
   .history {
     flex-direction: column;
@@ -46,8 +40,6 @@
   }
 }
 
-/* Tinted surface rather than a loud red fill: this is an explanation to read, not an alarm to
-   dismiss — the red badge in the list has already done the alerting. */
 .history__failure {
   display: flex;
   flex-direction: column;
@@ -69,8 +61,7 @@
   font-size: 14px;
   line-height: 1.5;
   color: var(--text);
-  /* Exception messages are long single tokens with no spaces to break at; without this the
-     container is what gives way and the panel scrolls sideways. */
+  /* Exception messages are long single tokens with no spaces to break at without this. */
   overflow-wrap: anywhere;
 }
 

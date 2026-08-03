@@ -27,25 +27,15 @@ interface FieldSpec {
   required: boolean;
   kind: "string" | "number" | "boolean" | "enum" | "unknown";
   enumValues?: (string | number)[];
-  // Human captions for `enumValues`, from `x-ui.options`. JSON Schema has nowhere to put them,
-  // and without it a cron-valued enum renders the raw expression instead of «Каждые 30 минут».
+  // Human captions from `x-ui.options`; without it a cron enum renders the raw expression.
   options?: PickerOption[];
   /** Explicit position from `x-ui.order`; absent means "keep declaration order". */
   order?: number;
-  // x-ui.widget picks the control within a kind: radio/multiselect for enum, textarea/datetime
-  // for string. "slider" is number-only, so it carries its own config below instead of here.
   widget?: JsonSchemaUi["widget"];
   slider?: { min: number; max: number; step: number; unit?: string };
 }
 
-/** Unwrap a property schema down to the type that decides which control to render.
- *
- * Three shapes arrive from Pydantic and all three used to fall through to "unknown":
- *   - `anyOf: [{type: X}, {type: "null"}]` for `X | None`;
- *   - `$ref: "#/$defs/Name"` for ANY enum-typed field — which is every picker in the app;
- *   - a plain inline `enum`.
- * `$defs` is threaded through because a `$ref` can only be resolved against the ROOT schema.
- */
+// `$defs` is threaded through because a `$ref` resolves only against the ROOT schema.
 function resolveType(
   schema: JsonSchema,
   defs: Record<string, JsonSchema>,
@@ -110,29 +100,18 @@ interface AutoFormProps {
   schema: JsonSchema;
   values: Record<string, FieldValue>;
   onChange: (key: string, value: FieldValue) => void;
-  /** Keys of the flow's declared params. Given, the form tells the operator which `{{vars.X}}`
-   * refs exist and flags the ones the backend will not substitute. Omitted (preset forms, the
-   * composite editor) nothing about params is shown at all. */
+  /** Given, flags `{{vars.X}}` refs the backend won't substitute; omitted, no param hints shown. */
   varKeys?: readonly string[];
 }
 
-/** Renders one input per JSON-Schema property.
- *
- * Drives both surfaces that describe their fields as a schema: a node's `input_schema` from GET
- * /catalog, and a preset's parameter model from GET /panel/presets/list. Supports
- * string/number/boolean/enum, with `x-ui.widget` upgrading string to textarea/datetime, enum to
- * radio/multiselect/account/category pickers, and number to slider; anything more exotic falls
- * back to a plain text field rather than silently dropping the parameter. */
 export function AutoForm({ schema, values, onChange, varKeys }: AutoFormProps) {
   const properties = schema.properties ?? {};
   const required = new Set(schema.required ?? []);
   const defs = (schema.$defs ?? {}) as Record<string, JsonSchema>;
   const fields = Object.entries(properties)
     .map(([key, propSchema]) => toFieldSpec(key, propSchema, required, defs))
-    // Declaration order is the default, but a field may claim a position with `x-ui.order`.
-    // Needed because Pydantic emits INHERITED fields first: a schedule declared on a shared base
-    // would open every form with «Как часто», asking when before who. Stable sort keeps
-    // everything without an order in its declared sequence.
+    // Pydantic emits inherited fields first, so a shared base's schedule field would open every
+    // form asking "how often" before "who"; x-ui.order overrides declaration order to fix that.
     .map((field, index) => ({ field, index }))
     .sort((a, b) => (a.field.order ?? 0) - (b.field.order ?? 0) || a.index - b.index)
     .map(({ field }) => field);
@@ -156,8 +135,6 @@ export function AutoForm({ schema, values, onChange, varKeys }: AutoFormProps) {
             </label>
           );
         }
-        // `x-ui.options` wins over the raw enum values: the schema knows the allowed set, the
-        // ui hint knows what to call each one.
         const options: PickerOption[] =
           field.options ??
           (field.enumValues ?? []).map((opt) => ({ value: String(opt), label: String(opt) }));
@@ -198,11 +175,8 @@ export function AutoForm({ schema, values, onChange, varKeys }: AutoFormProps) {
                 unit={field.slider.unit}
               />
             ) : field.kind === "number" ? (
-              // Value is kept as the raw string while typing — a live Number() coercion eats a
-              // trailing "." and breaks decimal entry; buildFlowSpec coerces before sending.
-              // A numeric field must also accept a partially-typed `{{param.x}}` reference: inside
-              // a composite that literal IS how an input parameter is wired, so a digits-only
-              // filter made every numeric parameter impossible to connect.
+              // Kept as raw string: live Number() coercion eats a trailing "." and breaks decimal
+              // entry; also must accept a partial `{{param.x}}` ref (how composite inputs wire up).
               <TextField
                 inputMode="decimal"
                 value={raw}
@@ -234,8 +208,7 @@ export function AutoForm({ schema, values, onChange, varKeys }: AutoFormProps) {
   );
 }
 
-/** Rendered under the control rather than blocking it: an embedded ref is a legal string, and the
- * operator may be mid-edit on the way to a correct one. */
+// Rendered under the control, not blocking it — an embedded ref is legal, and typing mid-edit is normal.
 function varRefProblem(value: FieldValue | undefined, varKeys: readonly string[] | undefined) {
   if (!varKeys) return null;
   const problem = diagnoseVarRef(value, varKeys);

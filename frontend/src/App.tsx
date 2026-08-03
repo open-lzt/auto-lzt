@@ -26,20 +26,14 @@ import "./app.css";
 
 const DEFAULT_FLOW_NAME = "Мой флоу";
 
-// The backend advertises every tab the installation has; this is the subset THIS build can render.
-// Authoring is filtered out rather than hidden behind a disabled tab: a tab that exists and does
-// nothing is worse than one that was never offered.
 const supportedTabs: ReadonlySet<string> = new Set(
   BUILDER_ENABLED
     ? ["tasks", "automation", "accounts", "flows", "registry", "history", "composites"]
     : ["tasks", "automation", "accounts", "flows", "registry", "history"],
 );
 
-/** Rebuilds canvas nodes/edges from a saved FlowSpec (GET .../export). The spec is the domain
- * graph only — it carries neither canvas layout (positions) nor the trigger's kind, since
- * triggers are attached out-of-band via POST .../triggers and NodeSpec has no x/y field. Loaded
- * flows therefore get a synthetic "manual" trigger and an auto-stacked vertical layout; the
- * operator can drag nodes and re-attach a real trigger after loading. */
+/** FlowSpec carries no layout or trigger kind (NodeSpec has no x/y; triggers attach out-of-band
+ * via POST .../triggers) — loaded flows get a synthetic "manual" trigger and stacked layout. */
 export function flowSpecToCanvas(
   spec: FlowSpec,
   catalog: CatalogNode[],
@@ -74,7 +68,7 @@ export function flowSpecToCanvas(
         category,
         label: displayLabel(nodeSpec.type),
         values: literalValues(nodeSpec.inputs),
-        // Dropping these on load made a republish overwrite the saved batch steps with nothing.
+        // Dropping this on load made a republish overwrite saved batch steps with nothing.
         children: nodeSpec.children?.length ? nodeSpec.children.map(childNodeSpecToCanvas) : undefined,
       },
     });
@@ -95,8 +89,6 @@ export default function App() {
   const [nodes, setNodes, rawOnNodesChange] = useNodesState<Node<CanvasNodeData>>([]);
   const [edges, setEdges, rawOnEdgesChange] = useEdgesState<Edge>([]);
   const [flowName, setFlowName] = useState(DEFAULT_FLOW_NAME);
-  // Lives beside the graph, in the same component, for the same reason: DeployButton needs it to
-  // build the spec and the params panel needs to edit it. One useState, no store.
   const [params, setParams] = useState<ParamSpec[]>([]);
   const [flowId, setFlowId] = useState<string | null>(null);
   const [switchError, setSwitchError] = useState<string | null>(null);
@@ -105,17 +97,12 @@ export default function App() {
   const [isAuthoringNew, setIsAuthoringNew] = useState(false);
   const [compositeSaves, setCompositeSaves] = useState(0);
   const [deploys, setDeploys] = useState(0);
-  // Tracks unsaved canvas edits so navigation away from the current graph (new flow, switch flow,
-  // tab close) can warn instead of silently discarding work.
   const [isDirty, setIsDirty] = useState(false);
-  // A loaded flow's trigger is always synthesized as "manual" (see flowSpecToCanvas) because the
-  // export endpoint carries no trigger kind — publishing without re-picking one silently
-  // downgrades a cron/event trigger to manual. This flag drives a visible warning until the
-  // operator explicitly re-assigns the trigger.
+  // True after loading a flow whose trigger was synthesized as "manual" (see flowSpecToCanvas) —
+  // publishing without re-picking one would silently downgrade a cron/event trigger to manual.
   const [triggerUnknown, setTriggerUnknown] = useState(false);
-  // Bumped whenever the canvas is filled from outside the editor. A counter rather than flowId:
-  // "new flow" twice in a row leaves flowId at null both times, and the second graph would inherit
-  // the first one's undo stack.
+  // Counter, not boolean: "new flow" twice leaves flowId null both times, and a flag wouldn't
+  // reset the undo stack on the second call.
   const [graphEpoch, setGraphEpoch] = useState(0);
   const [showParams, setShowParams] = useState(false);
   const paramKeys = useMemo(() => params.map((p) => p.key), [params]);

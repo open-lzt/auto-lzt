@@ -1,6 +1,5 @@
 .countdown {
-  /* Tabular figures are the whole point: without them every digit change reflows the string and
-     the countdown visibly twitches once a second. */
+  /* Without tabular-nums every digit change reflows the string and the countdown twitches. */
   font-variant-numeric: tabular-nums;
   font-feature-settings: "tnum" 1;
   letter-spacing: -0.02em;

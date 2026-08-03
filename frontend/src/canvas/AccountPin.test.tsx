@@ -1,4 +1,5 @@
 import { fireEvent, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import * as accountsClient from "../api/accountsClient";
 import type { Account } from "../api/accountsClient";
@@ -33,7 +34,8 @@ describe("AccountPin", () => {
     const select = await screen.findByLabelText("Аккаунт для этого блока");
     expect(screen.queryByText(/Исключённый/)).not.toBeInTheDocument();
 
-    fireEvent.change(select, { target: { value: "acc-1" } });
+    await userEvent.click(select);
+    await userEvent.click(screen.getByRole("option", { name: /Основной/ }));
     expect(onChange).toHaveBeenCalledWith("acc-1");
   });
 

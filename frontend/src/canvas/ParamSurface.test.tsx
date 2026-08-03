@@ -1,4 +1,5 @@
 import { fireEvent, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import { ParamSurface } from "./ParamSurface";
@@ -28,22 +29,25 @@ describe("ParamSurface", () => {
       { key: "count", label: "Купить аккаунтов", control: "slider", required: true, minimum: 1, maximum: 10 },
     ]);
     expect(screen.getByText("Купить аккаунтов")).toBeInTheDocument();
-    const range = screen.getByRole("slider") as HTMLInputElement;
-    fireEvent.change(range, { target: { value: "7" } });
-    expect(onChange).toHaveBeenCalledWith("count", 7);
+    const slider = screen.getByRole("slider");
+    slider.focus();
+    fireEvent.keyDown(slider, { key: "End" });
+    expect(onChange).toHaveBeenCalledWith("count", 10);
   });
 
-  it("renders a category picker with the market categories", () => {
+  it("renders a category picker with the market categories", async () => {
     surface([{ key: "cat", label: "Категория", control: "category_picker", required: true }]);
+    await userEvent.click(screen.getByRole("combobox"));
     expect(screen.getByRole("option", { name: "Steam" })).toBeInTheDocument();
   });
 
-  it("renders an account picker from provided accounts", () => {
+  it("renders an account picker from provided accounts", async () => {
     surface(
       [{ key: "acc", label: "Аккаунт", control: "account_picker", required: true }],
       {},
       [{ id: "a1", label: "main" }],
     );
+    await userEvent.click(screen.getByRole("combobox"));
     expect(screen.getByRole("option", { name: "main" })).toBeInTheDocument();
   });
 

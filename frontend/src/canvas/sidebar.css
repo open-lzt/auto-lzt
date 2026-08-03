@@ -42,9 +42,6 @@
   background: var(--surface-2);
 }
 
-/* Press feedback, not decoration: adding a block is a click that changes the canvas, and without it
-   the palette reads as unresponsive while the node is being placed. Surface shifts, nothing moves —
-   a lifting button is what the design language forbids. */
 .sidebar__item:active {
   background: var(--surface-3);
 }

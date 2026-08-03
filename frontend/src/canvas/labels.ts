@@ -1,6 +1,3 @@
-// RU labels + tooltip descriptions for catalog node types and trigger kinds. Supersedes
-// displayNames.ts: that map returned the raw key unmodified for anything unmapped (e.g.
-// "batch_submit" straight in the UI) — this one always humanizes an unmapped key instead.
 const LABELS: Record<string, string> = {
   "market.bump": "Поднять лот",
   "market.reprice": "Изменить цену",
@@ -24,8 +21,7 @@ const LABELS: Record<string, string> = {
   batch_submit: "Отправить пакет",
   batch_status: "Статус пакета",
   batch_list_pending: "Список ожидающих",
-  // wave-06 catalog keys — actual registered NodeType.key values (app/domain/catalog/registry.py),
-  // dotted under the "logic" facade, distinct from the bare aliases above.
+  // dotted "logic.*" keys are the actual registered NodeType.key values, distinct from bare aliases above
   "logic.fork": "Разветвление",
   "logic.join": "Слияние",
   "logic.batch": "Пакет шагов",
@@ -71,8 +67,7 @@ function humanize(raw: string): string {
     .join(" ");
 }
 
-/** Facade method (e.g. an action node's underlying "market.bump") takes priority over the
- * node's own type when both are known — that's the label a user recognizes on canvas. */
+// facade method (e.g. "market.bump") takes priority over node type when both known — user-recognized label
 export function displayLabel(nodeType: string, facadeMethod?: string): string {
   const key = facadeMethod ?? nodeType;
   return LABELS[key] ?? LABELS[nodeType] ?? humanize(key);

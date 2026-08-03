@@ -10,16 +10,7 @@ const KIND_LABEL: Record<"input" | "output", string> = {
 
 const COPIED_FEEDBACK_MS = 900;
 
-/** Authoring-time-only marker for one declared parameter on a composite template's surface —
- * it has no catalogKey/backend behaviour of its own. AuthoringMode reads `data.boundaryKind` /
- * `data.paramName` off it when assembling the template's `inputs`/`outputs` on save. Pill shape
- * (not the rectangular NodeShell chrome shared by Trigger/Action/Logic) so it reads as a
- * boundary, not a graph step. An output marker takes one incoming edge from the internal node
- * whose result it exposes; an input marker exposes a source handle for the operator's own
- * reference, but the actual wiring is a `{{param.NAME}}` literal typed into a consuming node's
- * field (composites have no data-flow edges, only control-flow ones — see AuthoringMode). Since
- * that literal is the ONLY way to connect an input — and saving fails without it — the marker
- * shows the exact text and copies it on click. */
+/** The `{{param.NAME}}` text is the only way to wire an input marker into a consuming field; saving fails without it. */
 export function TemplateBoundaryNode({ data, selected }: NodeProps<Node<CanvasNodeData>>) {
   const kind = data.boundaryKind ?? "input";
   const name = data.paramName?.trim() || "(без имени)";

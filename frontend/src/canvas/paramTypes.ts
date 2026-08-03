@@ -1,5 +1,4 @@
-// How the canvas INTERPRETS a ParamSpec: visibility, validation, and the category list a picker
-// offers. The spec itself is a wire DTO and lives in api/paramSpec.ts — see the note there.
+// The ParamSpec DTO itself lives in api/paramSpec.ts; this module only interprets it.
 import type { ParamSpec, ParamValue } from "../api/paramSpec";
 
 export type {
@@ -10,14 +9,12 @@ export type {
   ParamVisibility,
 } from "../api/paramSpec";
 
-/** A param gated by ``visible_if`` is shown only when its controlling field matches. */
 export function isVisible(spec: ParamSpec, values: Record<string, ParamValue>): boolean {
   if (!spec.visible_if) return true;
   return String(values[spec.visible_if.field] ?? "") === String(spec.visible_if.equals);
 }
 
-// WAVE-01 HARDCODE: mirror of app/domain/catalog/constants.py MARKET_CATEGORIES. Replaced in
-// wave-03 when CategoryPicker fetches GET /catalog/categories.
+// Mirrors app/domain/catalog/constants.py MARKET_CATEGORIES — keep in sync.
 export const MARKET_CATEGORIES: readonly { value: string; label: string }[] = [
   { value: "steam", label: "Steam" },
   { value: "fortnite", label: "Fortnite" },
@@ -47,8 +44,7 @@ export const MARKET_CATEGORIES: readonly { value: string; label: string }[] = [
   { value: "other", label: "Other" },
 ];
 
-/** Client-side validation mirroring resolve_params — returns an error string or null. Coercion to
- * the wire type happens in ParamSurface; this only gates the value before submit. */
+/** Mirrors resolve_params server-side; wire-type coercion happens in ParamSurface, not here. */
 export function validateParam(spec: ParamSpec, raw: ParamValue): string | null {
   const isEmpty = raw === null || raw === "";
   if (isEmpty) {

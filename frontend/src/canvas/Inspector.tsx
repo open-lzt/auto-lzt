@@ -22,14 +22,12 @@ interface InspectorProps {
   catalogEntry: CatalogNode | undefined;
   onChangeValue: (key: string, value: string | number | boolean) => void;
   onChangeAccountRef: (accountId: string | null) => void;
-  /** Passed in rather than derived here: the Inspector holds one node, and answering this needs
-   * the whole graph. */
+  // passed in rather than derived: the Inspector holds one node, answering this needs the whole graph
   insideAccountLoop: boolean;
   onChangeTrigger: (patch: Partial<TriggerConfig>) => void;
   onRenameLabel: (label: string) => void;
   onDeleteNode: () => void;
   onDuplicateNode: () => void;
-  /** Keys of the flow's declared params, for the `{{vars.X}}` hint under the node's fields. */
   varKeys?: readonly string[];
 }
 
@@ -50,8 +48,6 @@ function TrashIcon() {
   );
 }
 
-/** Side panel bound to the currently selected canvas node — renders AutoForm for action/logic
- * blocks, or the trigger's kind/cron/event config for a trigger block. */
 export function Inspector({
   node,
   catalogEntry,
@@ -116,11 +112,12 @@ export function Inspector({
             <SelectField
               value={node.data.triggerConfig.kind}
               onChange={(v) => onChangeTrigger({ kind: v as TriggerKind })}
-            >
-              <option value="manual">вручную</option>
-              <option value="schedule">по расписанию</option>
-              <option value="event">по событию</option>
-            </SelectField>
+              options={[
+                { value: "manual", label: "вручную" },
+                { value: "schedule", label: "по расписанию" },
+                { value: "event", label: "по событию" },
+              ]}
+            />
           </Field>
           {node.data.triggerConfig.kind === "schedule" ? (
             <Field label="Cron-выражение">
@@ -136,16 +133,8 @@ export function Inspector({
               <SelectField
                 value={node.data.triggerConfig.event_type}
                 onChange={(v) => onChangeTrigger({ event_type: v })}
-              >
-                <option value="" disabled>
-                  выберите…
-                </option>
-                {CURATED_EVENT_TYPES.map((et) => (
-                  <option key={et} value={et}>
-                    {et}
-                  </option>
-                ))}
-              </SelectField>
+                options={CURATED_EVENT_TYPES.map((et) => ({ value: et, label: et }))}
+              />
             </Field>
           ) : null}
         </div>

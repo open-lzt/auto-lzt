@@ -4,10 +4,6 @@
   margin: 0 auto;
   width: 100%;
 
-  /* One measure for the settings-shaped tabs (bump, accounts). They used to pick their own — 620
-     for the bump form, 560 for the token card, none at all for the account list — so a form and the
-     list directly under it ended on different right edges, and switching tabs moved the column.
-     The task grid ignores this and spans the full width. */
   --panel-column: 720px;
 }
 
@@ -47,7 +43,6 @@
   color: var(--lzt-brand);
 }
 
-/* Pulses so a stalled handshake reads as "still trying" rather than a frozen label. */
 .panel-live--connecting {
   color: var(--lzt-text-dim);
 }
@@ -74,8 +69,7 @@
   margin: 0 0 20px;
 }
 
-/* auto-fill, not auto-fit: with one task, auto-fit would stretch a single card the full width of
-   the page. auto-fill keeps the column width honest and leaves the empty tracks empty. */
+/* auto-fill, not auto-fit — auto-fit would stretch a single card the full width of the page. */
 .task-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
@@ -131,8 +125,7 @@
   gap: 2px;
 }
 
-/* The one place on the card allowed to be loud. tabular-nums stops the countdown from jittering
-   sideways as digits change, which on a ticking clock reads as sloppiness more than anything else. */
+/* tabular-nums stops the digits from jittering sideways as the countdown ticks. */
 .task-card__countdown .countdown {
   font-size: 32px;
   font-weight: 600;
@@ -171,8 +164,6 @@
   gap: 12px;
 }
 
-/* nowrap so a card whose value side is crowded (an outcome badge next to a timestamp) wraps the
-   LABEL onto two lines and grows taller than the cards beside it — which broke the grid's baseline. */
 .task-card__meta-row dt {
   color: var(--lzt-text-dim);
   white-space: nowrap;
@@ -213,8 +204,6 @@
   }
 }
 
-/* The wall-clock moment under the countdown. Quiet: the countdown is the focal value, this is
-   the reference that stops a UTC schedule from reading as a broken clock. */
 .task-card__countdown-at {
   display: block;
   margin-top: 2px;
@@ -223,8 +212,6 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* Phones: the title stops sharing a row with its explanation. Side by side, a 390px column left
-   «Автоматизация» squeezed into a third of the width beside a five-line paragraph. */
 @media (max-width: 700px) {
   .panel-view__head {
     flex-direction: column;

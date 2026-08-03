@@ -7,8 +7,7 @@ interface DynamicMethodsState {
   error: string | null;
 }
 
-/** A dynamic method's key is "facade.method" (e.g. "market.bump" -> facade "market"); a key with
- * no dot (condition, trigger kinds) buckets under its own category instead so nothing is dropped. */
+// key is "facade.method" (e.g. "market.bump"); no dot -> buckets under its own category instead
 function groupByFacade(nodes: CatalogNode[]): Record<string, CatalogNode[]> {
   const facades: Record<string, CatalogNode[]> = {};
   for (const node of nodes) {

@@ -15,18 +15,10 @@ interface SidebarProps {
   catalogError: string | null;
   onAddTrigger: (kind: TriggerKind) => void;
   onAddNode: (entry: CatalogNode) => void;
-  /** A composite's internal graph has no trigger, and the backend refuses a nested template
-   * (TemplateService._validate_standalone) — so the palette must not offer either. */
+  /** Backend refuses a nested template (TemplateService._validate_standalone) — palette omits both. */
   variant?: "flow" | "template";
 }
 
-/** Click-to-add palette. No drag-and-drop for the MVP canvas — a click drops the block onto the
- * canvas at a free spot, which is enough to assemble a flow with the mouse.
- *
- * Dynamic methods (e.g. every "market.*" action) are browsed per-facade via useDynamicMethods
- * instead of one flat "Действия" list, so a facade with many methods stays scannable. The
- * `catalog`/`catalogError` props (FlowCanvas's own already-fetched catalog) still gate the
- * overall loading/error banner so the two fetches don't show conflicting states mid-load. */
 export function Sidebar({ catalog, catalogError, onAddTrigger, onAddNode, variant = "flow" }: SidebarProps) {
   const { facades, loading, error } = useDynamicMethods();
   const combinedError = catalogError ?? error;
@@ -43,13 +35,10 @@ export function Sidebar({ catalog, catalogError, onAddTrigger, onAddNode, varian
       );
   }, []);
 
-  // A composite call is a plain node on the canvas — "custom.<template_id>" is the literal
-  // NodeSpec.type convention the compiler inlines server-side (app/domain/flow_engine/spec.py).
-  // Routing it through the exact same onAddNode the catalog buttons already use means FlowCanvas
-  // needs no separate insertion path for composites.
+  // "custom.<template_id>" is the literal NodeSpec.type convention the compiler expects server-side
+  // (app/domain/flow_engine/spec.py).
   function addComposite(composite: CompositeSummary): void {
-    // A composite is inlined server-side, so it has no catalog entry of its own to copy these
-    // from: the schemas are empty and the capabilities unknown until the compiler expands it.
+    // Inlined server-side, so schemas/capabilities are unknown client-side until the compiler expands it.
     onAddNode({
       key: `custom.${composite.id}`,
       category: "action",

@@ -37,28 +37,6 @@
   background: var(--surface-3);
 }
 
-/* Styled rather than left native: an unstyled select is the one control that would announce this
-   panel as unfinished, and it sits next to fields that are all hand-drawn. */
-.account-pin__select {
-  width: 100%;
-  height: 32px;
-  padding: 0 10px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--surface-1);
-  color: var(--text);
-  font-size: 14px;
-}
-
-.account-pin__select:hover {
-  border-color: var(--border-strong);
-}
-
-.account-pin__select:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
-
 .account-pin__note,
 .account-pin__hint {
   margin: 0;

@@ -2,11 +2,6 @@
   display: flex;
   flex-direction: column;
   gap: 14px;
-  /* A form is a column of text, and a 1400px-wide column is not readable — the account rows put a
-     name on one edge and its balance 1190px away on the other, and every select stretched to match.
-     `--panel-column` is the measure the panel already declares for exactly this; the form simply
-     was not using it. Falls back for the canvas inspector, which renders AutoForm outside a
-     `.panel-view` and is narrower than the cap anyway. */
   max-width: var(--panel-column, 720px);
 }
 
@@ -16,7 +11,6 @@
   margin: 0;
 }
 
-/* Parameter surface — the flat settings menu for a whole flow. */
 .param-surface {
   display: flex;
   flex-direction: column;
@@ -39,8 +33,6 @@
   color: var(--danger);
 }
 
-/* Warning, not danger: the value is a legal string and the flow will publish. What it will not do
-   is substitute — so the tone says "look at this", not "this is broken". */
 .autoform__var-warning {
   display: block;
   margin-top: 4px;
@@ -66,89 +58,12 @@
   font-size: 11px;
 }
 
-/* Slider control: range track + live numeric readout. */
-.ctl-slider {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-/* Fully hand-drawn, because `accent-color` alone leaves the browser's own thumb — and that thumb is
-   a glossy 3D disc on most platforms, the one raised, shiny control in an otherwise flat interface.
-   The rules are duplicated per engine on purpose: WebKit and Gecko do not accept a shared selector
-   list here, one unknown pseudo-element drops the whole rule. */
-.ctl-slider__range {
-  flex: 1;
-  height: 4px;
-  appearance: none;
-  background: var(--surface-3);
-  border-radius: 999px;
-}
-
-.ctl-slider__range::-webkit-slider-thumb {
-  appearance: none;
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  background: var(--accent);
-  border: 2px solid var(--surface-1);
-  cursor: pointer;
-}
-
-.ctl-slider__range::-moz-range-thumb {
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  background: var(--accent);
-  border: 2px solid var(--surface-1);
-  cursor: pointer;
-}
-
-.ctl-slider__range:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 4px;
-}
-
-.ctl-slider__readout {
-  min-width: 44px;
-  text-align: right;
-  font-size: 14px;
-  font-variant-numeric: tabular-nums;
-  color: var(--text);
-}
-
-.ctl-slider__unit {
-  margin-left: 2px;
-  color: var(--text-faint);
-}
-
-.ctl-textarea {
-  resize: vertical;
-  min-height: 72px;
-  font-family: inherit;
-  line-height: 1.5;
-}
 
 .ctl-radio,
 .ctl-multiselect {
   display: flex;
   flex-direction: column;
   gap: 6px;
-}
-
-.ctl-radio__option,
-.ctl-multiselect__option {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 14px;
-  color: var(--text);
-  cursor: pointer;
-}
-
-.ctl-radio__option input,
-.ctl-multiselect__option input {
-  accent-color: var(--accent);
 }
 
 .param-surface__group {
@@ -171,16 +86,11 @@
   gap: 6px;
 }
 
-/* boolean fields read as one row: label first, control right — not a checkbox orphaned below text */
 .autoform__field--inline {
   flex-direction: row;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  /* Capped, because `space-between` across the full form width put «Холостой прогон» 992px away
-     from the switch that toggles it — label on one edge, control on the other, nothing between.
-     The docked-right settings-row idiom is kept; it just needs a measure where the eye can still
-     see both ends at once. */
   max-width: 420px;
 }
 
@@ -195,101 +105,11 @@
   margin-left: 2px;
 }
 
-.autoform__control {
-  appearance: none;
-  height: 34px;
-  padding: 0 10px;
-  border-radius: var(--radius-sm);
-  background: var(--surface-3);
-  border: 1px solid var(--border);
-  color: var(--text);
-  font-size: 14px;
-  transition:
-    border-color 140ms ease-out,
-    background 140ms ease-out;
-}
-
-.autoform__control:hover {
-  border-color: var(--border-strong);
-}
-
-.autoform__control:focus {
-  border-color: var(--accent);
-  background: var(--surface-2);
-}
-
-/* A field's width is a promise about how much you are expected to type.
- *
- * Numeric inputs were inheriting the full form width: «Цена до» and «Лотов за один запуск» each
- * rendered 1130px wide on a desktop to hold "500" and "1". A field twelve times longer than its
- * longest plausible value reads as a text area and makes the form look like it wants an essay.
- * Keyed off `inputmode`, which AutoForm already sets for exactly the numeric branch — no new class
- * to thread through, and it cannot drift out of sync with which control is a number. */
-input.autoform__control[inputmode="decimal"] {
+/* Keyed off `inputmode`, which AutoForm sets only on the numeric branch — stays in sync by construction. */
+.autoform input[inputmode="decimal"] {
   max-width: 160px;
 }
 
-.ctl-select {
-  position: relative;
-  display: flex;
-}
-
-select.autoform__control {
-  cursor: pointer;
-  width: 100%;
-  padding-right: 30px;
-}
-
-.ctl-select__chevron {
-  position: absolute;
-  right: 10px;
-  top: 50%;
-  width: 14px;
-  height: 14px;
-  transform: translateY(-50%);
-  color: var(--text-faint);
-  pointer-events: none;
-}
-
-/* One checkbox in the app, not two. The account picker declared `.data-picker__check` and then
-   styled nothing, so it fell back to the browser default: a 16px grey box beside this 18px custom
-   one, on the very same form. Sharing the rule is what keeps them from drifting again. */
-.autoform__checkbox,
-.data-picker__check {
-  appearance: none;
-  width: 18px;
-  height: 18px;
-  border-radius: 5px;
-  border: 1px solid var(--border-strong);
-  background: var(--surface-3);
-  cursor: pointer;
-  position: relative;
-  flex-shrink: 0;
-  transition: background 140ms ease-out, border-color 140ms ease-out;
-}
-
-.autoform__checkbox:checked,
-.data-picker__check:checked {
-  background: var(--accent);
-  border-color: var(--accent);
-}
-
-.autoform__checkbox:checked::after,
-.data-picker__check:checked::after {
-  content: "";
-  position: absolute;
-  left: 5px;
-  top: 1px;
-  width: 5px;
-  height: 9px;
-  border: solid var(--bg);
-  border-width: 0 2px 2px 0;
-  transform: rotate(45deg);
-}
-
-/* The hint was the BRIGHTEST text on the form (#f2f2f3) while the label it explains was muted
-   (#86888d) — support shouting over the thing it supports. It steps below the label: same size,
-   lighter weight, dimmer ink, so the eye lands on the field name first. */
 .autoform__hint {
   color: var(--lzt-text-dim);
   font-weight: 400;

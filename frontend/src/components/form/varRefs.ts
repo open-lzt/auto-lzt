@@ -1,9 +1,6 @@
-// Reading `{{vars.X}}` out of a field value. Pure text, no canvas types — it lives here because
-// AutoForm (the node's field form) needs it and canvas/ already imports components/form; putting
-// it under canvas/ would make that import bidirectional.
+// Lives here (not canvas/) to avoid a bidirectional import — canvas/ already imports components/form.
 
-/** Mirror of app/domain/flow_engine/compiler.py:35. Anchored on both ends deliberately: the
- * backend substitutes a field ONLY when the ref is the entire value. */
+// Mirror of app/domain/flow_engine/compiler.py:35 — anchored both ends: backend substitutes only whole-value refs.
 const WHOLE_VAR_REF = /^\{\{\s*vars\.(\w+)\s*\}\}$/;
 
 const ANY_VAR_REF = /\{\{\s*vars\.(\w+)\s*\}\}/g;
@@ -25,11 +22,7 @@ export interface VarRefProblem {
   message: string;
 }
 
-/** Diagnoses one field value against the declared params.
- *
- * `partial` is the trap this exists for: "цена {{vars.p}} руб" is an error nowhere — the backend
- * stores it as a literal and the node runs with the braces still in the string. Nothing fails; the
- * flow just quietly does the wrong thing. */
+// `partial`: "цена {{vars.p}} руб" errors nowhere — backend stores it as a literal, braces and all.
 export function diagnoseVarRef(value: unknown, declaredKeys: readonly string[]): VarRefProblem | null {
   const mentioned = mentionedKeys(value);
   if (mentioned.length === 0) return null;

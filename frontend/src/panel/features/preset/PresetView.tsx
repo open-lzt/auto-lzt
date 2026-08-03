@@ -12,14 +12,6 @@ export interface PresetFormProps {
   onDeployed?: () => void;
 }
 
-/** The form for ONE preset — presentational, handed the preset it renders.
- *
- * There is no per-preset component on purpose. A preset states its own fields server-side
- * (`domain/panel/preset_registry.py`) and this renders whatever it states, so adding a preset is
- * a backend change and this file never grows. The shape before — one hand-written React screen
- * per preset — meant the interval list and the market's category enum were re-typed in
- * TypeScript, where they immediately began to drift.
- */
 export function PresetForm({ preset, onDeployed }: PresetFormProps) {
   const [values, setValues] = useState<Record<string, FormValue>>(() =>
     defaultValues(preset.params_schema),
@@ -27,8 +19,6 @@ export function PresetForm({ preset, onDeployed }: PresetFormProps) {
   const [deploying, setDeploying] = useState(false);
   const toast = useToast();
 
-  // Switching preset resets the form: the previous preset's values are keyed by ITS field names,
-  // and carrying them over would submit fields the new preset never declared.
   useEffect(() => {
     setValues(defaultValues(preset.params_schema));
   }, [preset]);

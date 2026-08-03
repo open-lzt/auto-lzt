@@ -20,19 +20,12 @@ interface FlowListProps {
   activeFlowId: string | null;
   onSelect: (id: string) => void;
   onCreateNew: () => void;
-  /** Bumped by the parent after a publish — the list is fetched on mount and stays mounted, so a
-   * newly created flow never appeared until a page reload. */
+  /** Bump to force a refetch — the list stays mounted, so a new flow otherwise needs a page reload. */
   reloadToken?: number;
-  /** False in the preview build (BUILDER_ENABLED off): the list still switches between flows and
-   * exports them — reads — but shows no control that would write. Export stays because it is a
-   * GET plus a local download. */
+  /** False in the preview build: hides write controls; export stays (read-only GET + local download). */
   canAuthor?: boolean;
 }
 
-/** Sidebar panel listing every saved flow so the operator can switch between them, rename,
- * delete, or export one inline, start a fresh blank flow, or import a flow from a JSON file.
- * Refetches the list after every mutation instead of patching local state — the list is small
- * and this keeps it trivially consistent with the backend (no optimistic-update bugs to chase). */
 export function FlowList({
   activeFlowId,
   onSelect,

@@ -4,16 +4,10 @@ import { downloadFlowById } from "../../../api/downloadFlow";
 import { fetchOfficialModules, importModule, type ModuleRef } from "./registryClient";
 import "./registry.css";
 
-/** The official flow registry: install a reviewed flow, or take it away as JSON.
- *
- * A list, not a form, so it needs no declarative surface — there is nothing here for an operator
- * to fill in.
- */
 export function RegistryView() {
   const [modules, setModules] = useState<ModuleRef[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
-  // flow ids of what this session installed, so «Скачать» can appear on the row it came from.
   const [installed, setInstalled] = useState<Record<string, string>>({});
   const toast = useToast();
 
@@ -72,8 +66,6 @@ export function RegistryView() {
         </Alert>
       ) : null}
 
-      {/* An unreachable registry and an empty one look identical over the wire — the client is
-          fail-closed and returns []. Saying which is which is the whole job of this state. */}
       {modules !== null && modules.length === 0 && !error ? (
         <Empty title="Реестр пуст или недоступен">
           <p className="panel-empty__hint">
@@ -92,8 +84,6 @@ export function RegistryView() {
               <Card key={module.name} className="registry__row">
                 <span className="registry__name">{module.name}</span>
                 <Badge pill>{module.version}</Badge>
-                {/* Integrity of the transfer, not a signature — it says nothing about the author.
-                    Shown truncated because the point is comparability, not reading it. */}
                 <code className="registry__hash" title={`sha256: ${module.sha256}`}>
                   {module.sha256.slice(0, 12)}
                 </code>

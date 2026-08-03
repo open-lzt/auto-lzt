@@ -1,6 +1,3 @@
-// The flat "settings menu" for a flow: renders its declared params as a form ("Задержка: X",
-// "Купить аккаунтов: N") so values live in one place instead of scattered across node inspectors.
-
 import { useEffect, useState } from "react";
 
 import {
@@ -22,8 +19,7 @@ import { fetchCategories } from "../api/catalogClient";
 import type { PickerOption } from "../components/form/controls";
 import "../components/form/autoform.css";
 
-/** Live market categories with the static snapshot as an offline fallback (closes the wave-01
- * hardcode: the picker prefers GET /catalog/categories, degrades to the bundled list on failure). */
+/** Prefers GET /catalog/categories, falls back to the bundled MARKET_CATEGORIES snapshot on failure. */
 function useCategories(): readonly PickerOption[] {
   const [categories, setCategories] = useState<readonly PickerOption[]>(MARKET_CATEGORIES);
   useEffect(() => {
@@ -51,7 +47,6 @@ interface ParamSurfaceProps {
   params: ParamSpec[];
   values: Record<string, ParamValue>;
   onChange: (key: string, value: ParamValue) => void;
-  /** Accounts offered by an account_picker param — supplied by the parent (fetched once). */
   accounts?: AccountRef[];
 }
 

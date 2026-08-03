@@ -30,9 +30,10 @@ describe("AutoForm widget dispatch", () => {
         "x-ui": { widget: "slider", step: 1 },
       }),
     );
-    const range = screen.getByRole("slider") as HTMLInputElement;
-    fireEvent.change(range, { target: { value: "7" } });
-    expect(onChange).toHaveBeenCalledWith("count", 7);
+    const slider = screen.getByRole("slider");
+    slider.focus();
+    fireEvent.keyDown(slider, { key: "End" });
+    expect(onChange).toHaveBeenCalledWith("count", 10);
   });
 
   it("renders a textarea for a string field hinted x-ui.widget=textarea", () => {
@@ -45,14 +46,17 @@ describe("AutoForm widget dispatch", () => {
     expect(onChange).toHaveBeenCalledWith("note", "hello");
   });
 
-  it("renders a datetime-local input for a string field hinted x-ui.widget=datetime", () => {
+  it("renders a date field and a time field for x-ui.widget=datetime", () => {
     const onChange = form(
       schemaFor("at", { type: "string", title: "At", "x-ui": { widget: "datetime" } }),
     );
-    const input = screen.getByLabelText(/^At/) as HTMLInputElement;
-    expect(input.type).toBe("datetime-local");
-    fireEvent.change(input, { target: { value: "2026-01-01T12:00" } });
-    expect(onChange).toHaveBeenCalledWith("at", "2026-01-01T12:00");
+    const date = screen.getByPlaceholderText("дд.мм.гггг");
+    const time = document.querySelector<HTMLInputElement>('input[type="time"]');
+    expect(time).not.toBeNull();
+
+    fireEvent.change(date, { target: { value: "01.01.2026" } });
+    fireEvent.blur(date);
+    expect(onChange).toHaveBeenCalledWith("at", "2026-01-01T00:00");
   });
 
   it("renders a radio group for an enum field hinted x-ui.widget=radio", () => {

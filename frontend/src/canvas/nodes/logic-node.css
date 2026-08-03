@@ -1,6 +1,3 @@
-/* Per-catalogKey visual distinction for the shared LogicNode component (fork/join/batch/utility) —
-   wraps the existing .flow-node chrome from shared.tsx rather than modifying it. */
-
 .logic-node--fork .flow-node {
   border-left: 3px solid var(--node-accent, var(--accent));
 }
@@ -29,8 +26,7 @@
   text-align: center;
 }
 
-/* 12px is the floor, not a preference: these name the branch a connection leaves by, and the canvas
-   is normally read zoomed out. Below 12px they stop being legible exactly when they are needed. */
+/* 12px floor: below it these branch-name labels stop being legible at the canvas's normal zoomed-out read */
 .logic-node__port-labels {
   display: flex;
   justify-content: space-between;

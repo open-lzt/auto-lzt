@@ -12,11 +12,7 @@ interface ConfirmDialogProps {
   onCancel: () => void;
 }
 
-/** The gate in front of a delete that the server cannot undo.
- *
- * Both call sites delete rows the backend has no restore endpoint for, so an undo toast would be a
- * lie — the only honest guard is asking first. Cancel is the default action: it is the first button
- * in the DOM, so Tab lands there and Escape (Modal's own handler) resolves to it. */
+/** For deletes the backend has no restore endpoint for — an undo toast would be a lie, so confirm first. */
 export function ConfirmDialog({
   open,
   title,

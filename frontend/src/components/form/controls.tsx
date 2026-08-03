@@ -1,35 +1,28 @@
+import {
+  Checkbox as KitCheckbox,
+  DateTimePicker as KitDateTimePicker,
+  Input,
+  Radio,
+  Select,
+  Slider as KitSlider,
+  Textarea,
+  type SelectOption,
+} from "@open-lzt/ui";
 import type { ReactNode } from "react";
 import "./autoform.css";
 
-/** Chevron for the custom select — native `appearance: none` strips the OS arrow, so the
- * dropdown affordance is drawn here instead. */
-function ChevronIcon() {
-  return (
-    <svg
-      className="ctl-select__chevron"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d="m6 9 6 6 6-6" />
-    </svg>
-  );
+export interface PickerOption {
+  value: string;
+  label: string;
 }
 
 interface FieldProps {
   label: string;
   required?: boolean;
-  /** The field'''s own explanation, rendered under the control. Comes straight from the schema'''s
-   * `description`, so a form explains itself without the screen restating anything. */
   hint?: string;
   children: ReactNode;
 }
 
-/** Labelled field wrapper shared by every control. */
 export function Field({ label, required, hint, children }: FieldProps) {
   return (
     <label className="autoform__field">
@@ -47,16 +40,14 @@ interface TextFieldProps {
   value: string;
   onChange: (value: string) => void;
   placeholder?: string;
-  /** `decimal` renders a numeric keypad on mobile without the type=number spinner/wheel bugs. */
+  /** `decimal` gives a numeric keypad without the type=number spinner and wheel bugs. */
   inputMode?: "text" | "decimal";
 }
 
 export function TextField({ value, onChange, placeholder, inputMode = "text" }: TextFieldProps) {
   return (
-    <input
-      type="text"
+    <Input
       inputMode={inputMode}
-      className="autoform__control"
       placeholder={placeholder}
       value={value}
       onChange={(e) => onChange(e.target.value)}
@@ -64,20 +55,20 @@ export function TextField({ value, onChange, placeholder, inputMode = "text" }: 
   );
 }
 
-interface SelectFieldProps {
+interface TextAreaProps {
   value: string;
   onChange: (value: string) => void;
-  children: ReactNode;
+  placeholder?: string;
 }
 
-export function SelectField({ value, onChange, children }: SelectFieldProps) {
+export function TextArea({ value, onChange, placeholder }: TextAreaProps) {
   return (
-    <div className="ctl-select">
-      <select className="autoform__control" value={value} onChange={(e) => onChange(e.target.value)}>
-        {children}
-      </select>
-      <ChevronIcon />
-    </div>
+    <Textarea
+      rows={4}
+      placeholder={placeholder}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+    />
   );
 }
 
@@ -87,14 +78,7 @@ interface CheckboxProps {
 }
 
 export function Checkbox({ checked, onChange }: CheckboxProps) {
-  return (
-    <input
-      type="checkbox"
-      className="autoform__checkbox"
-      checked={checked}
-      onChange={(e) => onChange(e.target.checked)}
-    />
-  );
+  return <KitCheckbox checked={checked} onChange={(e) => onChange(e.target.checked)} />;
 }
 
 interface SliderProps {
@@ -103,33 +87,22 @@ interface SliderProps {
   min?: number;
   max?: number;
   step?: number;
-  /** Rendered after the numeric readout, e.g. `"s"` for a delay in seconds. */
   unit?: string;
 }
 
 export function Slider({ value, onChange, min = 0, max = 100, step = 1, unit }: SliderProps) {
   return (
-    <div className="ctl-slider">
-      <input
-        type="range"
-        className="ctl-slider__range"
-        min={min}
-        max={max}
-        step={step}
-        value={value}
-        onChange={(e) => onChange(Number(e.target.value))}
-      />
-      <span className="ctl-slider__readout">
-        {value}
-        {unit ? <span className="ctl-slider__unit">{unit}</span> : null}
-      </span>
-    </div>
+    <KitSlider value={value} onChange={onChange} min={min} max={max} step={step} unit={unit} />
   );
 }
 
-export interface PickerOption {
+interface DateTimePickerProps {
   value: string;
-  label: string;
+  onChange: (value: string) => void;
+}
+
+export function DateTimePicker({ value, onChange }: DateTimePickerProps) {
+  return <KitDateTimePicker value={value} onChange={onChange} />;
 }
 
 interface PickerProps {
@@ -139,18 +112,14 @@ interface PickerProps {
   placeholder?: string;
 }
 
-/** A styled select over a caller-provided option list — the shared base for the account and
- * category pickers, which differ only in where their options come from. */
 export function OptionPicker({ value, onChange, options, placeholder }: PickerProps) {
   return (
-    <SelectField value={value} onChange={onChange}>
-      {placeholder ? <option value="">{placeholder}</option> : null}
-      {options.map((o) => (
-        <option key={o.value} value={o.value}>
-          {o.label}
-        </option>
-      ))}
-    </SelectField>
+    <Select
+      options={options as SelectOption[]}
+      value={value}
+      onChange={onChange}
+      placeholder={placeholder ?? "выберите…"}
+    />
   );
 }
 
@@ -162,38 +131,15 @@ export function CategoryPicker(props: Omit<PickerProps, "placeholder">) {
   return <OptionPicker {...props} placeholder="выберите категорию…" />;
 }
 
-interface TextAreaProps {
+interface SelectFieldProps {
   value: string;
   onChange: (value: string) => void;
+  options: readonly PickerOption[];
   placeholder?: string;
 }
 
-export function TextArea({ value, onChange, placeholder }: TextAreaProps) {
-  return (
-    <textarea
-      className="autoform__control ctl-textarea"
-      placeholder={placeholder}
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      rows={4}
-    />
-  );
-}
-
-interface DateTimePickerProps {
-  value: string;
-  onChange: (value: string) => void;
-}
-
-export function DateTimePicker({ value, onChange }: DateTimePickerProps) {
-  return (
-    <input
-      type="datetime-local"
-      className="autoform__control"
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-    />
-  );
+export function SelectField(props: SelectFieldProps) {
+  return <OptionPicker {...props} />;
 }
 
 interface RadioGroupProps {
@@ -207,23 +153,21 @@ export function RadioGroup({ value, onChange, options, name }: RadioGroupProps) 
   return (
     <div className="ctl-radio" role="radiogroup">
       {options.map((o) => (
-        <label key={o.value} className="ctl-radio__option">
-          <input
-            type="radio"
-            name={name}
-            value={o.value}
-            checked={value === o.value}
-            onChange={() => onChange(o.value)}
-          />
-          <span>{o.label}</span>
-        </label>
+        <Radio
+          key={o.value}
+          label={o.label}
+          name={name}
+          value={o.value}
+          checked={value === o.value}
+          onChange={() => onChange(o.value)}
+        />
       ))}
     </div>
   );
 }
 
 interface MultiSelectProps {
-  /** JSON-encoded array of selected values (matches the backend multiselect wire shape). */
+  /** JSON-encoded array of selected values — the backend multiselect wire shape. */
   value: string;
   onChange: (value: string) => void;
   options: readonly PickerOption[];
@@ -244,10 +188,12 @@ export function MultiSelect({ value, onChange, options }: MultiSelectProps) {
   return (
     <div className="ctl-multiselect">
       {options.map((o) => (
-        <label key={o.value} className="ctl-multiselect__option">
-          <input type="checkbox" checked={selected.includes(o.value)} onChange={() => toggle(o.value)} />
-          <span>{o.label}</span>
-        </label>
+        <KitCheckbox
+          key={o.value}
+          label={o.label}
+          checked={selected.includes(o.value)}
+          onChange={() => toggle(o.value)}
+        />
       ))}
     </div>
   );

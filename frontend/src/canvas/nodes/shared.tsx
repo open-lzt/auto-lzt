@@ -2,8 +2,6 @@ import type { CSSProperties, ReactNode } from "react";
 import { Tooltip } from "../ui/Tooltip";
 import "./node-styles.css";
 
-// One line-icon set, currentColor, reused across Trigger/Action/Logic — no icon library, three
-// tiny inline SVGs are cheaper than a dependency for a 3-category canvas.
 export function ZapIcon() {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -49,15 +47,11 @@ interface NodeShellProps {
   description: string;
   selected?: boolean;
   errorMessage?: string;
-  /** A problem the operator can still fix before publishing — distinct from errorMessage, which is
-   * the server's verdict after they tried. Warning tone, not danger: nothing is broken yet. */
+  /** Pre-publish issue, distinct from errorMessage (the server's verdict after a run attempt). */
   warning?: string;
   children?: ReactNode;
 }
 
-/** Shared chrome for all three node categories: icon + category label + title, colored by
- * `--node-accent` (set per category via inline style, see TriggerNode/ActionNode/LogicNode).
- * Wrapped in a hover Tooltip carrying the node type's description. */
 export function NodeShell({
   category,
   label,

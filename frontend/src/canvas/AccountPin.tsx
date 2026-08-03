@@ -1,3 +1,4 @@
+import { Select } from "@open-lzt/ui";
 import { useEffect, useState } from "react";
 import { accountBalance, fetchAccounts, type Account } from "../api/accountsClient";
 import "./account-pin.css";
@@ -5,17 +6,10 @@ import "./account-pin.css";
 export interface AccountPinProps {
   value: string | null;
   onChange: (accountId: string | null) => void;
-  /** The node sits inside a for_each_account loop, so the runtime supplies an account per iteration
-   * and this pin, if set, is ignored. Shown rather than hidden: hiding it would leave a pin the
-   * operator set earlier silently in the spec. */
   overriddenByLoop: boolean;
 }
 
-/** Pins ONE account to a node — NodeSpec.account_ref, which is a single UUID at the top of the node
- * and not one of its inputs.
- *
- * Deliberately not AccountMultiPicker: that one writes a JSON array into an input field, because it
- * feeds for_each_account's list. Same data source, different destination and cardinality. */
+// Pins NodeSpec.account_ref (single UUID). Not AccountMultiPicker, which writes a JSON array input.
 export function AccountPin({ value, onChange, overriddenByLoop }: AccountPinProps) {
   const [accounts, setAccounts] = useState<Account[] | null>(null);
   const [failed, setFailed] = useState(false);
@@ -45,19 +39,19 @@ export function AccountPin({ value, onChange, overriddenByLoop }: AccountPinProp
       ) : null}
 
       {accounts !== null && accounts.length > 0 ? (
-        <select
+        <Select
+          size="sm"
           className="account-pin__select"
           value={value ?? ""}
+          placeholder="Выбрать аккаунт"
           aria-label="Аккаунт для этого блока"
-          onChange={(e) => onChange(e.target.value === "" ? null : e.target.value)}
-        >
-          <option value="">Выбрать аккаунт</option>
-          {accounts.map((account) => (
-            <option key={account.id} value={account.id}>
-              {`${account.label ?? account.username ?? account.id.slice(0, 8)} · ${accountBalance(account) ?? "—"}`}
-            </option>
-          ))}
-        </select>
+          onChange={(next) => onChange(next === "" ? null : next)}
+          options={accounts.map((account) => {
+            const name = account.label ?? account.username ?? account.id.slice(0, 8);
+            const balance = accountBalance(account);
+            return { value: account.id, label: balance ? `${name} · ${balance}` : name };
+          })}
+        />
       ) : null}
 
       {overriddenByLoop ? (

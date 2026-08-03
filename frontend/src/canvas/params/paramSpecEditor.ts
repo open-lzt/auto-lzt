@@ -1,10 +1,6 @@
-// Pure edit operations on a ParamSpec[]. Kept out of the component so the rules that must match
-// the backend (key shape, uniqueness, which extras a control actually has) are testable without
-// rendering anything.
 import type { ParamControl, ParamOption, ParamSpec, ParamValue } from "../../api/paramSpec";
 
-/** Mirror of the backend's key validator (app/domain/flow_engine/spec.py) — the key becomes
- * `{{vars.<key>}}`, so anything outside \w breaks the ref rather than the save. */
+/** Mirrors backend key validator (app/domain/flow_engine/spec.py); outside \w breaks the {{vars.<key>}} ref. */
 export const PARAM_KEY_PATTERN = /^\w+$/;
 
 export const CONTROL_LABELS: Record<ParamControl, string> = {
@@ -24,8 +20,6 @@ export const CONTROL_LABELS: Record<ParamControl, string> = {
 
 export const CONTROLS = Object.keys(CONTROL_LABELS) as ParamControl[];
 
-/** Controls with a numeric range. Everything else must not show min/max/step — an input nobody
- * can fill honestly is worse than a missing one. */
 const RANGED: ReadonlySet<ParamControl> = new Set(["number", "slider", "delay"]);
 const OPTIONED: ReadonlySet<ParamControl> = new Set(["select", "radio", "multiselect"]);
 
@@ -44,11 +38,9 @@ export function validateKey(key: string, index: number, params: ParamSpec[]): st
   return null;
 }
 
-/** A default typed for the control it belongs to. Switching a control leaves the old default
- * behind otherwise — a string "10" under a toggle, which the backend then rejects at run time. */
+/** Retypes the default for the new control — else e.g. a string "10" survives under a toggle and the backend rejects it at run time. */
 export function coerceDefault(control: ParamControl, raw: ParamValue): ParamValue | undefined {
-  // undefined, not null: `default: null` would travel to the backend as a declared default of
-  // "nothing", and resolve_params treats a non-null default as the value to use.
+  // undefined not null: resolve_params treats a non-null default as the value to use.
   if (raw == null || raw === "") return undefined;
   if (control === "toggle") return raw === true || raw === "true";
   if (RANGED.has(control)) {
@@ -68,8 +60,6 @@ export function updateParam(params: ParamSpec[], index: number, patch: Partial<P
   return params.map((p, i) => {
     if (i !== index) return p;
     const next = { ...p, ...patch };
-    // Dropping the extras a control does not have keeps the saved spec honest: a leftover
-    // `options` under a slider would survive every round trip and confuse the next reader.
     if (!hasRange(next.control)) {
       delete next.minimum;
       delete next.maximum;
@@ -95,8 +85,6 @@ export function moveParam(params: ParamSpec[], index: number, delta: -1 | 1): Pa
   return next;
 }
 
-/** Options are edited as one line per `value|label` — a table of two columns for what is usually
- * three rows would be more chrome than content. */
 export function parseOptions(text: string): ParamOption[] {
   return text
     .split("\n")

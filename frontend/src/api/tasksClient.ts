@@ -10,8 +10,7 @@ export interface Task {
   flow_id: string;
   flow_name: string;
   schedule_cron: string;
-  /** The same schedule in words («Каждые 4 часа»), resolved server-side from the one map the
-   * schedule picker is built from. Falls back to the raw cron for a flow edited on the canvas. */
+  /** Resolved server-side; falls back to the raw cron for a flow edited on the canvas. */
   schedule_label: string;
   active: boolean;
   health: TaskHealth;
@@ -23,8 +22,7 @@ export interface Task {
 export interface TaskPage {
   items: Task[];
   next_cursor: string | null;
-  /** The server's clock at the moment the page was built. Every countdown anchors on this, never on
-   * the browser's clock, which can be minutes off and would silently mis-time every card. */
+  /** Every countdown anchors on this, never the browser's clock — it can be minutes off. */
   server_time: string;
 }
 
@@ -33,14 +31,14 @@ export interface RunNowResponse {
   task_id: string;
 }
 
-/** Why a card needs redrawing — mirrors `TaskEventReason` in app/domain/flow_engine/events.py. */
+/** Mirrors `TaskEventReason` in app/domain/flow_engine/events.py. */
 export type TaskEventReason = "run_started" | "run_finished" | "task_changed";
 
 export interface TaskEvent {
   type: "task";
   reason: TaskEventReason;
   flow_id: string;
-  /** Absent when the worker knows only which flow ran, not which schedule triggered it. */
+  /** Absent when the worker knows only which flow ran, not the triggering schedule. */
   task_id?: string | null;
   status?: TaskRunStatus | null;
   occurred_at?: string;
@@ -66,8 +64,6 @@ export async function createTaskStreamToken(): Promise<string> {
   return token;
 }
 
-/** The stream URL for a freshly minted token. Separated from the hook so the two-step handshake
- * (trade the API key for a short-lived token, then connect) is testable without a browser. */
 export function taskStreamUrl(token: string): string {
   return `/api/tasks/stream?token=${encodeURIComponent(token)}`;
 }

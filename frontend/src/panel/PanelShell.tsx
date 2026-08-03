@@ -5,11 +5,7 @@ import { fetchPanelTabs, type PanelTab } from "./tabs";
 import "./panel-shell.css";
 
 export interface PanelShellProps {
-  /** Rendered for the active tab key. `goTo` lets a tab's own content send the operator to another
-   * tab — an empty state that names the action which fills it has to be able to offer it. */
   renderTab: (key: string, goTo: (key: string) => void) => ReactNode;
-  /** Tab keys this build can actually render — a tab the frontend has no content for is dropped
-   * rather than shown broken. */
   supported: ReadonlySet<string>;
   headerRight?: ReactNode;
 }
@@ -33,8 +29,7 @@ export function PanelShell({ renderTab, supported, headerRight }: PanelShellProp
     return () => {
       cancelled = true;
     };
-    // `supported` is a module-level constant at every call site; listing it would re-fetch the tab
-    // strip on each render if a caller ever passed an inline Set.
+    // supported is a module-level constant at every call site — safe to omit from deps.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -52,9 +47,6 @@ export function PanelShell({ renderTab, supported, headerRight }: PanelShellProp
         </div>
       </Topbar>
 
-      {/* Navigation is a left COLUMN, not a top strip. Nine destinations never fit one row — the
-          last tab was clipped and the strip crowded the controls it shared the bar with. A column
-          grows downwards for free, and every label reads at full length. */}
       <div className="panel-shell__body">
         <Sidenav className="panel-shell__nav" label="Разделы">
           {(tabs ?? []).map((tab) => (
@@ -63,14 +55,10 @@ export function PanelShell({ renderTab, supported, headerRight }: PanelShellProp
               href="#"
               active={tab.key === active}
               className="panel-shell__nav-item"
-              // The label is hidden on phones, where the strip is icons only — without this the
-              // control would read as an unnamed link to a screen reader, and hover would tell a
-              // mouse user nothing either.
+              // Accessible name: the label is hidden on phones (icon-only strip).
               title={tab.title}
               aria-label={tab.title}
-              // Stable hook for the responsive audit, which drives every destination at every
-              // width. Selecting by visible text would break on phones, where the label is
-              // hidden and only the icon remains.
+              // Stable hook for the responsive audit — label text is hidden on phones.
               data-key={tab.key}
               onClick={(e) => {
                 e.preventDefault();
@@ -84,8 +72,6 @@ export function PanelShell({ renderTab, supported, headerRight }: PanelShellProp
         </Sidenav>
 
         <main className="panel-shell__main">
-          {/* Keyed by tab so switching remounts and replays the entrance animation instead of
-              swapping content in place, which reads as a jump cut. */}
           {active ? (
             <div key={active} className="panel-shell__tab-content">
               {renderTab(active, setActive)}

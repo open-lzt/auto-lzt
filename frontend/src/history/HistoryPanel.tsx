@@ -32,9 +32,6 @@ function formatDuration(ms: number | null): string {
   return seconds < 60 ? `${seconds.toFixed(1)} с` : `${Math.round(seconds / 60)} мин`;
 }
 
-/** Two panes: the run list on the left, the selected run's trace on the right. The trace is the
- * substance of this screen — as an accordion under a row it left most of the surface empty and
- * pushed the list around on every open. */
 export function HistoryPanel({ flowId }: HistoryPanelProps) {
   const [runs, setRuns] = useState<RunSummary[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -136,11 +133,7 @@ export function HistoryPanel({ flowId }: HistoryPanelProps) {
                 {formatTimestamp(selected.started_at)} · {formatDuration(selected.duration_ms)}
               </span>
             </div>
-            {/* The reason sits ABOVE the steps, not inside them: the steps say what ran, this says
-                why the run stopped. A failed run whose cause is only a red badge is the exact
-                complaint this panel exists to answer. `failed_node_id` is the graph's own node id
-                — the same string the canvas labels the block with — so it points at a place you
-                can actually go and look. */}
+            {/* failed_node_id is the graph's own node id, the same string the canvas labels the block with. */}
             {selected.error ? (
               <div className="history__failure" role="alert">
                 <span className="history__failure-label">

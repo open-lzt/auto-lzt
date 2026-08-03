@@ -27,10 +27,6 @@ function isBoundaryNode(node: Node<CanvasNodeData>): boolean {
   return node.type === "templateBoundary";
 }
 
-/** Reconstructs canvas nodes/edges from a saved composite (GET .../:id) — inverse of
- * buildTemplateSpec below. Internal step nodes render with their real catalog category;
- * boundary markers are re-synthesized from `inputs`/`outputs` and laid out in flanking columns
- * so the declared parameter surface stays visually distinct from the internal graph. */
 function compositeToCanvas(
   composite: CompositeDetail,
   catalog: CatalogNode[],
@@ -50,7 +46,6 @@ function compositeToCanvas(
         category,
         label: displayLabel(nodeSpec.type),
         values: literalValues(nodeSpec.inputs),
-        // Same round-trip loss as flowSpecToCanvas: reopening a composite dropped its batch steps.
         children: nodeSpec.children?.length ? nodeSpec.children.map(childNodeSpecToCanvas) : undefined,
       },
     });
@@ -96,9 +91,7 @@ function compositeToCanvas(
   return { nodes, edges };
 }
 
-/** The internal template graph has no trigger and no "control-flow only" edge into the entry
- * step — the entry is simply the one domain node nothing else points at. Cycles among domain
- * nodes with no free node surface as a null return (caller turns that into a save error). */
+// Entry is the one domain node with no incoming domain edge; a cycle with no free node returns null.
 function findEntryNodeId(domain: Node<CanvasNodeData>[], edges: Edge[], domainIds: Set<string>): string | null {
   const hasDomainIncoming = new Set(
     edges.filter((e) => domainIds.has(e.source) && domainIds.has(e.target)).map((e) => e.target),
@@ -113,9 +106,6 @@ function buildNodeSpecs(domain: Node<CanvasNodeData>[], edges: Edge[], domainIds
       if (edge.source !== node.id || !domainIds.has(edge.target)) continue;
       outEdges[edge.sourceHandle ?? "next"] = edge.target;
     }
-    // Shared with buildFlowSpec rather than re-derived: this copy used to skip coerceNumericString,
-    // so a composite's number fields travelled as strings and only survived on Pydantic's lenient
-    // coercion — any strict=True on a node schema would have broken composites alone.
     return {
       id: node.id,
       type: node.data.catalogKey,
@@ -127,10 +117,6 @@ function buildNodeSpecs(domain: Node<CanvasNodeData>[], edges: Edge[], domainIds
   });
 }
 
-/** An output param's `output_port` names the internal node+port that produced it
- * ("<node_id>.<port>") — resolved from the one edge pointing at that output's boundary marker.
- * An unconnected output marker (no such edge) is surfaced to the caller, never silently
- * defaulted. */
 function buildOutputParams(boundaryNodes: Node<CanvasNodeData>[], edges: Edge[]): { params: TemplateParam[]; unconnected: string[] } {
   const params: TemplateParam[] = [];
   const unconnected: string[] = [];
@@ -146,9 +132,7 @@ function buildOutputParams(boundaryNodes: Node<CanvasNodeData>[], edges: Edge[])
   return { params, unconnected };
 }
 
-/** An input param carries no `output_port` (backend: wiring lives in the consuming node's own
- * `{{param.NAME}}`-templated literal, not in an edge) — "connected" for an input therefore means
- * at least one domain node's field literal actually references it. */
+// Backend: input wiring lives in the consuming node's `{{param.NAME}}` literal, not in an edge.
 function buildInputParams(
   boundaryNodes: Node<CanvasNodeData>[],
   domain: Node<CanvasNodeData>[],
@@ -176,10 +160,6 @@ export interface AuthoringModeProps {
   onCancel: () => void;
 }
 
-/** Canvas-editing surface for one composite template's internal graph — reuses FlowCanvas the
- * same way App.tsx does for a normal flow (controlled nodes/edges), plus: a name field, controls
- * to drop named input/output TemplateBoundaryNode markers, and a Save action that walks the
- * canvas into a CreateCompositeRequest and calls createComposite. */
 export function AuthoringMode({ compositeId, onSaved, onCancel }: AuthoringModeProps) {
   const [nodes, setNodes, onNodesChange] = useNodesState<Node<CanvasNodeData>>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
@@ -316,8 +296,7 @@ export function AuthoringMode({ compositeId, onSaved, onCancel }: AuthoringModeP
           setNodes={setNodes}
           setEdges={setEdges}
           variant="template"
-          // Its own graph, so its own undo stack (FlowCanvas holds one per instance). The key
-          // clears it when another composite is loaded into the same editor.
+          // Resets FlowCanvas's per-instance undo stack when a different composite loads in.
           historyResetKey={compositeId ?? "new"}
           emptyHint="Соберите внутренний граф блока из действий в списке, затем объявите его входы и выходы."
         />

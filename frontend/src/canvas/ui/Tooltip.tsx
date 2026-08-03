@@ -5,8 +5,7 @@ interface TooltipProps {
   children: ReactNode;
 }
 
-/** CSS-only hover tooltip: `.tooltip` is the `position:relative` hover/focus target, `.tooltip__bubble`
- * is absolutely positioned above it and revealed via `:hover`/`:focus-within` (styles in flow-canvas.css). */
+/** CSS-only: `.tooltip__bubble` is revealed via `:hover`/`:focus-within` (styles in flow-canvas.css). */
 export function Tooltip({ label, children }: TooltipProps) {
   return (
     <div className="tooltip">

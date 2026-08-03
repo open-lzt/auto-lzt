@@ -58,8 +58,6 @@
   background: var(--surface-1);
 }
 
-/* Wraps rather than scrolls: on a narrow inspector the fields stack, and a row that scrolls
-   sideways hides the control the operator is looking for. */
 .flow-params__row {
   display: flex;
   flex-wrap: wrap;
@@ -70,8 +68,6 @@
   align-items: flex-end;
 }
 
-/* Capped, not merely flexible: alone in its row the default-value field stretched to the full
-   940px of the panel, so a field holding "10" looked like a paragraph editor. */
 .flow-params__field {
   display: flex;
   flex-direction: column;
@@ -96,8 +92,6 @@
   max-width: 520px;
 }
 
-/* Options are one per line; capping it at a single column's width would make the "value|label"
-   shape unreadable at three entries. */
 .flow-params__item > .flow-params__field {
   max-width: 520px;
 }

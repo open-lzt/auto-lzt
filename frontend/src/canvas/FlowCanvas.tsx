@@ -37,8 +37,7 @@ import "./flow-canvas.css";
 const nodeTypes = { trigger: TriggerNode, action: ActionNode, logic: LogicNode, templateBoundary: TemplateBoundaryNode };
 
 let nextNodeSeq = 1;
-// The backend validates a node id against ^\w+$ (app/domain/flow_engine/spec.py) — a dash makes
-// the whole save 422, so the separator is an underscore.
+// Backend validates node id against ^\w+$ (app/domain/flow_engine/spec.py) — a dash makes save 422.
 function nextNodeId(prefix: string): string {
   return `${prefix}_${nextNodeSeq++}`;
 }
@@ -54,9 +53,8 @@ function defaultValuesFor(entry: CatalogNode): Record<string, string | number | 
   return values;
 }
 
-// nodes/edges are lifted to App.tsx (useNodesState/useEdgesState) and passed down as controlled
-// props — DeployButton needs the same graph to build the Flow-JSON, and prop-passing beats adding
-// a store just to share two arrays between three components.
+// nodes/edges are lifted to App.tsx and passed down as controlled props — DeployButton needs the
+// same graph to build the Flow-JSON.
 export interface FlowCanvasProps {
   nodes: Node<CanvasNodeData>[];
   edges: Edge[];
@@ -64,18 +62,15 @@ export interface FlowCanvasProps {
   onEdgesChange: ReturnType<typeof useEdgesState>[2];
   setNodes: ReturnType<typeof useNodesState<Node<CanvasNodeData>>>[1];
   setEdges: ReturnType<typeof useEdgesState>[1];
-  /** "template" = the internal graph of a composite: no trigger, no nested composite (see Sidebar). */
+  // "template" = the internal graph of a composite: no trigger, no nested composite (see Sidebar).
   variant?: "flow" | "template";
-  /** Shown over an empty canvas — the surface is otherwise a black void with no next step. */
   emptyHint?: string;
-  /** Preview: the graph can be read and panned but not edited. Drives the BUILDER_ENABLED flag
-   * (see config.ts) — a product decision, not a security boundary; the API key is what actually
-   * gates mutations. */
+  // Preview: read/pan only. Drives BUILDER_ENABLED (config.ts) — not a security boundary, the API
+  // key is what actually gates mutations.
   readOnly?: boolean;
-  /** Changing this value clears the undo stack. Loading another flow is not a step back — without
-   * it, Ctrl+Z after switching flows would paste the previous flow's graph over this one. */
+  // Clears the undo stack — without it, Ctrl+Z after switching flows pastes the previous graph in.
   historyResetKey?: string | number;
-  /** Keys of the flow's declared params — the inspector shows them as available `{{vars.X}}` refs. */
+  // Keys of the flow's declared params — the inspector shows them as available `{{vars.X}}` refs.
   varKeys?: readonly string[];
 }
 
@@ -87,8 +82,6 @@ export function FlowCanvas({
   setNodes,
   setEdges,
   variant = "flow",
-  // No «слева»: the palette is to the left only on a wide screen — below 900px it stacks ABOVE the
-  // canvas, and the hint then pointed at nothing. Naming the list is true in both layouts.
   emptyHint = "Соберите флоу: начните с триггера в списке блоков, затем добавьте действия.",
   readOnly = false,
   historyResetKey,
@@ -113,8 +106,7 @@ export function FlowCanvas({
     resetHistory();
   }, [historyResetKey, resetHistory]);
 
-  // The snapshot is taken here rather than at each call site because React Flow's own edits —
-  // Backspace on a selected node, a drag, a reconnect — never pass through a handler of ours.
+  // React Flow's own edits (Backspace, drag, reconnect) never pass through a handler of ours.
   const handleNodesChange = useCallback<typeof onNodesChange>(
     (changes) => {
       if (isStructuralNodeChange(changes)) capture();
@@ -139,15 +131,13 @@ export function FlowCanvas({
     [capture, setEdges],
   );
 
-  // Ctrl/Cmd+Z undoes, Ctrl+Shift+Z (and Ctrl+Y, the Windows habit) redoes. Bound to the window
-  // rather than the canvas element: the operator's focus is usually in the inspector, and a
-  // shortcut that only fires when the graph itself is focused is a shortcut nobody finds.
+  // Ctrl/Cmd+Z undoes, Ctrl+Shift+Z / Ctrl+Y redoes. Bound to window, not the canvas element, since
+  // the operator's focus is usually in the inspector.
   useEffect(() => {
     if (readOnly) return;
     function onKeyDown(e: KeyboardEvent) {
       if (!(e.ctrlKey || e.metaKey)) return;
-      // Undoing the graph while the operator is mid-word in a text field would look like the field
-      // ate the text — inside an input, Ctrl+Z belongs to the browser.
+      // Inside a text field, Ctrl+Z belongs to the browser, not the graph.
       const target = e.target as HTMLElement | null;
       if (target?.isContentEditable) return;
       if (target && ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName)) return;
@@ -165,10 +155,8 @@ export function FlowCanvas({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [readOnly, undo, redo]);
 
-  // Guards buildFlowSpec (flowClient.ts: outEdges[port] = edge.target) from silently overwriting
-  // an existing wire: that map is keyed by port name, so a second edge from the same single-output
-  // port (next/true/false) would replace the first with no warning. fork/join ports are per-branch
-  // handle ids, so they never collide here and stay unrestricted.
+  // buildFlowSpec keys outEdges by port name — a 2nd edge from the same port would silently
+  // overwrite the 1st, so a single-output port (next/true/false) allows only one outgoing edge.
   const isValidConnection = useCallback(
     (conn: Connection | Edge) => {
       if (conn.source === conn.target) return false;
@@ -298,10 +286,7 @@ export function FlowCanvas({
     setSelectedId(id);
   }, [capture, selectedNode, setNodes]);
 
-  // @xyflow/react's built-in delete (deleteKeyCode) already cascades: GraphView resolves
-  // connected edges before calling onEdgesChange, and onEdgesChange here is the controlled
-  // setEdges from useEdgesState in App.tsx — so edges are cleaned up without extra code.
-  // This handler only clears a stale Inspector selection.
+  // @xyflow/react's deleteKeyCode already cascades edge removal; this only clears a stale selection.
   const onNodesDelete = useCallback(
     (deleted: Node[]) => {
       if (selectedId && deleted.some((n) => n.id === selectedId)) setSelectedId(null);
@@ -314,9 +299,8 @@ export function FlowCanvas({
 
   const { highlightedNodeIds, highlightedEdgeIds } = useConnectedChain(nodes, edges, hoveredId);
 
-  // The missing-account warning is derived here and never stored: it is a function of the whole
-  // graph (a loop upstream removes it), so persisting it in node.data would be a second copy of a
-  // fact the graph already carries, going stale the moment an edge moves.
+  // Derived here, never stored: persisting it in node.data would be a 2nd copy that goes stale
+  // the moment an edge moves.
   const renderNodes = useMemo(
     () =>
       nodes.map((n) => {
@@ -346,7 +330,6 @@ export function FlowCanvas({
 
   return (
     <div className="flow-canvas">
-      {/* The palette exists to add nodes; in preview there is nothing to add it to. */}
       {readOnly ? null : (
         <Sidebar
           catalog={catalog}
@@ -370,8 +353,6 @@ export function FlowCanvas({
               size="sm"
               onClick={undo}
               disabled={!history.canUndo}
-              // Says what does NOT come back, where the operator will look for it. Field values are
-              // out of the stack on purpose (see useGraphHistory) and their absence needs naming.
               title="Отменить последнее изменение графа (Ctrl+Z). Значения полей не откатываются."
             >
               Отменить
@@ -403,13 +384,8 @@ export function FlowCanvas({
           nodesDraggable={!readOnly}
           nodesConnectable={!readOnly}
           edgesReconnectable={!readOnly}
-          // Selection stays on in preview: clicking a node opens the inspector, which is how the
-          // graph is read. Only the edits are withheld.
           deleteKeyCode={readOnly ? null : ["Backspace", "Delete"]}
-          // React Flow paints its own chrome (background dots, controls, minimap, edge defaults)
-          // from an internal palette this app's tokens cannot reach, so it needs telling the theme
-          // separately. Left hardcoded to "dark" it stayed dark inside a light page — the one place
-          // the token migration could not fix by aliasing.
+          // React Flow paints its own chrome from an internal palette this app's tokens can't reach.
           colorMode={theme}
           fitView
           proOptions={{ hideAttribution: true }}

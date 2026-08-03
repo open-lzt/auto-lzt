@@ -1,4 +1,3 @@
-// The values half of flow parameters: asked once, right before the run that needs them.
 import { Button, Modal } from "@open-lzt/ui";
 import { useEffect, useMemo, useState } from "react";
 import { accountName, fetchAccounts } from "../../api/accountsClient";
@@ -12,7 +11,6 @@ export interface RunParamsDialogProps {
   onCancel: () => void;
 }
 
-/** Prefilled from the declared defaults so the common case is one click. */
 function initialValues(params: ParamSpec[]): Record<string, ParamValue> {
   const values: Record<string, ParamValue> = {};
   for (const spec of params) {
@@ -21,8 +19,7 @@ function initialValues(params: ParamSpec[]): Record<string, ParamValue> {
   return values;
 }
 
-/** Only what the operator actually set travels: a key sent as `null` is a value to the backend,
- * and resolve_params would coerce it rather than fall back to the declared default. */
+/** A key sent as null is a value to the backend — resolve_params won't fall back to the default. */
 function payload(params: ParamSpec[], values: Record<string, ParamValue>): Record<string, ParamValue> {
   const out: Record<string, ParamValue> = {};
   for (const spec of params) {
@@ -56,8 +53,7 @@ export function RunParamsDialog({ params, onSubmit, onCancel }: RunParamsDialogP
     };
   }, [needsAccounts]);
 
-  // The same verdict resolve_params will reach, reached here — otherwise the operator submits a
-  // green form and reads the refusal as a server fault.
+  // Mirrors the verdict resolve_params reaches server-side, or the refusal reads as a server fault.
   const blocking = useMemo(
     () => params.filter((spec) => validateParam(spec, values[spec.key] ?? spec.default ?? null) !== null),
     [params, values],

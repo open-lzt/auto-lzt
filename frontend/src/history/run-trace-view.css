@@ -57,7 +57,6 @@
   padding: 10px 12px;
 }
 
-/* A collapsed step is header-height plus padding — that is the shape the trace settles into. */
 .run-trace-view__step--skeleton {
   height: 54px;
   border-radius: var(--radius-sm);

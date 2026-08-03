@@ -20,13 +20,8 @@ function parseSelected(value: string): string[] {
   }
 }
 
-/** Checkbox list of the tenant's ACTIVE accounts, with each one's balance.
- *
- * Fetches its own options rather than taking them as a prop: the field that needs it is declared
- * server-side as `x-ui.widget: account_ref`, so nothing between the schema and this component
- * knows to go and get accounts. The balance is here because choosing which account buys or bumps
- * is a decision about money — reading it on this screen beats switching tabs to look it up.
- */
+// Fetches its own options: the field is declared server-side as `x-ui.widget: account_ref`, so
+// nothing between the schema and this component otherwise knows to go get accounts.
 export function AccountMultiPicker({ value, onChange }: PickerProps) {
   const [accounts, setAccounts] = useState<Account[] | null>(null);
   const [failed, setFailed] = useState(false);
@@ -74,12 +69,8 @@ export function AccountMultiPicker({ value, onChange }: PickerProps) {
   );
 }
 
-/** Market categories, fetched live from the catalog.
- *
- * The list comes from `GET /catalog/categories`, which derives it from the same enum the search
- * node validates against. Hand-copying those 21 slugs into the client was the bug this replaces:
- * the copy drifts the moment the marketplace gains a category.
- */
+// Fetched live from GET /catalog/categories (same enum the search node validates against) —
+// hand-copied slugs used to drift whenever the marketplace gained a category.
 export function CategorySelect({ value, onChange }: PickerProps) {
   const [categories, setCategories] = useState<MarketCategoryDTO[] | null>(null);
 

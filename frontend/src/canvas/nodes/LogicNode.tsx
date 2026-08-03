@@ -6,8 +6,7 @@ import { nodeDescription } from "../labels";
 import { NodeShell } from "./shared";
 import "./logic-node.css";
 
-// Fork has no known branch count on the canvas today (edges/values don't carry it) — two static
-// labeled handles is the documented simplification (see task brief) rather than a dynamic-handle UI.
+// fork has no known branch count on canvas today (edges/values don't carry it) — 2 static handles, not dynamic
 const FORK_BRANCH_HANDLES = ["branch-1", "branch-2"];
 const JOIN_BRANCH_HANDLES = ["branch-1", "branch-2"];
 

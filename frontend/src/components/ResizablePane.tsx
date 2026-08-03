@@ -29,8 +29,6 @@ interface ResizablePaneResult {
   handle: JSX.Element;
 }
 
-/** Gives a side pane a draggable edge. The width survives a reload (localStorage, per pane) and
- * the handle is focusable so it can also be nudged with the arrow keys. */
 export function useResizablePane({
   paneId,
   defaultWidth,

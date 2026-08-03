@@ -1,7 +1,4 @@
-// Declaring a flow's parameters. The values half lives in RunParamsDialog; this half only says
-// what exists. Preview is the very component the run form uses — a separate preview renderer would
-// be a second source of truth for how a param looks.
-import { Alert, Button, Input, Select, Textarea } from "@open-lzt/ui";
+import { Alert, Button, Checkbox, Input, Select, Textarea } from "@open-lzt/ui";
 import type { Node } from "@xyflow/react";
 import { useMemo, useState } from "react";
 import type { ParamControl, ParamSpec, ParamValue } from "../../api/paramSpec";
@@ -90,14 +87,12 @@ export function FlowParamsPanel({ params, onChange, nodes }: FlowParamsPanelProp
                   <span>Контрол</span>
                   <Select
                     value={spec.control}
-                    onChange={(e) => patch(index, { control: e.target.value as ParamControl })}
-                  >
-                    {CONTROLS.map((control) => (
-                      <option key={control} value={control}>
-                        {CONTROL_LABELS[control]}
-                      </option>
-                    ))}
-                  </Select>
+                    onChange={(next) => patch(index, { control: next as ParamControl })}
+                    options={CONTROLS.map((control) => ({
+                      value: control,
+                      label: CONTROL_LABELS[control],
+                    }))}
+                  />
                 </label>
               </div>
 
@@ -158,14 +153,12 @@ export function FlowParamsPanel({ params, onChange, nodes }: FlowParamsPanelProp
               ) : null}
 
               <div className="flow-params__row flow-params__row--foot">
-                <label className="flow-params__check">
-                  <input
-                    type="checkbox"
-                    checked={spec.required}
-                    onChange={(e) => patch(index, { required: e.target.checked })}
-                  />
-                  <span>Обязательный</span>
-                </label>
+                <Checkbox
+                  className="flow-params__check"
+                  label="Обязательный"
+                  checked={spec.required}
+                  onChange={(e) => patch(index, { required: e.target.checked })}
+                />
                 <label className="flow-params__field flow-params__field--grow">
                   <span>Пояснение</span>
                   <Input
