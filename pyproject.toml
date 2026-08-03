@@ -1,6 +1,6 @@
 [project]
 name = "auto-lzt"
-version = "0.4.1"
+version = "0.4.2"
 description = "Server-side no-code automation engine for the lzt.market marketplace."
 requires-python = ">=3.12"
 dependencies = [

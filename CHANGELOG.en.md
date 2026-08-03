@@ -3,6 +3,23 @@
 All notable changes to lzt-flow. Format loosely follows [Keep a Changelog](https://keepachangelog.com);
 this project uses a single-tenant, wave-based history — see `ARCHITECTURE.md` for the design record.
 
+## [0.4.2] — 2026-08-03
+
+### Fixed
+- **An account pinned to a node survives reopening the flow.** The pin was not read back on load,
+  so re-publishing sent "no account": the node silently fell back to the shared token pool, and the
+  nodes that require an account refused to publish at all.
+- **A node after the per-account loop no longer counts as inside it.** The account is pinned to the
+  loop body only, while the canvas followed every port — a node on the way out published without a
+  warning and failed at runtime.
+- **An excluded account no longer executes purchases.** The pin fetched the account by id and
+  skipped the status check, so an account taken out of service kept trading.
+- **One broken flow no longer takes other people's event triggers with it.** The trigger list spans
+  owners, and the first exception aborted the walk — everyone after it lost the event.
+- **A hidden required parameter no longer blocks publishing.** Visibility is now read the way the
+  server reads it: a hidden field is neither required nor validated.
+- The panel moved to kit 0.2.2: a field inside a modal accepts typing again.
+
 ## [0.4.1] — 2026-08-03
 
 ### Fixed
