@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ApiError, createComposite, getComposite, listComposites } from "./flowClient";
-import type { CompositeDetail, CreateCompositeRequest } from "./flowClient";
+import { createComposite, getComposite, listComposites } from "./compositeClient";
+import type { CompositeDetail, CreateCompositeRequest } from "./compositeClient";
+import { ApiError } from "./httpClient";
 
 const COMPOSITE: CompositeDetail = {
   id: "c1",

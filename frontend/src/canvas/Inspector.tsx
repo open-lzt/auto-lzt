@@ -1,5 +1,7 @@
-import type { CatalogNode, TriggerKind } from "../api/flowClient";
+import type { CatalogNode } from "../api/catalogClient";
+import type { TriggerKind } from "../api/flowClient";
 import { AutoForm } from "../components/form/AutoForm";
+import { AccountPin } from "./AccountPin";
 import type { CanvasNodeData, TriggerConfig } from "./canvasTypes";
 import { displayLabel } from "./labels";
 import { Field, SelectField, TextField } from "../components/form/controls";
@@ -19,10 +21,16 @@ interface InspectorProps {
   node: { id: string; data: CanvasNodeData } | null;
   catalogEntry: CatalogNode | undefined;
   onChangeValue: (key: string, value: string | number | boolean) => void;
+  onChangeAccountRef: (accountId: string | null) => void;
+  /** Passed in rather than derived here: the Inspector holds one node, and answering this needs
+   * the whole graph. */
+  insideAccountLoop: boolean;
   onChangeTrigger: (patch: Partial<TriggerConfig>) => void;
   onRenameLabel: (label: string) => void;
   onDeleteNode: () => void;
   onDuplicateNode: () => void;
+  /** Keys of the flow's declared params, for the `{{vars.X}}` hint under the node's fields. */
+  varKeys?: readonly string[];
 }
 
 function CopyIcon() {
@@ -48,10 +56,13 @@ export function Inspector({
   node,
   catalogEntry,
   onChangeValue,
+  onChangeAccountRef,
+  insideAccountLoop,
   onChangeTrigger,
   onRenameLabel,
   onDeleteNode,
   onDuplicateNode,
+  varKeys,
 }: InspectorProps) {
   const { width, handle } = useResizablePane({
     paneId: "inspector",
@@ -139,7 +150,19 @@ export function Inspector({
           ) : null}
         </div>
       ) : catalogEntry ? (
-        <AutoForm schema={catalogEntry.input_schema} values={node.data.values} onChange={onChangeValue} />
+        <>
+          <AutoForm
+            schema={catalogEntry.input_schema}
+            values={node.data.values}
+            onChange={onChangeValue}
+            varKeys={varKeys}
+          />
+          <AccountPin
+            value={node.data.accountRef ?? null}
+            onChange={onChangeAccountRef}
+            overriddenByLoop={insideAccountLoop}
+          />
+        </>
       ) : (
         <p className="inspector__loading">загрузка параметров…</p>
       )}

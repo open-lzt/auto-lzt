@@ -99,6 +99,13 @@ def test_radio_enforces_options_like_select() -> None:
         resolve_params([spec], {"mode": "z"})
 
 
+def test_category_param_accepts_a_slug() -> None:
+    """A category travels as a slug, so numeric coercion rejected every value the picker offers —
+    the param could be declared and never satisfied."""
+    spec = ParamSpec(key="cat", label="Cat", control=ParamControl.CATEGORY)
+    assert resolve_params([spec], {"cat": "steam"}) == {"cat": "steam"}
+
+
 def test_hidden_required_param_is_not_required() -> None:
     controller = ParamSpec(key="mode", label="Mode", control=ParamControl.TEXT, required=True)
     gated = ParamSpec(

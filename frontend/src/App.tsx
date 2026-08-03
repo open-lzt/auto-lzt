@@ -1,7 +1,11 @@
 import { Button, Empty } from "@open-lzt/ui";
 import { useNodesState, useEdgesState, type Edge, type Node } from "@xyflow/react";
-import { useCallback, useEffect, useState } from "react";
-import { exportFlow, fetchCatalog, type CatalogNode, type FlowSpec } from "./api/flowClient";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { fetchCatalog, type CatalogNode } from "./api/catalogClient";
+import { exportFlow, type FlowSpec } from "./api/flowClient";
+import type { ParamSpec } from "./api/paramSpec";
+import { FlowParamsPanel } from "./canvas/params/FlowParamsPanel";
+import { childNodeSpecToCanvas, literalValues } from "./canvas/buildFlowSpec";
 import { AuthoringMode } from "./canvas/AuthoringMode";
 import { FlowCanvas } from "./canvas/FlowCanvas";
 import type { CanvasNodeData } from "./canvas/canvasTypes";
@@ -36,7 +40,10 @@ const supportedTabs: ReadonlySet<string> = new Set(
  * triggers are attached out-of-band via POST .../triggers and NodeSpec has no x/y field. Loaded
  * flows therefore get a synthetic "manual" trigger and an auto-stacked vertical layout; the
  * operator can drag nodes and re-attach a real trigger after loading. */
-function flowSpecToCanvas(spec: FlowSpec, catalog: CatalogNode[]): { nodes: Node<CanvasNodeData>[]; edges: Edge[] } {
+export function flowSpecToCanvas(
+  spec: FlowSpec,
+  catalog: CatalogNode[],
+): { nodes: Node<CanvasNodeData>[]; edges: Edge[] } {
   const categoryByKey = new Map(catalog.map((entry) => [entry.key, entry.category]));
   const triggerId = "trigger-loaded";
 
@@ -58,17 +65,18 @@ function flowSpecToCanvas(spec: FlowSpec, catalog: CatalogNode[]): { nodes: Node
 
   spec.nodes.forEach((nodeSpec, index) => {
     const category = categoryByKey.get(nodeSpec.type) ?? "action";
-    const values: Record<string, string | number | boolean> = {};
-    for (const [key, input] of Object.entries(nodeSpec.inputs)) {
-      if (typeof input.literal === "string" || typeof input.literal === "number" || typeof input.literal === "boolean") {
-        values[key] = input.literal;
-      }
-    }
     nodes.push({
       id: nodeSpec.id,
       type: category,
       position: { x: 340, y: 40 + index * 120 },
-      data: { catalogKey: nodeSpec.type, category, label: displayLabel(nodeSpec.type), values },
+      data: {
+        catalogKey: nodeSpec.type,
+        category,
+        label: displayLabel(nodeSpec.type),
+        values: literalValues(nodeSpec.inputs),
+        // Dropping these on load made a republish overwrite the saved batch steps with nothing.
+        children: nodeSpec.children?.length ? nodeSpec.children.map(childNodeSpecToCanvas) : undefined,
+      },
     });
     for (const [port, targetId] of Object.entries(nodeSpec.edges)) {
       edges.push({
@@ -87,6 +95,9 @@ export default function App() {
   const [nodes, setNodes, rawOnNodesChange] = useNodesState<Node<CanvasNodeData>>([]);
   const [edges, setEdges, rawOnEdgesChange] = useEdgesState<Edge>([]);
   const [flowName, setFlowName] = useState(DEFAULT_FLOW_NAME);
+  // Lives beside the graph, in the same component, for the same reason: DeployButton needs it to
+  // build the spec and the params panel needs to edit it. One useState, no store.
+  const [params, setParams] = useState<ParamSpec[]>([]);
   const [flowId, setFlowId] = useState<string | null>(null);
   const [switchError, setSwitchError] = useState<string | null>(null);
   const [activeCompositeId, setActiveCompositeId] = useState<string | null>(null);
@@ -102,6 +113,12 @@ export default function App() {
   // downgrades a cron/event trigger to manual. This flag drives a visible warning until the
   // operator explicitly re-assigns the trigger.
   const [triggerUnknown, setTriggerUnknown] = useState(false);
+  // Bumped whenever the canvas is filled from outside the editor. A counter rather than flowId:
+  // "new flow" twice in a row leaves flowId at null both times, and the second graph would inherit
+  // the first one's undo stack.
+  const [graphEpoch, setGraphEpoch] = useState(0);
+  const [showParams, setShowParams] = useState(false);
+  const paramKeys = useMemo(() => params.map((p) => p.key), [params]);
 
   const onNodesChange: typeof rawOnNodesChange = useCallback(
     (changes) => {
@@ -140,9 +157,11 @@ export default function App() {
     setFlowName(DEFAULT_FLOW_NAME);
     setNodes([]);
     setEdges([]);
+    setParams([]);
     setSwitchError(null);
     setTriggerUnknown(false);
     setIsDirty(false);
+    setGraphEpoch((n) => n + 1);
   }
 
   function handleSelectComposite(id: string) {
@@ -184,8 +203,10 @@ export default function App() {
       setFlowName(spec.name);
       setNodes(loaded.nodes);
       setEdges(loaded.edges);
+      setParams(spec.params ?? []);
       setTriggerUnknown(true);
       setIsDirty(false);
+      setGraphEpoch((n) => n + 1);
     } catch (err) {
       setSwitchError(err instanceof Error ? err.message : "не удалось загрузить флоу");
     }
@@ -221,6 +242,16 @@ export default function App() {
               </span>
             ) : null}
             <div className="app__flow-bar-right">
+              {BUILDER_ENABLED ? (
+                <Button
+                  variant={showParams ? "outline" : "ghost"}
+                  size="sm"
+                  aria-expanded={showParams}
+                  onClick={() => setShowParams((v) => !v)}
+                >
+                  Параметры{params.length > 0 ? ` · ${params.length}` : ""}
+                </Button>
+              ) : null}
               <LiveBadge flowId={flowId} />
               {BUILDER_ENABLED ? (
                 <DeployButton
@@ -230,10 +261,23 @@ export default function App() {
                   edges={edges}
                   setNodes={setNodes}
                   onDeployed={handleDeployed}
+                  params={params}
                 />
               ) : null}
             </div>
           </div>
+          {showParams && BUILDER_ENABLED ? (
+            <div className="app__params">
+              <FlowParamsPanel
+                params={params}
+                nodes={nodes}
+                onChange={(next) => {
+                  setParams(next);
+                  setIsDirty(true);
+                }}
+              />
+            </div>
+          ) : null}
           <FlowCanvas
             nodes={nodes}
             edges={edges}
@@ -242,6 +286,8 @@ export default function App() {
             setNodes={setNodes}
             setEdges={setEdges}
             readOnly={!BUILDER_ENABLED}
+            historyResetKey={graphEpoch}
+            varKeys={paramKeys}
           />
         </div>
       </div>

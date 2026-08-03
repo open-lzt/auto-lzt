@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { fetchCatalog, type CatalogNode } from "../../api/flowClient";
+import { fetchCatalog, type CatalogNode } from "../../api/catalogClient";
 
 interface DynamicMethodsState {
   facades: Record<string, CatalogNode[]>;

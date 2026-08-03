@@ -27,6 +27,19 @@ def _example_files() -> list[Path]:
     return sorted(_EXAMPLES_DIR.glob("*.json"))
 
 
+# The examples live under `.claude/`, which is developer tooling and was deliberately dropped from
+# the published repository — so in CI there is nothing here to validate, and the suite must say
+# "skipped", not "failed". Left as an assertion it turned every build red the moment the cleanup
+# landed, which is how main arrived at a red CI with nothing actually broken in the product.
+#
+# The guard is kept rather than deleted: where the skill IS present (a developer checkout), an
+# example that drifts from the catalog contract must still fail loudly.
+pytestmark = pytest.mark.skipif(
+    not _EXAMPLES_DIR.is_dir(),
+    reason="flow-from-text skill is not part of this checkout (.claude is developer tooling)",
+)
+
+
 def test_examples_present() -> None:
     assert len(_example_files()) >= 3
 

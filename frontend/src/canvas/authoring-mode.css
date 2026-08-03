@@ -99,6 +99,10 @@
   border-color: var(--border-strong);
 }
 
+.authoring-mode__boundary-btn:active:not(:disabled) {
+  background: var(--surface-1);
+}
+
 .authoring-mode__boundary-btn:disabled {
   opacity: 0.5;
   cursor: default;

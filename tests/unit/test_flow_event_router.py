@@ -39,6 +39,14 @@ class _FakeTriggerRepo:
         return [t for t in self._triggers if t.event_type == event_type]
 
 
+class _FakeFlowRepo:
+    """The router reads the flow only for its declared parameters; these flows declare none, so an
+    unattended fire resolves to an empty vars map."""
+
+    async def get(self, tenant_id: TenantId, flow_id: FlowId) -> None:
+        return None
+
+
 class _FakeFlowIrRepo:
     """``FlowIrRepository``'s narrow read surface the router needs — distinct from
     ``flow_fakes.FakeFlowIrStore`` (keyed by ir id only, the ``execute_run`` interpreter's
@@ -83,6 +91,7 @@ async def test_same_event_delivered_twice_creates_exactly_one_run() -> None:
         triggers=_FakeTriggerRepo([trigger]),  # type: ignore[arg-type]
         runs=runs,  # type: ignore[arg-type]
         flow_irs=_FakeFlowIrRepo(ir),  # type: ignore[arg-type]
+        flows=_FakeFlowRepo(),  # type: ignore[arg-type]
         enqueue_run=enqueue_run,
     )
 
@@ -107,6 +116,7 @@ async def test_unmatched_event_type_creates_no_run() -> None:
         triggers=_FakeTriggerRepo([]),  # type: ignore[arg-type]
         runs=runs,  # type: ignore[arg-type]
         flow_irs=_FakeFlowIrRepo(ir),  # type: ignore[arg-type]
+        flows=_FakeFlowRepo(),  # type: ignore[arg-type]
         enqueue_run=enqueue_run,
     )
     await router.handle(_event(event_type=EventType.ITEM_SOLD, seq=1))
@@ -127,6 +137,7 @@ async def test_router_wires_into_build_memory_engine_as_a_consumer() -> None:
         triggers=_FakeTriggerRepo([]),  # type: ignore[arg-type]
         runs=FakeRunRepo(),  # type: ignore[arg-type]
         flow_irs=_FakeFlowIrRepo(ir),  # type: ignore[arg-type]
+        flows=_FakeFlowRepo(),  # type: ignore[arg-type]
         enqueue_run=enqueue_run,
     )
     engine = EventEngine.build_memory(client=Client(["fake-token"]), consumers=[router])

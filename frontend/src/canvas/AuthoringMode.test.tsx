@@ -1,15 +1,17 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AuthoringMode } from "./AuthoringMode";
-import * as flowClient from "../api/flowClient";
-import type { CatalogNode, CompositeDetail } from "../api/flowClient";
+import * as catalogClient from "../api/catalogClient";
+import * as compositeClient from "../api/compositeClient";
+import type { CatalogNode } from "../api/catalogClient";
+import type { CompositeDetail } from "../api/compositeClient";
 
 const CATALOG: CatalogNode[] = [
   { key: "market.bump", category: "action", input_schema: {}, output_schema: {}, idempotent: true, capabilities: [] },
 ];
 
 function stubCatalog() {
-  vi.spyOn(flowClient, "fetchCatalog").mockResolvedValue(CATALOG);
+  vi.spyOn(catalogClient, "fetchCatalog").mockResolvedValue(CATALOG);
 }
 
 describe("AuthoringMode", () => {
@@ -19,7 +21,7 @@ describe("AuthoringMode", () => {
 
   it("blocks save with no internal nodes on a fresh composite", async () => {
     stubCatalog();
-    const createMock = vi.spyOn(flowClient, "createComposite");
+    const createMock = vi.spyOn(compositeClient, "createComposite");
     render(<AuthoringMode compositeId={null} onSaved={vi.fn()} onCancel={vi.fn()} />);
 
     fireEvent.click(await screen.findByText("сохранить"));
@@ -48,8 +50,8 @@ describe("AuthoringMode", () => {
       outputs: [{ name: "result", output_port: "n1.next" }],
       created_at: "2026-01-01T00:00:00Z",
     };
-    vi.spyOn(flowClient, "getComposite").mockResolvedValue(composite);
-    const createMock = vi.spyOn(flowClient, "createComposite").mockResolvedValue(composite);
+    vi.spyOn(compositeClient, "getComposite").mockResolvedValue(composite);
+    const createMock = vi.spyOn(compositeClient, "createComposite").mockResolvedValue(composite);
     const onSaved = vi.fn();
 
     render(<AuthoringMode compositeId="c1" onSaved={onSaved} onCancel={vi.fn()} />);
@@ -78,8 +80,8 @@ describe("AuthoringMode", () => {
       outputs: [{ name: "result", output_port: null }],
       created_at: "2026-01-01T00:00:00Z",
     };
-    vi.spyOn(flowClient, "getComposite").mockResolvedValue(composite);
-    const createMock = vi.spyOn(flowClient, "createComposite");
+    vi.spyOn(compositeClient, "getComposite").mockResolvedValue(composite);
+    const createMock = vi.spyOn(compositeClient, "createComposite");
 
     render(<AuthoringMode compositeId="c2" onSaved={vi.fn()} onCancel={vi.fn()} />);
 

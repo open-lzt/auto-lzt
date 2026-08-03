@@ -18,8 +18,43 @@
   align-items: center;
 }
 
+.accounts-add__field {
+  position: relative;
+  flex: 1;
+  display: flex;
+}
+
 .accounts-add__row input {
   flex: 1;
+  /* Room for the reveal button, which sits inside the field rather than beside it — one control,
+     not two things the eye has to pair up. */
+  padding-right: 36px;
+}
+
+.accounts-add__reveal {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: none;
+  background: transparent;
+  color: var(--lzt-text-dim);
+  border-radius: var(--radius-sm);
+  transition: color 140ms ease-out, background 140ms ease-out;
+}
+
+.accounts-add__reveal:hover {
+  color: var(--lzt-text);
+  background: var(--surface-2);
+}
+
+.accounts-add__reveal[aria-pressed="true"] {
+  color: var(--accent);
 }
 
 .accounts-add__hint {

@@ -6,7 +6,7 @@
   border-radius: 999px;
   background: var(--surface-2);
   border: 1px solid var(--accent);
-  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.4);
+  box-shadow: var(--node-shadow);
   transition:
     box-shadow 160ms ease-out,
     transform 160ms ease-out;

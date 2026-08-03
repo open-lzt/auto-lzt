@@ -1,46 +1,14 @@
-// Mirror of app/domain/flow_engine/spec.py ParamSpec (source of truth is the backend). Kept in
-// lockstep by hand, the repo's existing DTO-mirroring convention.
+// How the canvas INTERPRETS a ParamSpec: visibility, validation, and the category list a picker
+// offers. The spec itself is a wire DTO and lives in api/paramSpec.ts — see the note there.
+import type { ParamSpec, ParamValue } from "../api/paramSpec";
 
-export type ParamControl =
-  | "text"
-  | "number"
-  | "slider"
-  | "toggle"
-  | "select"
-  | "account_picker"
-  | "category_picker"
-  | "delay"
-  | "multiselect"
-  | "datetime"
-  | "radio"
-  | "textarea";
-
-export interface ParamOption {
-  value: string | number;
-  label: string;
-}
-
-export type ParamValue = string | number | boolean | null;
-
-export interface ParamVisibility {
-  field: string;
-  equals: string | number | boolean;
-}
-
-export interface ParamSpec {
-  key: string;
-  label: string;
-  control: ParamControl;
-  default?: ParamValue;
-  required: boolean;
-  description?: string | null;
-  minimum?: number | null;
-  maximum?: number | null;
-  step?: number | null;
-  options?: ParamOption[] | null;
-  group?: string | null;
-  visible_if?: ParamVisibility | null;
-}
+export type {
+  ParamControl,
+  ParamOption,
+  ParamSpec,
+  ParamValue,
+  ParamVisibility,
+} from "../api/paramSpec";
 
 /** A param gated by ``visible_if`` is shown only when its controlling field matches. */
 export function isVisible(spec: ParamSpec, values: Record<string, ParamValue>): boolean {
@@ -84,17 +52,17 @@ export const MARKET_CATEGORIES: readonly { value: string; label: string }[] = [
 export function validateParam(spec: ParamSpec, raw: ParamValue): string | null {
   const isEmpty = raw === null || raw === "";
   if (isEmpty) {
-    return spec.required && spec.default == null ? "Required" : null;
+    return spec.required && spec.default == null ? "Обязательное поле" : null;
   }
   if (spec.control === "toggle") {
-    return typeof raw === "boolean" ? null : "Expected a switch value";
+    return typeof raw === "boolean" ? null : "Ожидается переключатель";
   }
   if (["number", "slider", "delay", "category_picker"].includes(spec.control)) {
     if (spec.control === "category_picker") return null; // slug string, validated by options
     const n = typeof raw === "number" ? raw : Number(raw);
-    if (Number.isNaN(n)) return "Expected a number";
-    if (spec.minimum != null && n < spec.minimum) return `Must be ≥ ${spec.minimum}`;
-    if (spec.maximum != null && n > spec.maximum) return `Must be ≤ ${spec.maximum}`;
+    if (Number.isNaN(n)) return "Ожидается число";
+    if (spec.minimum != null && n < spec.minimum) return `Должно быть ≥ ${spec.minimum}`;
+    if (spec.maximum != null && n > spec.maximum) return `Должно быть ≤ ${spec.maximum}`;
   }
   return null;
 }

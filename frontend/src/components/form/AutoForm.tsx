@@ -1,4 +1,4 @@
-import type { JsonSchema, JsonSchemaUi } from "../../api/flowClient";
+import type { JsonSchema, JsonSchemaUi } from "../../api/catalogClient";
 import {
   Checkbox,
   DateTimePicker,
@@ -12,6 +12,7 @@ import {
   type PickerOption,
 } from "./controls";
 import { AccountMultiPicker, CategorySelect } from "./DataPickers";
+import { diagnoseVarRef } from "./varRefs";
 import "./autoform.css";
 
 type FieldValue = string | number | boolean;
@@ -109,6 +110,10 @@ interface AutoFormProps {
   schema: JsonSchema;
   values: Record<string, FieldValue>;
   onChange: (key: string, value: FieldValue) => void;
+  /** Keys of the flow's declared params. Given, the form tells the operator which `{{vars.X}}`
+   * refs exist and flags the ones the backend will not substitute. Omitted (preset forms, the
+   * composite editor) nothing about params is shown at all. */
+  varKeys?: readonly string[];
 }
 
 /** Renders one input per JSON-Schema property.
@@ -118,7 +123,7 @@ interface AutoFormProps {
  * string/number/boolean/enum, with `x-ui.widget` upgrading string to textarea/datetime, enum to
  * radio/multiselect/account/category pickers, and number to slider; anything more exotic falls
  * back to a plain text field rather than silently dropping the parameter. */
-export function AutoForm({ schema, values, onChange }: AutoFormProps) {
+export function AutoForm({ schema, values, onChange, varKeys }: AutoFormProps) {
   const properties = schema.properties ?? {};
   const required = new Set(schema.required ?? []);
   const defs = (schema.$defs ?? {}) as Record<string, JsonSchema>;
@@ -212,9 +217,28 @@ export function AutoForm({ schema, values, onChange }: AutoFormProps) {
             ) : (
               <TextField value={raw} onChange={(v) => onChange(field.key, v)} />
             )}
+            {varRefProblem(values[field.key], varKeys)}
           </Field>
         );
       })}
+      {varKeys && varKeys.length > 0 ? (
+        <p className="autoform__var-hint">
+          Доступные параметры флоу:{" "}
+          {varKeys.map((k) => (
+            <code key={k}>{`{{vars.${k}}}`}</code>
+          ))}{" "}
+          — вставляются вместо всего значения поля.
+        </p>
+      ) : null}
     </div>
   );
+}
+
+/** Rendered under the control rather than blocking it: an embedded ref is a legal string, and the
+ * operator may be mid-edit on the way to a correct one. */
+function varRefProblem(value: FieldValue | undefined, varKeys: readonly string[] | undefined) {
+  if (!varKeys) return null;
+  const problem = diagnoseVarRef(value, varKeys);
+  if (!problem) return null;
+  return <span className="autoform__var-warning">{problem.message}</span>;
 }

@@ -11,6 +11,7 @@ export function ActionNode({ data, selected }: NodeProps<Node<CanvasNodeData>>) 
       description={nodeDescription(data.catalogKey)}
       selected={selected}
       errorMessage={data.errorMessage}
+      warning={data.warning}
     >
       <Handle type="target" position={Position.Top} />
       <Handle type="source" id="next" position={Position.Bottom} />

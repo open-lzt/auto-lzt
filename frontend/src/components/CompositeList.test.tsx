@@ -1,8 +1,8 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { CompositeList } from "./CompositeList";
-import * as flowClient from "../api/flowClient";
-import type { CompositeSummary } from "../api/flowClient";
+import * as flowClient from "../api/compositeClient";
+import type { CompositeSummary } from "../api/compositeClient";
 
 describe("CompositeList", () => {
   afterEach(() => {

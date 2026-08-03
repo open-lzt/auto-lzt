@@ -75,6 +75,9 @@ describe("FlowList", () => {
 
     render(<FlowList activeFlowId={null} onSelect={vi.fn()} onCreateNew={vi.fn()} />);
     fireEvent.click(await screen.findByLabelText("Удалить Flow One"));
+    // The row button only opens the gate; nothing is deleted until the dialog is confirmed.
+    expect(deleteMock).not.toHaveBeenCalled();
+    fireEvent.click(await screen.findByRole("button", { name: "Удалить флоу" }));
 
     await waitFor(() => expect(deleteMock).toHaveBeenCalledWith("f1"));
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));

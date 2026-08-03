@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AuthGate } from "./AuthGate";
 import * as flowClient from "../api/flowClient";
+import * as httpClient from "../api/httpClient";
 
 /** Every test states the SERVER's posture, because that is the first thing the gate asks and it
  * decides everything after it.
@@ -33,7 +34,7 @@ describe("AuthGate", () => {
 
     expect(await screen.findByRole("alert")).toHaveTextContent(/отклоняет все запросы/i);
     expect(screen.queryByText("protected content")).not.toBeInTheDocument();
-    expect(screen.queryByPlaceholderText("API-ключ")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Ключ доступа")).not.toBeInTheDocument();
   });
 
   it("renders children with a warning when the server admits everyone", async () => {
@@ -49,14 +50,14 @@ describe("AuthGate", () => {
     );
 
     await waitFor(() => expect(screen.getByText("protected content")).toBeInTheDocument());
-    expect(screen.queryByPlaceholderText("API-ключ")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Ключ доступа")).not.toBeInTheDocument();
     expect(screen.getByRole("status")).toHaveTextContent(/панель открыта всем/i);
     expect(fetchFlowsMock).not.toHaveBeenCalled();
   });
 
   it("renders children immediately when a key is already stored", async () => {
     serverPosture(true, false);
-    vi.spyOn(flowClient, "getApiKey").mockReturnValue("existing-key");
+    vi.spyOn(httpClient, "getApiKey").mockReturnValue("existing-key");
     render(
       <AuthGate>
         <p>protected content</p>
@@ -67,13 +68,13 @@ describe("AuthGate", () => {
 
   it("prompts for a key when the server enforces one and none is stored", async () => {
     serverPosture(true, false);
-    vi.spyOn(flowClient, "getApiKey").mockReturnValue(null);
+    vi.spyOn(httpClient, "getApiKey").mockReturnValue(null);
     render(
       <AuthGate>
         <p>protected content</p>
       </AuthGate>,
     );
-    expect(await screen.findByPlaceholderText("API-ключ")).toBeInTheDocument();
+    expect(await screen.findByLabelText("Ключ доступа")).toBeInTheDocument();
     expect(screen.queryByText("protected content")).not.toBeInTheDocument();
   });
 
@@ -81,19 +82,19 @@ describe("AuthGate", () => {
     // Failing closed here costs a needless login screen; failing open would hide an
     // unprotected stand behind a guess.
     vi.spyOn(flowClient, "authRequired").mockRejectedValue(new Error("сеть недоступна"));
-    vi.spyOn(flowClient, "getApiKey").mockReturnValue(null);
+    vi.spyOn(httpClient, "getApiKey").mockReturnValue(null);
     render(
       <AuthGate>
         <p>protected content</p>
       </AuthGate>,
     );
-    expect(await screen.findByPlaceholderText("API-ключ")).toBeInTheDocument();
+    expect(await screen.findByLabelText("Ключ доступа")).toBeInTheDocument();
   });
 
   it("validates the entered key and renders children on success", async () => {
     serverPosture(true, false);
-    vi.spyOn(flowClient, "getApiKey").mockReturnValue(null);
-    const setApiKeyMock = vi.spyOn(flowClient, "setApiKey").mockImplementation(() => {});
+    vi.spyOn(httpClient, "getApiKey").mockReturnValue(null);
+    const setApiKeyMock = vi.spyOn(httpClient, "setApiKey").mockImplementation(() => {});
     vi.spyOn(flowClient, "fetchFlows").mockResolvedValue([]);
 
     render(
@@ -102,7 +103,7 @@ describe("AuthGate", () => {
       </AuthGate>,
     );
 
-    fireEvent.change(await screen.findByPlaceholderText("API-ключ"), {
+    fireEvent.change(await screen.findByLabelText("Ключ доступа"), {
       target: { value: "good-key" },
     });
     fireEvent.click(screen.getByText("Войти"));
@@ -113,8 +114,8 @@ describe("AuthGate", () => {
 
   it("shows an error and clears the key on validation failure, letting the user retry", async () => {
     serverPosture(true, false);
-    vi.spyOn(flowClient, "getApiKey").mockReturnValue(null);
-    const setApiKeyMock = vi.spyOn(flowClient, "setApiKey").mockImplementation(() => {});
+    vi.spyOn(httpClient, "getApiKey").mockReturnValue(null);
+    const setApiKeyMock = vi.spyOn(httpClient, "setApiKey").mockImplementation(() => {});
     vi.spyOn(flowClient, "fetchFlows").mockRejectedValue(new Error("неверный ключ"));
 
     render(
@@ -123,7 +124,7 @@ describe("AuthGate", () => {
       </AuthGate>,
     );
 
-    fireEvent.change(await screen.findByPlaceholderText("API-ключ"), {
+    fireEvent.change(await screen.findByLabelText("Ключ доступа"), {
       target: { value: "bad-key" },
     });
     fireEvent.click(screen.getByText("Войти"));
@@ -135,7 +136,7 @@ describe("AuthGate", () => {
 
   it("rejects an empty submission without calling the API", async () => {
     serverPosture(true, false);
-    vi.spyOn(flowClient, "getApiKey").mockReturnValue(null);
+    vi.spyOn(httpClient, "getApiKey").mockReturnValue(null);
     const fetchFlowsMock = vi.spyOn(flowClient, "fetchFlows");
 
     render(
@@ -147,5 +148,41 @@ describe("AuthGate", () => {
     fireEvent.click(await screen.findByText("Войти"));
     expect(screen.getByText("введите API-ключ")).toBeInTheDocument();
     expect(fetchFlowsMock).not.toHaveBeenCalled();
+  });
+
+  it("draws a skeleton while the posture check is in flight", () => {
+    // This state used to render null: the first paint was blank, then a card appeared out of
+    // nowhere and moved everything the eye had just settled on.
+    vi.spyOn(flowClient, "authRequired").mockReturnValue(new Promise(() => {}));
+    vi.spyOn(httpClient, "getApiKey").mockReturnValue(null);
+
+    const { container } = render(
+      <AuthGate>
+        <p>protected content</p>
+      </AuthGate>,
+    );
+
+    expect(container.querySelector('[aria-busy="true"]')).not.toBeNull();
+    expect(screen.queryByText("protected content")).not.toBeInTheDocument();
+  });
+
+  it("reveals the key on demand so a truncated paste can be spotted", async () => {
+    serverPosture(true, false);
+    vi.spyOn(httpClient, "getApiKey").mockReturnValue(null);
+
+    render(
+      <AuthGate>
+        <p>protected content</p>
+      </AuthGate>,
+    );
+
+    const field = await screen.findByLabelText("Ключ доступа");
+    expect(field).toHaveAttribute("type", "password");
+
+    fireEvent.click(screen.getByRole("button", { name: "Показать ключ" }));
+    expect(field).toHaveAttribute("type", "text");
+
+    fireEvent.click(screen.getByRole("button", { name: "Скрыть ключ" }));
+    expect(field).toHaveAttribute("type", "password");
   });
 });

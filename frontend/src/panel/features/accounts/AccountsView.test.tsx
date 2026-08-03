@@ -52,8 +52,24 @@ describe("AccountsView", () => {
 
     render(<AccountsView />);
     fireEvent.click(await screen.findByRole("button", { name: "Удалить" }));
+    expect(deleteAccount).not.toHaveBeenCalled();
+    fireEvent.click(await screen.findByRole("button", { name: "Удалить аккаунт" }));
 
     expect(await screen.findByText(/Поднятие, Ночной релист/)).toBeInTheDocument();
+  });
+
+  it("reveals the token on demand so a truncated paste can be spotted", async () => {
+    fetchAccounts.mockResolvedValue([]);
+
+    render(<AccountsView />);
+    const field = await screen.findByLabelText("Токен lzt.market");
+    expect(field).toHaveAttribute("type", "password");
+
+    fireEvent.click(screen.getByRole("button", { name: "Показать токен" }));
+    expect(field).toHaveAttribute("type", "text");
+
+    fireEvent.click(screen.getByRole("button", { name: "Скрыть токен" }));
+    expect(field).toHaveAttribute("type", "password");
   });
 
   it("keeps a rejected token in the field so a paste error can be fixed", async () => {

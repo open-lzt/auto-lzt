@@ -85,6 +85,10 @@
   background: var(--surface-3);
 }
 
+.inspector__icon-btn:active {
+  background: var(--surface-1);
+}
+
 .inspector__icon-btn--danger:hover {
   border-color: var(--danger);
   color: var(--danger);

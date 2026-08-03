@@ -39,6 +39,33 @@
   color: var(--danger);
 }
 
+/* Warning, not danger: the value is a legal string and the flow will publish. What it will not do
+   is substitute — so the tone says "look at this", not "this is broken". */
+.autoform__var-warning {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--warning);
+}
+
+.autoform__var-hint {
+  margin: 4px 0 0;
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--text-faint);
+}
+
+.autoform__var-hint code {
+  margin-right: 6px;
+  padding: 1px 5px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--text-muted);
+  font-family: var(--lzt-font-mono, ui-monospace, monospace);
+  font-size: 11px;
+}
+
 /* Slider control: range track + live numeric readout. */
 .ctl-slider {
   display: flex;
@@ -46,10 +73,40 @@
   gap: 12px;
 }
 
+/* Fully hand-drawn, because `accent-color` alone leaves the browser's own thumb — and that thumb is
+   a glossy 3D disc on most platforms, the one raised, shiny control in an otherwise flat interface.
+   The rules are duplicated per engine on purpose: WebKit and Gecko do not accept a shared selector
+   list here, one unknown pseudo-element drops the whole rule. */
 .ctl-slider__range {
   flex: 1;
-  accent-color: var(--accent);
   height: 4px;
+  appearance: none;
+  background: var(--surface-3);
+  border-radius: 999px;
+}
+
+.ctl-slider__range::-webkit-slider-thumb {
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--surface-1);
+  cursor: pointer;
+}
+
+.ctl-slider__range::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--surface-1);
+  cursor: pointer;
+}
+
+.ctl-slider__range:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 4px;
 }
 
 .ctl-slider__readout {

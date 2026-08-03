@@ -1,4 +1,4 @@
-import { request } from "./flowClient";
+import { request } from "./httpClient";
 
 export type AccountStatus = "active" | "excluded";
 

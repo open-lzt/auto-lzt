@@ -1,4 +1,4 @@
-import { request } from "../../../api/flowClient";
+import { request } from "../../../api/httpClient";
 
 export interface ModuleRef {
   name: string;

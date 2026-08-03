@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { accountBalance, fetchAccounts, type Account } from "../../api/accountsClient";
-import { fetchCategories, type MarketCategoryDTO } from "../../api/flowClient";
+import { fetchCategories, type MarketCategoryDTO } from "../../api/catalogClient";
 import { OptionPicker } from "./controls";
 import "./data-pickers.css";
 

@@ -98,7 +98,7 @@
 
 .app__trigger-warning {
   font-size: 14px;
-  color: var(--warning, #d9a441);
+  color: var(--warning);
   max-width: 320px;
 }
 
@@ -150,6 +150,15 @@
   gap: 12px;
   padding: 12px 20px;
   border-bottom: 1px solid var(--lzt-border);
+}
+
+/* Capped and scrollable: the declarations sit above the canvas, and an unbounded list of them
+   would push the graph off screen exactly when the operator needs to see which node uses what. */
+.app__params {
+  max-height: 46vh;
+  overflow-y: auto;
+  border-bottom: 1px solid var(--lzt-border);
+  background: var(--surface-0, var(--bg));
 }
 
 /* Below the editor's floor the two-pane workspace STACKS.

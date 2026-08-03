@@ -13,6 +13,7 @@ import { downloadFlowSpec } from "../api/downloadFlow";
 import { CloseIcon, DownloadIcon, PencilIcon } from "./icons";
 import { useResizablePane } from "./ResizablePane";
 import { ImportErrorReport } from "./ImportErrorReport";
+import { ConfirmDialog } from "./ConfirmDialog";
 import "./flow-list.css";
 
 interface FlowListProps {
@@ -46,6 +47,7 @@ export function FlowList({
   const [busyId, setBusyId] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
   const [importErrors, setImportErrors] = useState<ImportError[] | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<FlowSummary | null>(null);
   const importInputRef = useRef<HTMLInputElement>(null);
   const { width, handle } = useResizablePane({ paneId: "flow-list", defaultWidth: 200, min: 160, max: 420 });
 
@@ -62,13 +64,15 @@ export function FlowList({
     reload();
   }, [reload, reloadToken]);
 
-  async function handleDelete(id: string) {
-    setBusyId(id);
+  async function handleDelete(flow: FlowSummary) {
+    setBusyId(flow.id);
     try {
-      await deleteFlow(id);
+      await deleteFlow(flow.id);
+      setPendingDelete(null);
       reload();
     } catch (err) {
       setError(err instanceof Error ? err.message : "не удалось удалить флоу");
+      setPendingDelete(null);
     } finally {
       setBusyId(null);
     }
@@ -246,7 +250,7 @@ export function FlowList({
                       type="button"
                       className="flow-list__action flow-list__action--danger"
                       disabled={busyId === flow.id}
-                      onClick={() => void handleDelete(flow.id)}
+                      onClick={() => setPendingDelete(flow)}
                       aria-label={`Удалить ${flow.name}`}
                     >
                       <CloseIcon />
@@ -260,6 +264,18 @@ export function FlowList({
       )}
     </aside>
     {handle}
+    <ConfirmDialog
+      open={pendingDelete !== null}
+      title="Удалить флоу?"
+      confirmLabel="Удалить флоу"
+      busy={pendingDelete !== null && busyId === pendingDelete.id}
+      onConfirm={() => {
+        if (pendingDelete) void handleDelete(pendingDelete);
+      }}
+      onCancel={() => setPendingDelete(null)}
+    >
+      «{pendingDelete?.name}» и его история запусков будут удалены безвозвратно.
+    </ConfirmDialog>
     </>
   );
 }

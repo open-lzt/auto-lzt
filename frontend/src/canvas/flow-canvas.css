@@ -156,3 +156,19 @@
   color: var(--text-faint);
   pointer-events: none;
 }
+
+/* Top-right of the stage, opposite React Flow's own controls in the bottom-left: two chrome
+   clusters sharing one corner read as a single broken toolbar. */
+.flow-canvas__history {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 5;
+  display: flex;
+  gap: 6px;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--surface-1) 88%, transparent);
+  backdrop-filter: blur(6px);
+}

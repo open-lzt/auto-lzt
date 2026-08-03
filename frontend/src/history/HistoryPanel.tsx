@@ -1,7 +1,7 @@
+import { Skeleton } from "@open-lzt/ui";
 import { useCallback, useEffect, useState } from "react";
 import { fetchRunHistory } from "../api/flowClient";
 import type { RunStatus, RunSummary } from "../api/flowClient";
-import { Loader } from "../components/Loader";
 import { useResizablePane } from "../components/ResizablePane";
 import { RunTraceView } from "./RunTraceView";
 import "./history-panel.css";
@@ -88,9 +88,15 @@ export function HistoryPanel({ flowId }: HistoryPanelProps) {
         {error ? <p className="history__error">{error}</p> : null}
 
         {!runs && !error ? (
-          <div className="history__loading">
-            <Loader />
-          </div>
+          // Skeleton rows, not a centred spinner: the list is what arrives, so holding its shape
+          // keeps the pane from jumping when it does.
+          <ul className="history__items" aria-busy="true">
+            {Array.from({ length: 5 }, (_, i) => (
+              <li key={i}>
+                <Skeleton className="history__row--skeleton" />
+              </li>
+            ))}
+          </ul>
         ) : runs && runs.length === 0 ? (
           <div className="empty-prompt">
             <p className="empty-prompt__title">Запусков ещё не было</p>

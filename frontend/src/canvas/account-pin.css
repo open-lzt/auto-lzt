@@ -1,0 +1,68 @@
+.account-pin {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 0;
+  border-top: 1px solid var(--border);
+}
+
+.account-pin__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.account-pin__label {
+  font-size: 14px;
+  color: var(--text-muted);
+}
+
+.account-pin__clear {
+  border: none;
+  background: transparent;
+  color: var(--text-faint);
+  font-size: 14px;
+  padding: 2px 4px;
+  border-radius: var(--radius-sm);
+  transition: color 140ms ease-out, background 140ms ease-out;
+}
+
+.account-pin__clear:hover {
+  color: var(--text);
+  background: var(--surface-2);
+}
+
+.account-pin__clear:active {
+  background: var(--surface-3);
+}
+
+/* Styled rather than left native: an unstyled select is the one control that would announce this
+   panel as unfinished, and it sits next to fields that are all hand-drawn. */
+.account-pin__select {
+  width: 100%;
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-1);
+  color: var(--text);
+  font-size: 14px;
+}
+
+.account-pin__select:hover {
+  border-color: var(--border-strong);
+}
+
+.account-pin__select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.account-pin__note,
+.account-pin__hint {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--text-faint);
+}

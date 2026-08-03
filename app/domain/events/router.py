@@ -19,8 +19,8 @@ from lzt_eventus.events.base import DomainEvent
 
 from app.domain.events.types import FLOW_RELEVANT_EVENT_TYPES
 from app.domain.flow_engine.model import Run, RunId, RunStatus
-from app.domain.flow_engine.repo import FlowIrRepository, RunRepository
-from app.domain.triggers.firing import create_and_enqueue_run
+from app.domain.flow_engine.repo import FlowIrRepository, FlowRepository, RunRepository
+from app.domain.triggers.firing import create_and_enqueue_run, resolve_unattended_vars
 from app.domain.triggers.model import TriggerDefinition
 from app.domain.triggers.repo import TriggerRepository
 
@@ -36,6 +36,9 @@ class FlowEventRouter(BaseConsumer):
         triggers: TriggerRepository,
         runs: RunRepository,
         flow_irs: FlowIrRepository,
+        # Needed for the flow's declared parameters: an event fire has no operator to supply
+        # values, so it resolves the declared defaults (see resolve_unattended_vars).
+        flows: FlowRepository,
         enqueue_run: Callable[[RunId], Awaitable[None]],
     ) -> None:
         self.subscriptions: list[BaseSubscription[DomainEvent]] = [
@@ -44,6 +47,7 @@ class FlowEventRouter(BaseConsumer):
         self._triggers = triggers
         self._runs = runs
         self._flow_irs = flow_irs
+        self._flows = flows
         self._enqueue_run = enqueue_run
 
     async def handle(self, event: DomainEvent) -> None:
@@ -63,12 +67,14 @@ class FlowEventRouter(BaseConsumer):
 
         run_key = f"{trigger.flow_id}:{event.seq}"
         now = datetime.now(UTC)
+        flow_vars = await resolve_unattended_vars(self._flows, trigger.tenant_id, trigger.flow_id)
         run = Run(
             id=RunId(uuid4()),
             flow_id=trigger.flow_id,
             flow_ir_id=ir.id,
             tenant_id=trigger.tenant_id,
             run_key=run_key,
+            vars=flow_vars,
             status=RunStatus.PENDING,
             current_node_id=None,
             version=0,

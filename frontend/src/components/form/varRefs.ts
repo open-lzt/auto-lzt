@@ -1,0 +1,49 @@
+// Reading `{{vars.X}}` out of a field value. Pure text, no canvas types — it lives here because
+// AutoForm (the node's field form) needs it and canvas/ already imports components/form; putting
+// it under canvas/ would make that import bidirectional.
+
+/** Mirror of app/domain/flow_engine/compiler.py:35. Anchored on both ends deliberately: the
+ * backend substitutes a field ONLY when the ref is the entire value. */
+const WHOLE_VAR_REF = /^\{\{\s*vars\.(\w+)\s*\}\}$/;
+
+const ANY_VAR_REF = /\{\{\s*vars\.(\w+)\s*\}\}/g;
+
+/** The param key this value resolves to, or null if the value is a literal. */
+export function wholeRefKey(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  return WHOLE_VAR_REF.exec(value)?.[1] ?? null;
+}
+
+/** Every param key mentioned anywhere in the value, including refs the backend will not honour. */
+export function mentionedKeys(value: unknown): string[] {
+  if (typeof value !== "string") return [];
+  return [...value.matchAll(ANY_VAR_REF)].map((m) => m[1]);
+}
+
+export interface VarRefProblem {
+  kind: "partial" | "unknown";
+  message: string;
+}
+
+/** Diagnoses one field value against the declared params.
+ *
+ * `partial` is the trap this exists for: "цена {{vars.p}} руб" is an error nowhere — the backend
+ * stores it as a literal and the node runs with the braces still in the string. Nothing fails; the
+ * flow just quietly does the wrong thing. */
+export function diagnoseVarRef(value: unknown, declaredKeys: readonly string[]): VarRefProblem | null {
+  const mentioned = mentionedKeys(value);
+  if (mentioned.length === 0) return null;
+
+  const unknown = mentioned.find((k) => !declaredKeys.includes(k));
+  if (unknown) {
+    return { kind: "unknown", message: `параметр «${unknown}» не объявлен — подстановки не будет` };
+  }
+  if (wholeRefKey(value) === null) {
+    return {
+      kind: "partial",
+      message:
+        "подставляется только значение целиком: уберите остальной текст из поля, иначе строка уедет как есть, вместе со скобками",
+    };
+  }
+  return null;
+}

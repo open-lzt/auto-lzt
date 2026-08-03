@@ -49,14 +49,30 @@ interface NodeShellProps {
   description: string;
   selected?: boolean;
   errorMessage?: string;
+  /** A problem the operator can still fix before publishing — distinct from errorMessage, which is
+   * the server's verdict after they tried. Warning tone, not danger: nothing is broken yet. */
+  warning?: string;
   children?: ReactNode;
 }
 
 /** Shared chrome for all three node categories: icon + category label + title, colored by
  * `--node-accent` (set per category via inline style, see TriggerNode/ActionNode/LogicNode).
  * Wrapped in a hover Tooltip carrying the node type's description. */
-export function NodeShell({ category, label, description, selected, errorMessage, children }: NodeShellProps) {
-  const classes = ["flow-node", selected && "selected", errorMessage && "has-error"]
+export function NodeShell({
+  category,
+  label,
+  description,
+  selected,
+  errorMessage,
+  warning,
+  children,
+}: NodeShellProps) {
+  const classes = [
+    "flow-node",
+    selected && "selected",
+    errorMessage && "has-error",
+    !errorMessage && warning && "has-warning",
+  ]
     .filter(Boolean)
     .join(" ");
   const style = {
@@ -75,6 +91,7 @@ export function NodeShell({ category, label, description, selected, errorMessage
         </div>
         {children ? <div className="flow-node__body">{children}</div> : null}
         {errorMessage ? <div className="flow-node__error">{errorMessage}</div> : null}
+        {!errorMessage && warning ? <div className="flow-node__warning">{warning}</div> : null}
       </div>
     </Tooltip>
   );

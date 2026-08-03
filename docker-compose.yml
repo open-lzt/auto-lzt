@@ -40,6 +40,14 @@ services:
     # Raise if a heavier plugin genuinely needs more; this is a floor, not a measured ceiling.
     mem_limit: 512m
     cpus: 1.0
+    # Without this the container saw ONLY the four names spelled out below, and every other setting
+    # in .env was silently inert under Docker — the documented testnet switch
+    # (LZT_FLOW_MARKET_BASE_URL), the runaway-loop backstop (LZT_FLOW_MAX_STEPS_PER_RUN) and the
+    # egress allow-list all read their code defaults while .env said otherwise. `environment:` below
+    # still wins per key, which is what keeps the service-network URLs pointing at the compose
+    # services instead of the localhost values .env carries for the no-Docker loop.
+    env_file:
+      - .env
     environment:
       LZT_FLOW_DATABASE_URL: postgresql+asyncpg://lzt:${POSTGRES_PASSWORD:-lzt}@postgres:5432/lztflow
       LZT_FLOW_REDIS_URL: redis://:${REDIS_PASSWORD:-}@redis:6379/0
@@ -76,7 +84,13 @@ services:
   # api:8000 (same prefix-strip contract as the Vite dev proxy, see frontend/vite.config.ts) so the
   # SPA never hardcodes a backend host in either environment.
   frontend:
-    build: ./frontend
+    build:
+      context: ./frontend
+      args:
+        # Off by default, same as the source flag. Set VITE_BUILDER_ENABLED=1 in .env and rebuild
+        # the image to ship the canvas builder — it is baked in at build time, so a restart alone
+        # will not change it.
+        VITE_BUILDER_ENABLED: ${VITE_BUILDER_ENABLED:-0}
     ports:
       - "5173:80"
     restart: unless-stopped
@@ -98,13 +112,21 @@ services:
     # plugin job can't take down postgres/redis for the rest of the stack.
     mem_limit: 512m
     cpus: 1.0
+    # See the note on `api` — .env is the config surface, `environment:` only overrides what must
+    # differ inside the compose network.
+    env_file:
+      - .env
     environment:
       LZT_FLOW_DATABASE_URL: postgresql+asyncpg://lzt:${POSTGRES_PASSWORD:-lzt}@postgres:5432/lztflow
       LZT_FLOW_REDIS_URL: redis://:${REDIS_PASSWORD:-}@redis:6379/0
       LZT_FLOW_MASTER_KEY: ${LZT_FLOW_MASTER_KEY:-}
       LZT_FLOW_WORKER_ID: ${LZT_FLOW_WORKER_ID:-worker-1}
       # lzt-eventus's own config surface (LZT_ prefix, separate from LZT_FLOW_ — decisions #21/#24).
-      LZT_TOKENS: ${LZT_TOKENS:-}
+      # `[]`, not the empty string: EngineConfig.tokens is list[SecretStr] with no default, and
+      # pydantic-settings parses a complex field as JSON — "" is not JSON, so it raised
+      # SettingsError and the worker crash-looped on the DEFAULT install, meaning no run ever
+      # executed. `:-` covers unset and empty alike, so a .env line left blank is safe too.
+      LZT_TOKENS: ${LZT_TOKENS:-[]}
       LZT_TOKEN_ENC_KEY: ${LZT_TOKEN_ENC_KEY:-}
       LZT_DATABASE_URL: postgresql://lzt:${POSTGRES_PASSWORD:-lzt}@postgres:5432/lztflow
       LZT_REDIS_URL: redis://:${REDIS_PASSWORD:-}@redis:6379/0
@@ -139,6 +161,8 @@ services:
     build: .
     command: lzt-flow-bot
     profiles: ["bot"]
+    env_file:
+      - .env
     environment:
       LZT_FLOW_BOT_TOKEN: ${LZT_FLOW_BOT_TOKEN:-}
       LZT_FLOW_BOT_ADMIN_IDS: ${LZT_FLOW_BOT_ADMIN_IDS:-}

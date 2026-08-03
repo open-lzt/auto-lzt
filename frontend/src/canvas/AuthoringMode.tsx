@@ -1,15 +1,14 @@
 import { useEdgesState, useNodesState, type Edge, type Node } from "@xyflow/react";
 import { useCallback, useEffect, useState } from "react";
+import { fetchCatalog, type CatalogNode } from "../api/catalogClient";
 import {
   createComposite,
-  fetchCatalog,
   getComposite,
-  type CatalogNode,
   type CompositeDetail,
-  type InputSpec,
-  type NodeSpec,
   type TemplateParam,
-} from "../api/flowClient";
+} from "../api/compositeClient";
+import type { NodeSpec } from "../api/flowClient";
+import { buildInputs, childNodeSpecToCanvas, literalValues } from "./buildFlowSpec";
 import { FlowCanvas } from "./FlowCanvas";
 import { displayLabel } from "./labels";
 import type { CanvasNodeData, TemplateBoundaryKind } from "./canvasTypes";
@@ -42,17 +41,18 @@ function compositeToCanvas(
 
   composite.nodes.forEach((nodeSpec: NodeSpec, index) => {
     const category = categoryByKey.get(nodeSpec.type) ?? "action";
-    const values: Record<string, string | number | boolean> = {};
-    for (const [key, input] of Object.entries(nodeSpec.inputs)) {
-      if (typeof input.literal === "string" || typeof input.literal === "number" || typeof input.literal === "boolean") {
-        values[key] = input.literal;
-      }
-    }
     nodes.push({
       id: nodeSpec.id,
       type: category,
       position: { x: 340, y: 40 + index * 120 },
-      data: { catalogKey: nodeSpec.type, category, label: displayLabel(nodeSpec.type), values },
+      data: {
+        catalogKey: nodeSpec.type,
+        category,
+        label: displayLabel(nodeSpec.type),
+        values: literalValues(nodeSpec.inputs),
+        // Same round-trip loss as flowSpecToCanvas: reopening a composite dropped its batch steps.
+        children: nodeSpec.children?.length ? nodeSpec.children.map(childNodeSpecToCanvas) : undefined,
+      },
     });
     for (const [port, targetId] of Object.entries(nodeSpec.edges)) {
       edges.push({
@@ -113,12 +113,17 @@ function buildNodeSpecs(domain: Node<CanvasNodeData>[], edges: Edge[], domainIds
       if (edge.source !== node.id || !domainIds.has(edge.target)) continue;
       outEdges[edge.sourceHandle ?? "next"] = edge.target;
     }
-    const inputs: Record<string, InputSpec> = {};
-    for (const [key, value] of Object.entries(node.data.values)) {
-      if (value === "" || value === undefined) continue;
-      inputs[key] = { literal: value };
-    }
-    return { id: node.id, type: node.data.catalogKey, inputs, account_ref: null, edges: outEdges, on_error: null };
+    // Shared with buildFlowSpec rather than re-derived: this copy used to skip coerceNumericString,
+    // so a composite's number fields travelled as strings and only survived on Pydantic's lenient
+    // coercion — any strict=True on a node schema would have broken composites alone.
+    return {
+      id: node.id,
+      type: node.data.catalogKey,
+      inputs: buildInputs(node.data.values),
+      account_ref: null,
+      edges: outEdges,
+      on_error: null,
+    };
   });
 }
 
@@ -311,6 +316,9 @@ export function AuthoringMode({ compositeId, onSaved, onCancel }: AuthoringModeP
           setNodes={setNodes}
           setEdges={setEdges}
           variant="template"
+          // Its own graph, so its own undo stack (FlowCanvas holds one per instance). The key
+          // clears it when another composite is loaded into the same editor.
+          historyResetKey={compositeId ?? "new"}
           emptyHint="Соберите внутренний граф блока из действий в списке, затем объявите его входы и выходы."
         />
       </div>
