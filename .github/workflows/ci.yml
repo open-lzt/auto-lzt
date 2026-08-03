@@ -51,7 +51,7 @@ jobs:
       - name: Ruff format
         run: uv run ruff format --check .
       - name: Mypy
-        run: uv run mypy app
+        run: uv run mypy app dev.py
       - name: Pytest
         run: uv run pytest --cov=app --cov-report=term-missing
       # Fails the build on a known-vulnerable dependency in the locked resolution — the same

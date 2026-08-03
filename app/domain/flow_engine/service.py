@@ -9,7 +9,12 @@ from uuid import uuid4
 from app.domain.account.model import TenantId
 from app.domain.catalog.registry import NodeRegistry
 from app.domain.flow_engine.compiler import compile_flow
-from app.domain.flow_engine.errors import EntityNotFound, FlowNotCompiled, UnknownTemplate
+from app.domain.flow_engine.errors import (
+    DuplicatePresetFlow,
+    EntityNotFound,
+    FlowNotCompiled,
+    UnknownTemplate,
+)
 from app.domain.flow_engine.model import (
     Flow,
     FlowId,
@@ -59,9 +64,18 @@ class FlowService:
         second press is an edit, and this is where that reading is enforced.
         """
         existing = await self._flows.get_by_preset(tenant_id, key)
-        if existing is None:
+        if existing is not None:
+            return await self.update(tenant_id, existing.id, spec)
+        try:
             return await self.create(tenant_id, spec, source_preset_key=key)
-        return await self.update(tenant_id, existing.id, spec)
+        except DuplicatePresetFlow:
+            # Lost a race with a concurrent deploy — a double-click on the enable button, or two
+            # open tabs. Both requests wanted this preset's automation to match their form, so the
+            # loser applies its own spec as an edit instead of returning an error nobody can act on.
+            winner = await self._flows.get_by_preset(tenant_id, key)
+            if winner is None:  # pragma: no cover — the row exists, we just collided with it
+                raise
+            return await self.update(tenant_id, winner.id, spec)
 
     async def list(self, tenant_id: TenantId) -> list[Flow]:
         return await self._flows.list(tenant_id)

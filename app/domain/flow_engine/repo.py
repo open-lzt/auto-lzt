@@ -14,6 +14,7 @@ from typing import Any, cast
 from uuid import UUID, uuid4
 
 from sqlalchemy import CursorResult, Result, delete, func, select, update
+from sqlalchemy.exc import IntegrityError
 
 from app.db.base import BaseSessionmakerRepo, dialect_insert, session_scope
 from app.db.models import (
@@ -26,6 +27,7 @@ from app.db.models import (
 )
 from app.domain.account.model import AccountId, TenantId
 from app.domain.flow_engine.dtos import StepResultDTO
+from app.domain.flow_engine.errors import DuplicatePresetFlow
 from app.domain.flow_engine.ir_node import EnvRef, IRNode, LiteralValue, PortRef
 from app.domain.flow_engine.model import (
     Flow,
@@ -133,6 +135,14 @@ class FlowRepository(BaseSessionmakerRepo[Flow, FlowId]):
         )
         async with session_scope(self._sm) as session:
             session.add(orm)
+            if source_preset_key is not None:
+                # Flushed here rather than at scope exit so the only unique this insert can hit —
+                # uq_flows_tenant_preset — becomes a typed error the caller can act on. Two deploys
+                # of one preset racing is a double-click, not an incident.
+                try:
+                    await session.flush()
+                except IntegrityError as exc:
+                    raise DuplicatePresetFlow(source_preset_key) from exc
         return flow
 
     async def get(self, tenant_id: TenantId, flow_id: FlowId) -> Flow | None:

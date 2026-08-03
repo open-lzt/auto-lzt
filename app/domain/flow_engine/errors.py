@@ -263,6 +263,19 @@ class EventDecodeError(Exception):
         self.raw_payload = raw_payload
 
 
+class DuplicatePresetFlow(Exception):
+    """Two deploys of the same preset raced and this one lost the unique index.
+
+    Not something the operator should ever see: both requests meant "make this preset's automation
+    match my form", so the loser re-reads the winner's row and applies its spec as an edit. It is a
+    typed error so that path is explicit, rather than an IntegrityError recognised by shape.
+    """
+
+    def __init__(self, preset_key: str) -> None:
+        super().__init__(f"preset {preset_key!r} already has an automation for this tenant")
+        self.preset_key = preset_key
+
+
 class DynamicMethodArgMismatch(Exception):
     """A ``DynamicMethodNode``'s wired kwargs don't match the resolved method's real signature."""
 

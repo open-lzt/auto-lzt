@@ -2,6 +2,12 @@
 the shared connections on the arq context and delegates to the standalone ``execute_run`` (which is
 what tests drive directly, without arq/Redis).
 
+Every job here is a bare module-level coroutine taking ``ctx`` because that IS arq's contract — it
+imports the functions by reference and hands each one the same context dict. A class wrapping them
+would have exactly one implementation and buy nothing; the shape is arq's, not a style choice.
+
+What the context holds is NOT arq's business, though, so it is typed: see ``WorkerContext``.
+
 Job settings are pinned here, not left to arq defaults: ``max_tries=3`` (transient retries) and an
 explicit ``job_timeout`` sized for the slowest node. A re-enqueue mid-run is safe — the optimistic
 lock + two-phase RunStep commit make a second executor a no-op loser (RunAlreadyClaimed).
@@ -13,15 +19,15 @@ import asyncio
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import timedelta
-from typing import Any
+from typing import Any, TypedDict, cast
 from uuid import UUID
 
 import redis.asyncio as aioredis
 import structlog
 from arq import cron
-from arq.connections import RedisSettings
+from arq.connections import ArqRedis, RedisSettings
 from pylzt import Client
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from app.core.config import Settings, get_settings
 from app.db.base import make_engine, make_sessionmaker, session_scope
@@ -32,6 +38,7 @@ from app.domain.account.model import Account, AccountId, TenantId
 from app.domain.account.pool import TokenPool
 from app.domain.account.repo import AccountRepository
 from app.domain.catalog.plugins import build_registry
+from app.domain.catalog.registry import NodeRegistry
 from app.domain.egress.policy import EgressPolicy
 from app.domain.egress.transport import build_transport
 from app.domain.flow_engine.base_node import NodeDeps
@@ -56,7 +63,31 @@ log = structlog.get_logger()
 _JOB_TIMEOUT_SECONDS = 300
 
 
+class WorkerContext(TypedDict):
+    """What ``startup`` puts on arq's context dict, plus the two arq keys the jobs below read.
+
+    ``dict[str, Any]`` is what arq declares, and it means every ``ctx["sessionmaker"]`` in this
+    module used to be an ``Any`` — a mistyped key surfaced as a KeyError inside a running job, and
+    a wrong type not at all. Naming the keys costs one class and makes both a type error.
+    """
+
+    node_registry: NodeRegistry
+    plugins: PluginManager
+    engine: AsyncEngine
+    redis_client: aioredis.Redis
+    sessionmaker: async_sessionmaker[AsyncSession]
+    node_deps: NodeDeps
+    redis: ArqRedis  # arq's own pool, put here by arq itself — never opened by us
+    job_try: int
+
+
+def worker_ctx(ctx: dict[str, Any]) -> WorkerContext:
+    """The one cast in this module: arq hands every job the same loose dict, and this names it."""
+    return cast(WorkerContext, ctx)
+
+
 async def startup(ctx: dict[str, Any]) -> None:
+    c = worker_ctx(ctx)
     settings = get_settings()
     # Owner-only plugins: the worker consumes their nodes only (routers are ignored by the manager
     # for this process). Same fail-closed gate as the API's lifespan — a worker whose node set is
@@ -64,29 +95,28 @@ async def startup(ctx: dict[str, Any]) -> None:
     plugins = PluginManager(PluginProcess.WORKER, settings)
     plugins.discover()
     contributions = plugins.pre_init()
-    ctx["node_registry"] = build_registry(extra_registrations=contributions.nodes)
-    ctx["plugins"] = plugins
+    c["node_registry"] = build_registry(extra_registrations=contributions.nodes)
+    c["plugins"] = plugins
     engine = make_engine(settings.database_url)
     sessionmaker = make_sessionmaker(engine)
     redis = aioredis.from_url(settings.redis_url, decode_responses=True)  # type: ignore[no-untyped-call]
     cipher = EnvelopeCipher(master_key=settings.master_key)
     token_pool = TokenPool(sessionmaker, cipher, settings.market_base_url)
     excluder = AccountExcluder(sessionmaker, token_pool)
-    ctx["engine"] = engine
-    ctx["redis_client"] = redis
-    ctx["sessionmaker"] = sessionmaker
-    ctx["node_deps"] = _build_node_deps(
-        sessionmaker, cipher, token_pool, excluder, redis, settings.market_base_url, settings
-    )
+    c["engine"] = engine
+    c["redis_client"] = redis
+    c["sessionmaker"] = sessionmaker
+    c["node_deps"] = _build_node_deps(sessionmaker, cipher, token_pool, excluder, redis, settings)
     await plugins.post_init(
-        node_registry=ctx["node_registry"], redis=redis, sessionmaker=sessionmaker
+        node_registry=c["node_registry"], redis=redis, sessionmaker=sessionmaker
     )
 
 
 async def shutdown(ctx: dict[str, Any]) -> None:
-    await ctx["plugins"].shutdown()
-    await ctx["redis_client"].aclose()
-    await ctx["engine"].dispose()
+    c = worker_ctx(ctx)
+    await c["plugins"].shutdown()
+    await c["redis_client"].aclose()
+    await c["engine"].dispose()
 
 
 def _build_node_deps(
@@ -95,11 +125,10 @@ def _build_node_deps(
     token_pool: TokenPool,
     excluder: AccountExcluder,
     redis: aioredis.Redis,
-    market_base_url: str | None,
     settings: Settings,
 ) -> NodeDeps:
     market = MarketService(
-        cipher, pool=token_pool, excluder=excluder, market_base_url=market_base_url
+        cipher, pool=token_pool, excluder=excluder, market_base_url=settings.market_base_url
     )
 
     async def load_account(tenant_id: TenantId, account_id: AccountId) -> Account:
@@ -155,15 +184,14 @@ def build_invoke_node_deps(
     """Assemble the same NodeDeps the arq worker uses, for the synchronous invoke path — the API
     composition root has the sessionmaker/token_pool/excluder/redis on ``app.state`` already."""
     cipher = EnvelopeCipher(master_key=settings.master_key)
-    return _build_node_deps(
-        sessionmaker, cipher, token_pool, excluder, redis, settings.market_base_url, settings
-    )
+    return _build_node_deps(sessionmaker, cipher, token_pool, excluder, redis, settings)
 
 
 async def prune_run_traces_task(ctx: dict[str, Any]) -> int:
+    c = worker_ctx(ctx)
     settings = get_settings()
     return await prune_run_traces(
-        RunTraceRepository(ctx["sessionmaker"]), settings.run_trace_retention_days
+        RunTraceRepository(c["sessionmaker"]), settings.run_trace_retention_days
     )
 
 
@@ -171,10 +199,11 @@ async def sweep_pending_runs_task(ctx: dict[str, Any]) -> int:
     """Re-enqueue Runs whose row was committed but whose arq push never landed (process death or
     an unreachable Redis between the two steps) — see ``triggers/firing.py``. ``ctx["redis"]`` is
     the ArqRedis pool arq itself puts on the job context, so this opens no second connection."""
+    c = worker_ctx(ctx)
     settings = get_settings()
     return await sweep_stale_pending_runs(
-        RunRepository(ctx["sessionmaker"]),
-        build_arq_enqueue(ctx["redis"]),
+        RunRepository(c["sessionmaker"]),
+        build_arq_enqueue(c["redis"]),
         grace=timedelta(seconds=settings.pending_sweep_grace_s),
         limit=settings.pending_sweep_batch_limit,
     )
@@ -183,17 +212,19 @@ async def sweep_pending_runs_task(ctx: dict[str, Any]) -> int:
 async def close_abandoned_runs_task(ctx: dict[str, Any]) -> int:
     """Closes runs whose executor vanished. The grace is deliberately larger than the job timeout:
     a run still inside a legitimately slow step must not be declared abandoned while it works."""
+    c = worker_ctx(ctx)
     settings = get_settings()
     return await close_abandoned_running_runs(
-        RunRepository(ctx["sessionmaker"]),
+        RunRepository(c["sessionmaker"]),
         grace=timedelta(seconds=_JOB_TIMEOUT_SECONDS + settings.pending_sweep_grace_s),
         limit=settings.pending_sweep_batch_limit,
     )
 
 
 async def execute_run_task(ctx: dict[str, Any], run_id: str) -> str:
+    c = worker_ctx(ctx)
     settings = get_settings()
-    sessionmaker = ctx["sessionmaker"]
+    sessionmaker = c["sessionmaker"]
     log.info("run_pickup", run_id=run_id, job_try=ctx.get("job_try"))
     try:
         status = await execute_run(
@@ -201,13 +232,11 @@ async def execute_run_task(ctx: dict[str, Any], run_id: str) -> str:
             runs=RunRepository(sessionmaker),
             steps=RunStepRepository(sessionmaker),
             flows=FlowIrRepository(sessionmaker),
-            registry=ctx["node_registry"].node_classes(),
-            node_deps=ctx["node_deps"],
+            registry=c["node_registry"].node_classes(),
+            node_deps=c["node_deps"],
             worker_id=settings.worker_id,
             trace_sink=RunTraceRepository(sessionmaker),
-            # wave-07: reuses the worker's existing Redis connection (ctx["redis_client"], set up
-            # in `startup()`) — no second connection opened for live-monitoring events.
-            event_transport=RedisEventTransport(ctx["redis_client"]),
+            event_transport=RedisEventTransport(c["redis_client"]),
             max_steps_per_run=settings.max_steps_per_run,
         )
     except RunAlreadyClaimed:
@@ -250,7 +279,7 @@ async def _fail_abandoned_run(
 class WorkerSettings:
     functions = [execute_run_task]
     cron_jobs = [
-        cron(prune_run_traces_task, hour=3, minute=0),  # once daily, off-peak
+        cron(prune_run_traces_task, hour=3, minute=0),
         # Every 5 minutes: the recovery window for a Run whose enqueue was lost is bounded by
         # this interval plus LZT_FLOW_PENDING_SWEEP_GRACE_S, not by the next process restart.
         cron(sweep_pending_runs_task, minute={0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55}),

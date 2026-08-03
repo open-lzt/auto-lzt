@@ -113,22 +113,31 @@ async def close_abandoned_running_runs(runs: RunRepository, *, grace: timedelta,
     """
     cutoff = datetime.now(UTC) - grace
     stale = await runs.list_stale_running(cutoff, limit)
+    closed = []
     for run in stale:
-        await runs.touch(
-            run.id,
-            run.version,
-            run.current_node_id,
-            RunStatus.FAILED,
-            error=(
-                "executor stopped without finishing this run — the last step's outcome is unknown "
-                "and may have completed; check the marketplace before re-running"
-            ),
-        )
-    if stale:
+        # `touch` is version-checked, so a run that came back to life between the SELECT above and
+        # this write loses the update and is left alone — correct, and the reason the count comes
+        # from what actually changed. Reporting `len(stale)` would tell an incident review that
+        # runs were force-failed when the rows never moved.
+        if (
+            await runs.touch(
+                run.id,
+                run.version,
+                run.current_node_id,
+                RunStatus.FAILED,
+                error=(
+                    "executor stopped without finishing this run — the last step's outcome is "
+                    "unknown and may have completed; check the marketplace before re-running"
+                ),
+            )
+            is not None
+        ):
+            closed.append(run.id)
+    if closed:
         log.warning(
             "running_run.abandoned",
-            count=len(stale),
+            count=len(closed),
             grace_seconds=int(grace.total_seconds()),
-            run_ids=[str(r.id) for r in stale],
+            run_ids=[str(run_id) for run_id in closed],
         )
-    return len(stale)
+    return len(closed)

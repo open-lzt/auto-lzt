@@ -45,7 +45,7 @@ def _fake_from_url(*_args: object, **kwargs: object) -> fakeredis.aioredis.FakeR
     return fakeredis.aioredis.FakeRedis(server=_FAKE_SERVER, decode_responses=decode)
 
 
-_redis_asyncio.from_url = _fake_from_url  # type: ignore[assignment]
+_redis_asyncio.from_url = _fake_from_url
 
 import uvicorn  # noqa: E402
 from sqlalchemy import select  # noqa: E402
@@ -119,9 +119,7 @@ async def _dev_executor(stop: asyncio.Event) -> None:
     pool = TokenPool(sm, cipher, settings.market_base_url)
     excluder = AccountExcluder(sm, pool)
     redis = _fake_from_url(decode_responses=True)
-    node_deps = _build_node_deps(
-        sm, cipher, pool, excluder, redis, settings.market_base_url, settings
-    )
+    node_deps = _build_node_deps(sm, cipher, pool, excluder, redis, settings)
     try:
         while not stop.is_set():
             async with session_scope(sm) as session:
@@ -180,7 +178,7 @@ def _install_arq_noop() -> None:
     async def _fake_create_pool(*_a: object, **_k: object) -> _NoOpPool:
         return _NoOpPool()
 
-    app_main.create_pool = _fake_create_pool  # type: ignore[assignment]
+    app_main.create_pool = _fake_create_pool  # type: ignore[assignment,attr-defined]
 
 
 @contextlib.contextmanager

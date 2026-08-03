@@ -102,6 +102,31 @@ async def test_a_run_still_moving_is_left_alone(sessionmaker) -> None:  # type: 
     assert row is not None and row.status is RunStatus.RUNNING
 
 
+async def test_a_run_that_revived_mid_sweep_is_not_counted_as_closed(sessionmaker) -> None:  # type: ignore[no-untyped-def]
+    """The write is version-checked, so a run that reported progress between the sweep's SELECT
+    and its UPDATE keeps working — and must NOT appear in the count. Reporting it would tell an
+    incident review that runs were force-failed when the rows never moved."""
+    runs = RunRepository(sessionmaker)
+    now = datetime.now(UTC)
+
+    revived = _run(RunStatus.PENDING, now - _GRACE - timedelta(minutes=5))
+    await runs.create_if_absent(revived)
+    version = await runs.claim(revived.id, 0, "worker-1")
+    assert version is not None
+    await runs.touch(revived.id, version, "buy_lot", RunStatus.RUNNING)
+    await _silence_since(sessionmaker, revived.id, now - _GRACE - timedelta(minutes=5))
+
+    # A real revival is a race between the sweep's SELECT and its UPDATE, which no single-threaded
+    # test can stage. What IS testable — and what the fix changed — is that a lost write does not
+    # get counted: `touch` returning None is exactly what the optimistic lock does when it loses.
+    async def lost_the_lock(*_args: object, **_kwargs: object) -> None:
+        return None
+
+    runs.touch = lost_the_lock  # type: ignore[method-assign]
+
+    assert await close_abandoned_running_runs(runs, grace=_GRACE, limit=_LIMIT) == 0
+
+
 async def test_pending_and_finished_runs_are_not_touched(sessionmaker) -> None:  # type: ignore[no-untyped-def]
     """PENDING belongs to the other sweep (which re-enqueues); COMPLETED is nobody's business."""
     runs = RunRepository(sessionmaker)
