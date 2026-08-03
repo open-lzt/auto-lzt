@@ -16,6 +16,7 @@ from app.domain.account.model import TenantId
 from app.domain.flow_engine.repo import FlowIrRepository, FlowRepository
 from app.domain.flow_engine.service import FlowService
 from app.domain.modules.service import ModuleService
+from app.domain.triggers.repo import TriggerRepository
 
 router = APIRouter(prefix="/modules", tags=["modules"])
 
@@ -42,7 +43,7 @@ def _module_service(request: Request) -> ModuleService:
         # The lifespan owns one client so its single-flight lock is actually shared; a per-request
         # client would give every caller its own lock and no single-flight at all (R-15).
         request.app.state.registry_client,
-        FlowService(FlowRepository(sm), FlowIrRepository(sm), registry),
+        FlowService(FlowRepository(sm), FlowIrRepository(sm), registry, TriggerRepository(sm)),
         registry,
     )
 

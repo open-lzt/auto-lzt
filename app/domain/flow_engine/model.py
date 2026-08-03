@@ -55,6 +55,12 @@ class Flow:
     version: int
     spec: FlowSpec
     created_at: datetime
+    # Which preset this flow was deployed from ("autobuy", "autobump", …), or None for a flow
+    # authored on the canvas. It is the ONLY stable identity of "the tenant's autobuy automation":
+    # the panel offers one form per preset, so pressing "Включить" a second time must update that
+    # automation, not stand a second one beside it. Matching on the name cannot do this job — the
+    # operator is free to rename, and two automations then both spend money on the same schedule.
+    source_preset_key: str | None = None
 
 
 @dataclass(slots=True, frozen=True)

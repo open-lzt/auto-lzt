@@ -9,6 +9,7 @@ lock + two-phase RunStep commit make a second executor a no-op loser (RunAlready
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import timedelta
@@ -37,7 +38,7 @@ from app.domain.flow_engine.base_node import NodeDeps
 from app.domain.flow_engine.errors import RunAlreadyClaimed
 from app.domain.flow_engine.events import RedisEventTransport
 from app.domain.flow_engine.idempotency import IdempotencyGuard
-from app.domain.flow_engine.model import RunId
+from app.domain.flow_engine.model import RunId, RunStatus
 from app.domain.flow_engine.repo import (
     FlowIrRepository,
     RunRepository,
@@ -46,7 +47,7 @@ from app.domain.flow_engine.repo import (
 )
 from app.domain.flow_engine.retention import prune_run_traces
 from app.domain.market.service import MarketService
-from app.domain.triggers.firing import sweep_stale_pending_runs
+from app.domain.triggers.firing import close_abandoned_running_runs, sweep_stale_pending_runs
 from app.plugin_runtime import PluginManager, PluginProcess
 from app.worker.enqueue import build_arq_enqueue
 from app.worker.runtime import execute_run
@@ -179,6 +180,17 @@ async def sweep_pending_runs_task(ctx: dict[str, Any]) -> int:
     )
 
 
+async def close_abandoned_runs_task(ctx: dict[str, Any]) -> int:
+    """Closes runs whose executor vanished. The grace is deliberately larger than the job timeout:
+    a run still inside a legitimately slow step must not be declared abandoned while it works."""
+    settings = get_settings()
+    return await close_abandoned_running_runs(
+        RunRepository(ctx["sessionmaker"]),
+        grace=timedelta(seconds=_JOB_TIMEOUT_SECONDS + settings.pending_sweep_grace_s),
+        limit=settings.pending_sweep_batch_limit,
+    )
+
+
 async def execute_run_task(ctx: dict[str, Any], run_id: str) -> str:
     settings = get_settings()
     sessionmaker = ctx["sessionmaker"]
@@ -201,7 +213,38 @@ async def execute_run_task(ctx: dict[str, Any], run_id: str) -> str:
     except RunAlreadyClaimed:
         log.info("run_already_claimed", run_id=run_id)
         return "already_claimed"
+    except asyncio.CancelledError:
+        # arq cancels the coroutine when the job outlives `job_timeout`. Without this the run row
+        # kept `status=running, claimed_by=<worker>` FOREVER: the sweep only looks at PENDING, so
+        # nothing ever revisited it. Observed live on a purchase — the operator's screen said
+        # "running" while the money had already left the account.
+        #
+        # Shielded because we are inside a cancellation: an unshielded await here is cancelled too,
+        # and the row would stay untouched exactly when the record matters most.
+        await asyncio.shield(
+            _fail_abandoned_run(sessionmaker, run_id, "job cancelled (timeout or shutdown)")
+        )
+        raise
     return status.value
+
+
+async def _fail_abandoned_run(
+    sessionmaker: async_sessionmaker[AsyncSession], run_id: str, reason: str
+) -> None:
+    """Best-effort transition of a run nobody will finish into FAILED.
+
+    Never raises: it runs on the cancellation path, and a failure to record the outcome must not
+    replace the original reason for stopping.
+    """
+    try:
+        runs = RunRepository(sessionmaker)
+        run = await runs.get(RunId(UUID(run_id)))
+        if run is None or run.status is not RunStatus.RUNNING:
+            return
+        await runs.touch(run.id, run.version, run.current_node_id, RunStatus.FAILED, error=reason)
+        log.warning("run_abandoned", run_id=run_id, reason=reason)
+    except Exception:  # noqa: BLE001 — see the docstring: recording must not mask the cancellation
+        log.exception("run_abandoned.record_failed", run_id=run_id)
 
 
 class WorkerSettings:
@@ -211,6 +254,9 @@ class WorkerSettings:
         # Every 5 minutes: the recovery window for a Run whose enqueue was lost is bounded by
         # this interval plus LZT_FLOW_PENDING_SWEEP_GRACE_S, not by the next process restart.
         cron(sweep_pending_runs_task, minute={0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55}),
+        # Same cadence, opposite failure: a run that was picked up and then abandoned. See
+        # `close_abandoned_running_runs` for why these are closed rather than retried.
+        cron(close_abandoned_runs_task, minute={2, 7, 12, 17, 22, 27, 32, 37, 42, 47, 52, 57}),
     ]
     on_startup = startup
     on_shutdown = shutdown

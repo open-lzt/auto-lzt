@@ -78,6 +78,52 @@ async def test_deploying_a_preset_creates_a_flow_and_a_trigger(sqlite_app: Any) 
     assert body["trigger_id"]
 
 
+async def test_deploying_the_same_preset_twice_edits_it_instead_of_doubling_it(
+    sqlite_app: Any,
+) -> None:
+    """The panel shows ONE form per preset, so pressing save again is an edit of the automation
+    already there. It used to append: two flows, each with its own cron trigger, both firing. On
+    autobuy that is two purchases per tick — the reason this defect is scoped as money and not as
+    log noise."""
+    app = create_app()
+    async with LifespanManager(app), await _client(app) as client:
+        created = await client.post("/accounts/create", json={"token": "t-" + uuid4().hex})
+        account_id = created.json()["id"]
+        body = {"params": {"accounts": [account_id], "max_bumps": 3}}
+
+        first = await client.post("/panel/presets/autobump/deploy", json=body)
+        body["params"]["max_bumps"] = 5
+        second = await client.post("/panel/presets/autobump/deploy", json=body)
+
+        flows = (await client.get("/flows/list")).json()
+        triggers = (await client.get(f"/flows/{first.json()['flow_id']}/triggers/list")).json()
+
+    assert second.status_code == 201, second.text
+    assert second.json()["flow_id"] == first.json()["flow_id"], "a second flow was stood up"
+    assert len(flows) == 1, f"expected one automation for the preset, got {len(flows)}"
+    assert len(triggers) == 1, f"expected one schedule, got {len(triggers)} — the flow fires twice"
+
+
+async def test_deleting_a_flow_takes_its_schedule_with_it(sqlite_app: Any) -> None:
+    """There is no foreign key between flows and triggers, so nothing removes the schedule for us.
+    A trigger row left behind keeps its scheduler job and goes on firing a flow that is gone from
+    the panel — on the autobuy preset, buying against an automation the operator deleted."""
+    app = create_app()
+    async with LifespanManager(app), await _client(app) as client:
+        created = await client.post("/accounts/create", json={"token": "t-" + uuid4().hex})
+        deployed = await client.post(
+            "/panel/presets/autobump/deploy",
+            json={"params": {"accounts": [created.json()["id"]], "max_bumps": 3}},
+        )
+        flow_id = deployed.json()["flow_id"]
+
+        deleted = await client.delete(f"/flows/{flow_id}/delete")
+        triggers = await client.get(f"/flows/{flow_id}/triggers/list")
+
+    assert deleted.status_code in (200, 204), deleted.text
+    assert triggers.json() == [], "the deleted flow still has a live schedule"
+
+
 async def test_bad_parameters_are_a_422_not_a_500(sqlite_app: Any) -> None:
     """The body is `{"params": {...}}`, so FastAPI validates the envelope while the preset model
     validates its contents. Without an explicit mapping the second failure escapes as a 500."""

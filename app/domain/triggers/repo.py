@@ -82,6 +82,26 @@ class TriggerRepository(BaseSessionmakerRepo[TriggerDefinition, TriggerId]):
             rows = (await session.execute(stmt)).scalars().all()
         return [_from_orm(row) for row in rows]
 
+    async def delete_by_flow(
+        self, tenant_id: TenantId, flow_id: FlowId, kind: TriggerKind | None = None
+    ) -> list[TriggerId]:
+        """Remove a flow's triggers (optionally just one kind); returns the ids removed.
+
+        The ids are the point, not a courtesy: the scheduler keys its jobs by trigger id, so the
+        caller needs them to take the corresponding cron jobs down. A trigger row deleted while its
+        job stays registered is an automation that keeps firing after the operator removed it.
+        """
+        stmt = select(TriggerORM).where(
+            TriggerORM.tenant_id == tenant_id, TriggerORM.flow_id == flow_id
+        )
+        if kind is not None:
+            stmt = stmt.where(TriggerORM.kind == kind.value)
+        async with session_scope(self._sm) as session:
+            rows = list((await session.execute(stmt)).scalars().all())
+            for row in rows:
+                await session.delete(row)
+        return [TriggerId(row.id) for row in rows]
+
     async def list_active_schedule_triggers(self) -> list[TriggerDefinition]:
         """Worker-global — see module docstring for why this has no ``tenant_id`` filter."""
         stmt = select(TriggerORM).where(

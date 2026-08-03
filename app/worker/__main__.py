@@ -10,9 +10,11 @@ silently let the second one win and orphan the first component's shutdown path.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import signal
 
 import structlog
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from arq import create_pool
 from arq.connections import RedisSettings
 from arq.worker import Worker, create_worker
@@ -29,6 +31,33 @@ from app.worker.enqueue import build_arq_enqueue
 from app.worker.eventus_bootstrap import build_eventus_engine, ensure_eventus_schema
 
 log = structlog.get_logger()
+
+
+_SCHEDULE_RESYNC_INTERVAL_S = 60
+
+
+async def _resync_schedule_jobs(
+    scheduler: AsyncIOScheduler, triggers: TriggerRepository, stop: asyncio.Event
+) -> None:
+    """Re-match the jobstore to the ``triggers`` table every minute until shutdown.
+
+    The startup sync alone leaves a window with no upper bound: the jobstore is persistent, so a
+    schedule removed through the API keeps firing until somebody restarts this process — days, on a
+    box nobody touches. Since the removal can be a preset that buys, the window is measured in
+    money, and a minute is the ceiling this puts on it.
+
+    Failures are logged and the loop continues: a DB blip must not leave the scheduler running
+    without its resync for the rest of the process's life.
+    """
+    while not stop.is_set():
+        with contextlib.suppress(TimeoutError):
+            await asyncio.wait_for(stop.wait(), timeout=_SCHEDULE_RESYNC_INTERVAL_S)
+        if stop.is_set():
+            return
+        try:
+            await sync_jobs_from_triggers(scheduler, triggers)
+        except Exception:  # noqa: BLE001 — supervisor loop; the next tick retries
+            log.exception("schedule_resync.failed")
 
 
 async def _supervise(engine: EventEngine | None, arq_worker: Worker, stop: asyncio.Event) -> None:
@@ -135,9 +164,16 @@ async def main() -> None:
         log.info(
             "eventus_engine.run_starting", note="blocks on the Postgres advisory lock until owned"
         )
+    resync_task = asyncio.create_task(
+        _resync_schedule_jobs(scheduler, TriggerRepository(app_sessionmaker), stop),
+        name="schedule-resync",
+    )
     try:
         await _supervise(engine, arq_worker, stop)
     finally:
+        resync_task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await resync_task
         scheduler.shutdown(wait=False)
         await arq_worker.close()
         await arq_pool.aclose()

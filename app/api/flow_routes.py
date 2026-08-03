@@ -34,6 +34,7 @@ from app.domain.flow_engine.repo import (
 )
 from app.domain.flow_engine.service import FlowService, RunService
 from app.domain.flow_engine.spec import FlowSpec
+from app.domain.triggers.repo import TriggerRepository
 from app.worker.arq_settings import build_invoke_node_deps
 from app.worker.runtime import execute_run
 
@@ -89,7 +90,9 @@ class ImportResultResponse(BaseSchema):
 
 def _flow_service(request: Request) -> FlowService:
     sm = request.app.state.sessionmaker
-    return FlowService(FlowRepository(sm), FlowIrRepository(sm), node_registry_dep(request))
+    return FlowService(
+        FlowRepository(sm), FlowIrRepository(sm), node_registry_dep(request), TriggerRepository(sm)
+    )
 
 
 async def _noop_enqueue(_run_id: object) -> None:

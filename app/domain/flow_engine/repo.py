@@ -105,7 +105,14 @@ def _result_from_json(data: dict[str, Any] | None) -> StepResultDTO | None:
 
 
 class FlowRepository(BaseSessionmakerRepo[Flow, FlowId]):
-    async def create(self, tenant_id: TenantId, name: str, spec: FlowSpec) -> Flow:
+    async def create(
+        self,
+        tenant_id: TenantId,
+        name: str,
+        spec: FlowSpec,
+        *,
+        source_preset_key: str | None = None,
+    ) -> Flow:
         flow = Flow(
             id=FlowId(uuid4()),
             tenant_id=tenant_id,
@@ -113,6 +120,7 @@ class FlowRepository(BaseSessionmakerRepo[Flow, FlowId]):
             version=1,
             spec=spec,
             created_at=_now(),
+            source_preset_key=source_preset_key,
         )
         orm = FlowORM(
             id=flow.id,
@@ -121,6 +129,7 @@ class FlowRepository(BaseSessionmakerRepo[Flow, FlowId]):
             version=flow.version,
             spec=spec.model_dump(mode="json"),
             created_at=flow.created_at,
+            source_preset_key=source_preset_key,
         )
         async with session_scope(self._sm) as session:
             session.add(orm)
@@ -130,16 +139,17 @@ class FlowRepository(BaseSessionmakerRepo[Flow, FlowId]):
         stmt = select(FlowORM).where(FlowORM.tenant_id == tenant_id, FlowORM.id == flow_id)
         async with session_scope(self._sm) as session:
             orm = (await session.execute(stmt)).scalar_one_or_none()
-        if orm is None:
-            return None
-        return Flow(
-            id=FlowId(orm.id),
-            tenant_id=TenantId(orm.tenant_id),
-            name=orm.name,
-            version=orm.version,
-            spec=FlowSpec.model_validate(orm.spec),
-            created_at=orm.created_at,
+        return None if orm is None else _flow_from_orm(orm)
+
+    async def get_by_preset(self, tenant_id: TenantId, preset_key: str) -> Flow | None:
+        """The tenant's automation for this preset, if it was ever enabled. At most one exists —
+        `uq_flows_tenant_preset` makes a second one impossible."""
+        stmt = select(FlowORM).where(
+            FlowORM.tenant_id == tenant_id, FlowORM.source_preset_key == preset_key
         )
+        async with session_scope(self._sm) as session:
+            orm = (await session.execute(stmt)).scalar_one_or_none()
+        return None if orm is None else _flow_from_orm(orm)
 
     async def update_spec(
         self, tenant_id: TenantId, flow_id: FlowId, name: str, spec: FlowSpec
@@ -328,6 +338,23 @@ class RunRepository(BaseSessionmakerRepo[Run, RunId]):
             rows = (await session.execute(stmt)).scalars().all()
         return [RunId(row) for row in rows]
 
+    async def list_stale_running(self, cutoff: datetime, limit: int) -> list[Run]:
+        """Runs that were claimed and then went silent — RUNNING with ``updated_at`` before
+        ``cutoff``, i.e. the executor died, was cancelled, or lost its host mid-step.
+
+        Whole rows, not ids: closing one needs its ``version`` for the optimistic update and its
+        ``current_node_id`` to say where it stopped.
+        """
+        stmt = (
+            select(RunORM)
+            .where(RunORM.status == RunStatus.RUNNING.value, RunORM.updated_at < cutoff)
+            .order_by(RunORM.updated_at)
+            .limit(limit)
+        )
+        async with session_scope(self._sm) as session:
+            rows = (await session.execute(stmt)).scalars().all()
+        return [_run_from_orm(row) for row in rows]
+
     async def claim(self, run_id: RunId, expected_version: int, worker_id: str) -> int | None:
         """Optimistic pickup: bump version iff it still matches. Returns the new version, or None if
         another executor already advanced it (caller treats None as RunAlreadyClaimed)."""
@@ -377,6 +404,18 @@ class RunRepository(BaseSessionmakerRepo[Run, RunId]):
         async with session_scope(self._sm) as session:
             result = await session.execute(stmt)
         return new_version if _rowcount(result) == 1 else None
+
+
+def _flow_from_orm(orm: FlowORM) -> Flow:
+    return Flow(
+        id=FlowId(orm.id),
+        tenant_id=TenantId(orm.tenant_id),
+        name=orm.name,
+        version=orm.version,
+        spec=FlowSpec.model_validate(orm.spec),
+        created_at=orm.created_at,
+        source_preset_key=orm.source_preset_key,
+    )
 
 
 def _run_from_orm(orm: RunORM) -> Run:

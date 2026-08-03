@@ -26,7 +26,6 @@ from app.core.exceptions import AppError, ErrorCode
 from app.core.schema import BaseSchema
 from app.core.tenant import tenant_id_dep
 from app.domain.account.model import TenantId
-from app.domain.flow_engine.model import TriggerKind
 from app.domain.flow_engine.repo import FlowIrRepository, FlowRepository
 from app.domain.flow_engine.service import FlowService
 from app.domain.panel.preset_registry import BUILTIN_PRESETS, PresetParams, get_preset
@@ -79,7 +78,9 @@ class DeployPresetResponse(BaseSchema):
 
 def _flow_service(request: Request) -> FlowService:
     sm = request.app.state.sessionmaker
-    return FlowService(FlowRepository(sm), FlowIrRepository(sm), node_registry_dep(request))
+    return FlowService(
+        FlowRepository(sm), FlowIrRepository(sm), node_registry_dep(request), TriggerRepository(sm)
+    )
 
 
 def _trigger_service(request: Request) -> TriggerService:
@@ -127,9 +128,9 @@ async def deploy_preset(
     # path can read it off any preset without knowing which one it is holding.
     schedule_cron = params.schedule_cron.value
 
-    flow = await flows.create(tenant_id, spec)
+    # Overwrites this preset's existing automation instead of standing a second one beside it —
+    # see FlowService.deploy_from_preset for the money this costs when it does not.
+    flow = await flows.deploy_from_preset(tenant_id, key, spec)
     await flows.compile(tenant_id, flow.id)
-    trigger = await triggers.create(
-        tenant_id, flow.id, TriggerKind.SCHEDULE, schedule_cron=schedule_cron, event_type=None
-    )
+    trigger = await triggers.replace_schedule(tenant_id, flow.id, schedule_cron)
     return DeployPresetResponse(flow_id=str(flow.id), trigger_id=str(trigger.id))

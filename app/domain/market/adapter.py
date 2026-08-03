@@ -282,10 +282,17 @@ class MarketAdapter:
                     ),
                 ),
             )
-        except httpx.TimeoutException as exc:
+        except (httpx.TimeoutException, TimeoutError) as exc:
             # httpx errors are not part of pylzt's typed tree, so this one escaped every handler
             # below and reached the worker as a bare ReadTimeout(''). On a non-idempotent POST that
             # is the worst thing to be vague about: the purchase may well have completed.
+            #
+            # The bare `TimeoutError` is not redundant with httpx's: `purchasing_fast_buy` waits for
+            # a websocket event (`pylzt/facades/market.py`, `_receive_event`) under
+            # `asyncio.timeout`, which raises the BUILTIN TimeoutError — a different type that
+            # httpx.TimeoutException does not cover. Caught live on the production marketplace: that
+            # timeout escaped this handler, arq then cancelled the job, and the lot turned out to
+            # have been BOUGHT — 2 ₽ left the balance while the trace recorded one 1 ₽ purchase.
             raise PurchaseOutcomeUnknown(item_id, PURCHASE_TIMEOUT_S) from exc
         return FastBuyResult(
             item_id=response.item.item_id, price=response.item.price, purchased=True

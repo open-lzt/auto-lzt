@@ -15,6 +15,7 @@ from __future__ import annotations
 
 from datetime import UTC
 
+import structlog
 from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -27,6 +28,8 @@ from app.domain.triggers.repo import TriggerRepository
 # Postgres MUST map to the explicit ``+psycopg`` (psycopg3) driver, never bare ``postgresql://``:
 # SQLAlchemy resolves a bare postgres URL to the psycopg2 dialect, which this project never installs
 # (it depends on psycopg3). Bare-stripping was the bug that crash-looped the worker on boot.
+log = structlog.get_logger()
+
 _SYNC_DRIVER_REPLACEMENTS = (
     ("+asyncpg", "+psycopg"),
     ("+aiosqlite", ""),  # stdlib sqlite3, no extra dependency
@@ -48,13 +51,21 @@ def build_scheduler(database_url: str) -> AsyncIOScheduler:
     return AsyncIOScheduler(jobstores={"default": jobstore}, timezone=UTC)
 
 
-async def sync_jobs_from_triggers(scheduler: AsyncIOScheduler, triggers: TriggerRepository) -> None:
-    """(Re)register every active SCHEDULE trigger as an APScheduler job — idempotent
-    (``replace_existing=True``), called once at scheduler startup so a redeployed process picks up
-    triggers created via the API while it was down."""
-    rows = await triggers.list_active_schedule_triggers()
+async def sync_jobs_from_triggers(scheduler: AsyncIOScheduler, triggers: TriggerRepository) -> int:
+    """Make the jobstore match the ``triggers`` table exactly; returns how many jobs were removed.
+
+    The table is the source of truth in BOTH directions, and the removing half is the load-bearing
+    one. The jobstore is persistent, so a job outlives the process that added it: when a trigger
+    goes away — the flow deleted, the schedule replaced, the trigger deactivated — nothing ever
+    took its job down, and it kept firing a flow the operator had removed. On a preset that buys,
+    that is money leaving an account nobody is watching any more.
+
+    Only jobs carrying ``SCHEDULE_JOB_PREFIX`` are considered; anything else in the store belongs
+    to someone else and is left alone.
+    """
+    rows = [r for r in await triggers.list_active_schedule_triggers() if r.schedule_cron]
     for row in rows:
-        if row.kind is not TriggerKind.SCHEDULE or not row.schedule_cron:
+        if row.kind is not TriggerKind.SCHEDULE:
             continue
         scheduler.add_job(
             run_scheduled_flow,
@@ -66,3 +77,13 @@ async def sync_jobs_from_triggers(scheduler: AsyncIOScheduler, triggers: Trigger
             coalesce=True,
             misfire_grace_time=300,
         )
+
+    live = {f"{SCHEDULE_JOB_PREFIX}{row.id}" for row in rows}
+    removed = 0
+    for job in scheduler.get_jobs():
+        if job.id.startswith(SCHEDULE_JOB_PREFIX) and job.id not in live:
+            scheduler.remove_job(job.id)
+            removed += 1
+    if removed:
+        log.warning("schedule_job.orphaned_removed", count=removed)
+    return removed

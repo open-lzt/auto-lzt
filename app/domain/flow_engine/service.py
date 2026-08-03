@@ -28,18 +28,40 @@ from app.domain.flow_engine.repo import (
     RunRepository,
 )
 from app.domain.flow_engine.spec import FlowSpec
+from app.domain.triggers.repo import TriggerRepository
 
 
 class FlowService:
     def __init__(
-        self, flow_repo: FlowRepository, ir_repo: FlowIrRepository, registry: NodeRegistry
+        self,
+        flow_repo: FlowRepository,
+        ir_repo: FlowIrRepository,
+        registry: NodeRegistry,
+        trigger_repo: TriggerRepository,
     ) -> None:
         self._flows = flow_repo
         self._irs = ir_repo
         self._registry = registry
+        self._triggers = trigger_repo
 
-    async def create(self, tenant_id: TenantId, spec: FlowSpec) -> Flow:
-        return await self._flows.create(tenant_id, spec.name, spec)
+    async def create(
+        self, tenant_id: TenantId, spec: FlowSpec, *, source_preset_key: str | None = None
+    ) -> Flow:
+        return await self._flows.create(
+            tenant_id, spec.name, spec, source_preset_key=source_preset_key
+        )
+
+    async def deploy_from_preset(self, tenant_id: TenantId, key: str, spec: FlowSpec) -> Flow:
+        """Create the tenant's automation for this preset, or overwrite the one already there.
+
+        Enabling a preset twice used to leave TWO flows, each with its own schedule, both firing —
+        which on the autobuy preset means paying twice. The panel shows one form per preset, so a
+        second press is an edit, and this is where that reading is enforced.
+        """
+        existing = await self._flows.get_by_preset(tenant_id, key)
+        if existing is None:
+            return await self.create(tenant_id, spec, source_preset_key=key)
+        return await self.update(tenant_id, existing.id, spec)
 
     async def list(self, tenant_id: TenantId) -> list[Flow]:
         return await self._flows.list(tenant_id)
@@ -66,6 +88,15 @@ class FlowService:
             raise EntityNotFound("flow", str(flow_id))
 
     async def delete(self, tenant_id: TenantId, flow_id: FlowId) -> None:
+        """Delete the flow AND the triggers that fire it.
+
+        There is no foreign key between the two tables, so nothing removes the triggers on our
+        behalf. Left behind, a schedule row keeps its APScheduler job and the flow the operator
+        deleted goes on firing — with a purchase preset, spending money against a flow that no
+        longer exists in the panel. The rows go first: a delete that fails halfway must leave the
+        flow unfireable rather than fireable-but-invisible.
+        """
+        await self._triggers.delete_by_flow(tenant_id, flow_id)
         if not await self._flows.delete(tenant_id, flow_id):
             raise EntityNotFound("flow", str(flow_id))
 

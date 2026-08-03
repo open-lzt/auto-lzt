@@ -49,3 +49,18 @@ class TriggerService:
 
     async def list_by_flow(self, tenant_id: TenantId, flow_id: FlowId) -> list[TriggerDefinition]:
         return await self._triggers.list_by_flow(tenant_id, flow_id)
+
+    async def replace_schedule(
+        self, tenant_id: TenantId, flow_id: FlowId, schedule_cron: str
+    ) -> TriggerDefinition:
+        """Make this the flow's ONLY schedule.
+
+        `create` appends, which is right when a flow is meant to answer several triggers — and
+        wrong every time a schedule is re-saved. Re-publishing a flow left it with two identical
+        cron triggers, so it fired twice per tick; that is visible as noise on a read-only flow and
+        as a doubled bill on one that buys.
+        """
+        await self._triggers.delete_by_flow(tenant_id, flow_id, TriggerKind.SCHEDULE)
+        return await self.create(
+            tenant_id, flow_id, TriggerKind.SCHEDULE, schedule_cron=schedule_cron, event_type=None
+        )

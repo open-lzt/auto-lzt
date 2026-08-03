@@ -20,7 +20,7 @@ from datetime import UTC, datetime, timedelta
 import structlog
 
 from app.domain.account.model import TenantId
-from app.domain.flow_engine.model import FlowId, Run, RunId
+from app.domain.flow_engine.model import FlowId, Run, RunId, RunStatus
 from app.domain.flow_engine.params import JsonValue, resolve_params
 from app.domain.flow_engine.repo import FlowRepository, RunRepository
 
@@ -90,4 +90,45 @@ async def sweep_stale_pending_runs(
         await enqueue_run(run_id)
     if stale:
         log.info("pending_run.swept", count=len(stale), grace_seconds=int(grace.total_seconds()))
+    return len(stale)
+
+
+async def close_abandoned_running_runs(runs: RunRepository, *, grace: timedelta, limit: int) -> int:
+    """Mark every RUNNING run that stopped moving before ``grace`` as FAILED; returns how many.
+
+    The counterpart to the PENDING sweep above, for the other way a run gets stranded: it WAS
+    picked up, and then the executor went away — cancelled by arq's job timeout, killed with its
+    host, or crashed below the handler. The row keeps ``status=running`` and its ``claimed_by``,
+    and until this existed nothing ever looked at it again: the sweep above filters on PENDING.
+    Seen live — a purchase run sat "running" while the money had already left the account.
+
+    **These are closed, not re-enqueued, and that asymmetry is the point.** A PENDING run provably
+    never started, so re-enqueueing it repeats nothing. A RUNNING one stopped mid-step and its last
+    step may have been a purchase that completed on the marketplace but never got written down —
+    re-running it would buy the same lot twice. Losing a run to a false failure costs one re-run
+    the operator asks for; double-charging costs money that is not ours to spend.
+
+    The error text says the outcome is unknown on purpose: "failed" here means "nobody will finish
+    this", not "nothing happened".
+    """
+    cutoff = datetime.now(UTC) - grace
+    stale = await runs.list_stale_running(cutoff, limit)
+    for run in stale:
+        await runs.touch(
+            run.id,
+            run.version,
+            run.current_node_id,
+            RunStatus.FAILED,
+            error=(
+                "executor stopped without finishing this run — the last step's outcome is unknown "
+                "and may have completed; check the marketplace before re-running"
+            ),
+        )
+    if stale:
+        log.warning(
+            "running_run.abandoned",
+            count=len(stale),
+            grace_seconds=int(grace.total_seconds()),
+            run_ids=[str(r.id) for r in stale],
+        )
     return len(stale)
