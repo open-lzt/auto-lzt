@@ -33,3 +33,8 @@ desktop.ini
 
 # TypeScript incremental build cache — a build artifact, regenerated on every tsc run.
 *.tsbuildinfo
+
+# Рабочие заметки и ревью — внутреннее, в публичный репозиторий не едут
+.claude/
+CLAUDE.md
+reviews/

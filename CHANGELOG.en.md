@@ -3,6 +3,30 @@
 All notable changes to lzt-flow. Format loosely follows [Keep a Changelog](https://keepachangelog.com);
 this project uses a single-tenant, wave-based history — see `ARCHITECTURE.md` for the design record.
 
+## [0.4.0] — 2026-08-03
+
+### Fixed
+- **An abandoned run no longer buys twice.** A run left in `RUNNING` after the worker died is
+  closed as failed instead of retried: a purchase is not idempotent, and replaying a step that may
+  already have reached the marketplace costs a second payment.
+- **Re-deploying a preset edits the flow instead of cloning it.** The preset key is unique per
+  owner at the database level, so a race between two deploys ends in an edit of the winner rather
+  than a second automation on the same account.
+- **A deleted flow stops firing.** Triggers are deleted with the flow, and the scheduler reconciles
+  against the database every minute, dropping jobs nothing stands behind any more.
+
+### Changed
+- **The panel takes its controls from the design kit** `@open-lzt/ui` 0.2.0: selects, date and time
+  fields, sliders and switches look the same in both themes and are fully keyboard-driven. They
+  used to be native browser controls, which every OS draws its own way.
+- **The automation form reads at a glance** — the schedule is separated from the preset parameters,
+  and the action sits in the block footer.
+- Double-clicking a node on the canvas opens it for editing.
+
+### Migration
+- `0015_flow_source_preset_key` — the flow's preset key and a partial unique index over the
+  owner–preset pair.
+
 ## [0.3.0] — 2026-07-21
 
 ### Added
