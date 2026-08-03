@@ -67,9 +67,7 @@ class FlowEventRouter(BaseConsumer):
 
         run_key = f"{trigger.flow_id}:{event.seq}"
         now = datetime.now(UTC)
-        flow_vars = await resolve_unattended_vars(
-            self._flows, trigger.tenant_id, trigger.flow_id
-        )
+        flow_vars = await resolve_unattended_vars(self._flows, trigger.tenant_id, trigger.flow_id)
         run = Run(
             id=RunId(uuid4()),
             flow_id=trigger.flow_id,
