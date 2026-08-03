@@ -23,6 +23,10 @@ this project uses a single-tenant, wave-based history — see `ARCHITECTURE.md` 
   and the action sits in the block footer.
 - Double-clicking a node on the canvas opens it for editing.
 
+- **The package and its commands are called `auto-lzt`**, same as the repository. `lzt-flow`,
+  `lzt-flow-bot` and `lzt-flow-validate` remain as aliases, so existing installs and other
+  people's CI keep working.
+
 ### Migration
 - `0015_flow_source_preset_key` — the flow's preset key and a partial unique index over the
   owner–preset pair.

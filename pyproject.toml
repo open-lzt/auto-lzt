@@ -1,5 +1,5 @@
 [project]
-name = "lzt-flow"
+name = "auto-lzt"
 version = "0.4.0"
 description = "Server-side no-code automation engine for the lzt.market marketplace."
 requires-python = ">=3.12"
@@ -71,12 +71,16 @@ lzt-flow-demo-runtime = { path = "tests/fixtures/plugin_runtime_pkg", editable =
 lzt-eventus = { git = "https://github.com/open-lzt/lzt-eventus.git", branch = "main" }
 
 [project.scripts]
-# The SAME validator the backend calls (D-6) — the lzt-flows CI installs lzt-flow and runs this,
+# The SAME validator the backend calls (D-6) — the lzt-flows CI installs auto-lzt and runs this,
 # so a module cannot pass CI and fail import, or vice versa.
-lzt-flow-validate = "app.domain.modules.cli:main"
+auto-lzt-validate = "app.domain.modules.cli:main"
 # The admin bot as its own process — it is a client of the API, not part of it.
-lzt-flow-bot = "app.bot.main:main"
+auto-lzt-bot = "app.bot.main:main"
 # Operator CLI: install/run/debug autobuy flows against a running flow API (127.0.0.1:8000).
+auto-lzt = "app.cli.__main__:main"
+# The pre-rename names, kept so existing installs, compose files and CI keep working.
+lzt-flow-validate = "app.domain.modules.cli:main"
+lzt-flow-bot = "app.bot.main:main"
 lzt-flow = "app.cli.__main__:main"
 
 [build-system]

@@ -4,7 +4,7 @@
 
 A server-side no-code automation engine for [lzt.market](https://lzt.market). A task is described as a graph of nodes rather than a script: "find Steam accounts under 500 and buy them", "bump my listings every 4 hours".
 
-**The repository is called `auto-lzt`, while the package, the CLI and the docs are called `lzt-flow`.** That's a leftover from a rename, not two different things.
+The repository, the package and the command are all called `auto-lzt`. The older names `lzt-flow`, `lzt-flow-bot` and `lzt-flow-validate` stay as working aliases so existing installs and other people's CI keep working.
 
 ```bash
 uv sync --extra dev
@@ -40,12 +40,12 @@ LZT_FLOW_MASTER_KEY=$(python -c "from cryptography.fernet import Fernet; print(F
 
 ## CLI
 
-The package installs two commands: `lzt-flow` for operator tasks and `lzt-flow-validate` for checking a module.
+The package installs two commands: `auto-lzt` for operator tasks and `auto-lzt-validate` for checking a module.
 
 Global flags go **before** the subcommand:
 
 ```bash
-lzt-flow --api http://127.0.0.1:8000 --json list
+auto-lzt --api http://127.0.0.1:8000 --json list
 ```
 
 | Flag | What it does |

@@ -159,7 +159,7 @@ services:
   # the compose network under the same X-API-Key gate as the web UI.
   bot:
     build: .
-    command: lzt-flow-bot
+    command: auto-lzt-bot
     profiles: ["bot"]
     env_file:
       - .env
