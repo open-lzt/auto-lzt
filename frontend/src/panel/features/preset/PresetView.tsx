@@ -1,5 +1,6 @@
-import { Button, Card, useToast } from "@open-lzt/ui";
+import { Block, BlockBody, BlockFooter, BlockHeader, Button, useToast } from "@open-lzt/ui";
 import { useEffect, useState } from "react";
+import type { JsonSchema } from "../../../api/catalogClient";
 import { AutoForm } from "../../../components/form/AutoForm";
 import { coerceParams, defaultValues, deployPreset, type PresetSummary } from "./presetClient";
 import "../preset-form.css";
@@ -45,26 +46,64 @@ export function PresetForm({ preset, onDeployed }: PresetFormProps) {
     }
   }
 
+  const what = withoutKeys(preset.params_schema, [SCHEDULE_KEY]);
+  const when = onlyKeys(preset.params_schema, [SCHEDULE_KEY]);
+  const change = (key: string, value: FormValue) =>
+    setValues((prev) => ({ ...prev, [key]: value }));
+
   return (
     <div className="preset-form">
-      <Card className="preset-form__section">
-        <AutoForm
-          schema={preset.params_schema}
-          values={values}
-          onChange={(key, value) => setValues((prev) => ({ ...prev, [key]: value }))}
-        />
-      </Card>
+      <Block className="preset-form__block">
+        <BlockHeader className="preset-form__block-head">
+          <h3 className="preset-form__block-title">Что делать</h3>
+        </BlockHeader>
+        <BlockBody className="preset-form__block-body">
+          <AutoForm schema={what} values={values} onChange={change} />
+        </BlockBody>
+      </Block>
 
-      <div className="preset-form__deploy">
-        <Button
-          variant="primary"
-          loading={deploying}
-          disabled={deploying}
-          onClick={() => void handleDeploy()}
-        >
-          Включить
-        </Button>
-      </div>
+      <Block className="preset-form__block">
+        <BlockHeader className="preset-form__block-head">
+          <h3 className="preset-form__block-title">Когда</h3>
+        </BlockHeader>
+        <BlockBody className="preset-form__block-body">
+          <AutoForm schema={when} values={values} onChange={change} />
+        </BlockBody>
+        <BlockFooter className="preset-form__deploy">
+          <p className="preset-form__note">
+            Соберёт флоу и запустит его по расписанию. Остановить можно на вкладке «Флоу».
+          </p>
+          <Button
+            variant="primary"
+            loading={deploying}
+            disabled={deploying}
+            onClick={() => void handleDeploy()}
+          >
+            Включить
+          </Button>
+        </BlockFooter>
+      </Block>
     </div>
   );
+}
+
+const SCHEDULE_KEY = "schedule_cron";
+
+function pickProperties(schema: JsonSchema, keep: (key: string) => boolean): JsonSchema {
+  const properties = Object.fromEntries(
+    Object.entries(schema.properties ?? {}).filter(([key]) => keep(key)),
+  );
+  return {
+    ...schema,
+    properties,
+    required: (schema.required ?? []).filter(keep),
+  };
+}
+
+function withoutKeys(schema: JsonSchema, keys: string[]): JsonSchema {
+  return pickProperties(schema, (key) => !keys.includes(key));
+}
+
+function onlyKeys(schema: JsonSchema, keys: string[]): JsonSchema {
+  return pickProperties(schema, (key) => keys.includes(key));
 }

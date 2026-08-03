@@ -1,4 +1,4 @@
-import { Alert, Icon, Skeleton } from "@open-lzt/ui";
+import { Alert, Icon, Segmented, Skeleton } from "@open-lzt/ui";
 import { useEffect, useState } from "react";
 import { PresetForm } from "./PresetView";
 import { fetchPresets, type PresetSummary } from "./presetClient";
@@ -75,25 +75,21 @@ export function AutomationView({ onDeployed }: AutomationViewProps) {
         </p>
       </div>
 
-      <div className="preset-switch" role="tablist" aria-label="Пресеты">
-        {presets.map((preset) => (
-          <button
-            key={preset.key}
-            type="button"
-            role="tab"
-            aria-selected={preset.key === activeKey}
-            className={
-              preset.key === activeKey
-                ? "preset-switch__item preset-switch__item--active"
-                : "preset-switch__item"
-            }
-            onClick={() => setActiveKey(preset.key)}
-          >
-            <Icon name={preset.icon} size={16} />
-            {preset.title}
-          </button>
-        ))}
-      </div>
+      <Segmented
+        className="preset-switch"
+        aria-label="Пресеты"
+        value={activeKey ?? undefined}
+        onChange={setActiveKey}
+        items={presets.map((preset) => ({
+          value: preset.key,
+          label: (
+            <span className="preset-switch__label">
+              <Icon name={preset.icon} size={16} />
+              {preset.title}
+            </span>
+          ),
+        }))}
+      />
 
       {active ? <PresetForm preset={active} onDeployed={onDeployed} /> : null}
     </div>

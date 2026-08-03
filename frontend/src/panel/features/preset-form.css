@@ -17,75 +17,56 @@
   max-width: var(--panel-column);
 }
 
-.preset-form__section {
+.preset-form__block-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--lzt-text-dim);
+}
+
+.preset-form__block-body {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 18px;
 }
 
 .preset-form__deploy {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
+  gap: 20px;
+  flex-wrap: wrap;
 }
 
 .preset-form__note {
   margin: 0;
-  font-size: 14px;
+  max-width: 42ch;
+  font-size: 13px;
+  line-height: 1.5;
   color: var(--lzt-text-dim);
 }
 
 /* Preset switcher: the one place all presets are offered, built from what the server returns. */
 .preset-switch {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
   margin-bottom: 20px;
 }
 
-.preset-switch__item {
+.preset-switch__label {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
-  height: 34px;
-  padding: 0 14px;
-  border: 1px solid var(--lzt-border);
-  border-radius: 999px;
-  background: transparent;
-  color: var(--lzt-text-dim);
-  font-size: 14px;
-  font-family: inherit;
-  cursor: pointer;
-  transition: background-color 140ms ease-out, color 140ms ease-out, border-color 140ms ease-out;
+  gap: 8px;
 }
 
-/* Pill-shaped like the real tabs, and wide enough that three of them occupy the row they will. */
 .preset-switch__item--skeleton {
-  width: 140px;
+  width: 132px;
   height: 34px;
-  border-radius: 999px;
+  border-radius: var(--radius-md);
 }
 
 .preset-form__skeleton {
   height: 320px;
   border-radius: var(--radius-md);
-}
-
-.preset-switch__item:hover {
-  color: var(--lzt-text);
-  border-color: var(--lzt-border-strong, var(--lzt-border));
-}
-
-.preset-switch__item--active {
-  color: var(--lzt-text);
-  border-color: var(--lzt-brand);
-  background: rgba(46, 204, 113, 0.1);
-}
-
-.preset-switch__item:focus-visible {
-  outline: 2px solid var(--lzt-brand);
-  outline-offset: 2px;
 }
 
 .panel-view__subtitle {

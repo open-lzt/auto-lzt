@@ -1,3 +1,4 @@
+import { Checkbox } from "@open-lzt/ui";
 import { useEffect, useState } from "react";
 import { accountBalance, fetchAccounts, type Account } from "../../api/accountsClient";
 import { fetchCategories, type MarketCategoryDTO } from "../../api/catalogClient";
@@ -52,9 +53,7 @@ export function AccountMultiPicker({ value, onChange }: PickerProps) {
     <div className="data-picker">
       {accounts.map((account) => (
         <label key={account.id} className="data-picker__row">
-          <input
-            type="checkbox"
-            className="data-picker__check"
+          <Checkbox
             checked={selected.includes(account.id)}
             onChange={() => toggle(account.id)}
           />
@@ -64,7 +63,11 @@ export function AccountMultiPicker({ value, onChange }: PickerProps) {
           {account.label && account.username ? (
             <span className="data-picker__sub">{account.username}</span>
           ) : null}
-          <span className="data-picker__balance">{accountBalance(account) ?? "—"}</span>
+          {accountBalance(account) ? (
+            <span className="data-picker__balance" title="Баланс">
+              {accountBalance(account)}
+            </span>
+          ) : null}
         </label>
       ))}
     </div>
