@@ -12,8 +12,8 @@ importers:
         specifier: ^5.1.0
         version: 5.2.8
       '@open-lzt/ui':
-        specifier: github:open-lzt/lzt-ui#main
-        version: https://codeload.github.com/open-lzt/lzt-ui/tar.gz/ab016e629931694f3a78c49bfae65ff95a3ecf39(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+        specifier: ^0.2.0
+        version: 0.2.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@xyflow/react':
         specifier: ^12.3.5
         version: 12.11.2(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
@@ -30,6 +30,9 @@ importers:
       '@testing-library/react':
         specifier: ^16.0.1
         version: 16.3.2(@testing-library/dom@10.4.1)(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@testing-library/user-event':
+        specifier: ^14.6.1
+        version: 14.6.1(@testing-library/dom@10.4.1)
       '@types/react':
         specifier: ^18.3.12
         version: 18.3.31
@@ -488,9 +491,8 @@ packages:
   '@jridgewell/trace-mapping@0.3.31':
     resolution: {integrity: sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw==}
 
-  '@open-lzt/ui@https://codeload.github.com/open-lzt/lzt-ui/tar.gz/ab016e629931694f3a78c49bfae65ff95a3ecf39':
-    resolution: {gitHosted: true, integrity: sha512-xlu3UL4KBpv6lgOpi/kthmzAWwamiSQDNQVcZ8SnZJ25XES64y5kWvPI6TLZ2adNuVy/Tc9sf0Ng/eFqXtHWsg==, tarball: https://codeload.github.com/open-lzt/lzt-ui/tar.gz/ab016e629931694f3a78c49bfae65ff95a3ecf39}
-    version: 0.1.0
+  '@open-lzt/ui@0.2.0':
+    resolution: {integrity: sha512-qUrjHXTERh1nLblHC9LZRSFaVId2ykJA7ASNQlsbO8p48//mOfr2yaS/3Faz9vuHsrlCM8mbuHoCo9My54Ns4Q==}
     peerDependencies:
       react: '>=18'
       react-dom: '>=18'
@@ -658,6 +660,12 @@ packages:
         optional: true
       '@types/react-dom':
         optional: true
+
+  '@testing-library/user-event@14.6.1':
+    resolution: {integrity: sha512-vq7fv0rnt+QTXgPxr5Hjc210p6YKq2kmdziLgnsZGgLJ9e6VAShx1pACLuRjd/AS/sr7phAR58OIIpf0LlmQNw==}
+    engines: {node: '>=12', npm: '>=6'}
+    peerDependencies:
+      '@testing-library/dom': '>=7.21.4'
 
   '@types/aria-query@5.0.4':
     resolution: {integrity: sha512-rfT93uj5s0PRL7EzccGMs3brplhcrghnDoV26NqKhCAS1hVo+WdNsPvE/yb6ilfr5hi2MEk6d5EWJTKdxg8jVw==}
@@ -1725,7 +1733,7 @@ snapshots:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.5.5
 
-  '@open-lzt/ui@https://codeload.github.com/open-lzt/lzt-ui/tar.gz/ab016e629931694f3a78c49bfae65ff95a3ecf39(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
+  '@open-lzt/ui@0.2.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
     dependencies:
       react: 18.3.1
       react-dom: 18.3.1(react@18.3.1)
@@ -1836,6 +1844,10 @@ snapshots:
     optionalDependencies:
       '@types/react': 18.3.31
       '@types/react-dom': 18.3.7(@types/react@18.3.31)
+
+  '@testing-library/user-event@14.6.1(@testing-library/dom@10.4.1)':
+    dependencies:
+      '@testing-library/dom': 10.4.1
 
   '@types/aria-query@5.0.4': {}
 
