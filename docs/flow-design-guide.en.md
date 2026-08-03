@@ -90,9 +90,6 @@ An unvalidated FlowSpec isn't a result. Two gates:
 
 More ready-made scenarios — in the template library `seeds/templates/`.
 
-See also: the `flow-from-text` skill (`.claude/skills/flow-from-text/SKILL.md`) and its examples
-`examples/*.json`.
-
 ## See also
 
 - [Plugins](plugins.en.md) — if the node you need doesn't exist, add your own
