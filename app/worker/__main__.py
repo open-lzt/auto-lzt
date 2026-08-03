@@ -55,7 +55,7 @@ async def _resync_schedule_jobs(
         if stop.is_set():
             return
         try:
-            await sync_jobs_from_triggers(scheduler, triggers)
+            await sync_jobs_from_triggers(scheduler, triggers, rewrite_existing=False)
         except Exception:  # noqa: BLE001 — supervisor loop; the next tick retries
             log.exception("schedule_resync.failed")
 
@@ -136,8 +136,11 @@ async def main() -> None:
     enqueue_run = build_arq_enqueue(arq_pool)
     configure_runtime(SchedulerRuntime(sessionmaker=app_sessionmaker, enqueue_run=enqueue_run))
     scheduler = build_scheduler(settings.database_url)
-    await sync_jobs_from_triggers(scheduler, TriggerRepository(app_sessionmaker))
+    # Sync AFTER start(): while the scheduler is STOPPED, `get_jobs()` returns only the jobs this
+    # process just queued and never opens the persistent store — so the removing half, the one that
+    # takes down the job of a deleted flow, silently did nothing on boot.
     scheduler.start()
+    await sync_jobs_from_triggers(scheduler, TriggerRepository(app_sessionmaker))
     log.info("scheduler.started")
 
     engine: EventEngine | None = None

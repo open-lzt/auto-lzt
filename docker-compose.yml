@@ -159,7 +159,9 @@ services:
   # the compose network under the same X-API-Key gate as the web UI.
   bot:
     build: .
-    command: auto-lzt-bot
+    # The alias, not `auto-lzt-bot`: an image built before the rename has no such entry point, and
+    # `git pull && docker compose up -d` without a rebuild would crash-loop on it.
+    command: lzt-flow-bot
     profiles: ["bot"]
     env_file:
       - .env

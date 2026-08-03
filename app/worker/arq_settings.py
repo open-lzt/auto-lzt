@@ -291,4 +291,10 @@ class WorkerSettings:
     on_shutdown = shutdown
     redis_settings = RedisSettings.from_dsn(get_settings().redis_url)
     max_tries = 3
+    # arq re-queues a job whose coroutine ended in CancelledError — which is what a worker shutdown
+    # produces. The run row is already FAILED by then, and `execute_run` only refuses to resume a
+    # COMPLETED one, so the replay picked the run back up at its current step and could buy the same
+    # lot twice. Recovery of an abandoned run belongs to `close_abandoned_runs_task`, which closes
+    # it rather than re-running it — the same reasoning, in one place.
+    retry_jobs = False
     job_timeout = _JOB_TIMEOUT_SECONDS

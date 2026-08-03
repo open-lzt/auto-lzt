@@ -12,8 +12,8 @@ importers:
         specifier: ^5.1.0
         version: 5.2.8
       '@open-lzt/ui':
-        specifier: ^0.2.0
-        version: 0.2.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+        specifier: ^0.2.1
+        version: 0.2.1(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@xyflow/react':
         specifier: ^12.3.5
         version: 12.11.2(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
@@ -491,8 +491,8 @@ packages:
   '@jridgewell/trace-mapping@0.3.31':
     resolution: {integrity: sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw==}
 
-  '@open-lzt/ui@0.2.0':
-    resolution: {integrity: sha512-qUrjHXTERh1nLblHC9LZRSFaVId2ykJA7ASNQlsbO8p48//mOfr2yaS/3Faz9vuHsrlCM8mbuHoCo9My54Ns4Q==}
+  '@open-lzt/ui@0.2.1':
+    resolution: {integrity: sha512-EFXvzRkvp3M6WVP+o81S+xR4AoLLFHkgYrEm/9VqHBW11Gm2VUTIm9CQCGHg0j5P/8/EK1+VwRPOo1mDIjksRA==}
     peerDependencies:
       react: '>=18'
       react-dom: '>=18'
@@ -1733,7 +1733,7 @@ snapshots:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.5.5
 
-  '@open-lzt/ui@0.2.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
+  '@open-lzt/ui@0.2.1(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
     dependencies:
       react: 18.3.1
       react-dom: 18.3.1(react@18.3.1)

@@ -20,7 +20,6 @@ from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 
-from app.domain.flow_engine.model import TriggerKind
 from app.domain.scheduler.jobs import SCHEDULE_JOB_PREFIX, run_scheduled_flow
 from app.domain.triggers.repo import TriggerRepository
 
@@ -51,7 +50,9 @@ def build_scheduler(database_url: str) -> AsyncIOScheduler:
     return AsyncIOScheduler(jobstores={"default": jobstore}, timezone=UTC)
 
 
-async def sync_jobs_from_triggers(scheduler: AsyncIOScheduler, triggers: TriggerRepository) -> int:
+async def sync_jobs_from_triggers(
+    scheduler: AsyncIOScheduler, triggers: TriggerRepository, *, rewrite_existing: bool = True
+) -> int:
     """Make the jobstore match the ``triggers`` table exactly; returns how many jobs were removed.
 
     The table is the source of truth in BOTH directions, and the removing half is the load-bearing
@@ -62,27 +63,44 @@ async def sync_jobs_from_triggers(scheduler: AsyncIOScheduler, triggers: Trigger
 
     Only jobs carrying ``SCHEDULE_JOB_PREFIX`` are considered; anything else in the store belongs
     to someone else and is left alone.
+
+    ``rewrite_existing`` is True on startup, where the job's own settings may have changed with the
+    code, and False in the minute-by-minute resync, where rewriting recomputes ``next_run_time``
+    for every job on every tick — an update per row per minute forever, and a due-but-not-yet-fired
+    tick can be pushed past. A trigger's cron never changes under a stable id (a re-saved schedule
+    deletes the row and creates a new one), so adding only what is missing loses nothing.
     """
     rows = [r for r in await triggers.list_active_schedule_triggers() if r.schedule_cron]
+    known = {job.id for job in scheduler.get_jobs()}
+    live: set[str] = set()
     for row in rows:
-        if row.kind is not TriggerKind.SCHEDULE:
+        job_id = f"{SCHEDULE_JOB_PREFIX}{row.id}"
+        try:
+            trigger = CronTrigger.from_crontab(row.schedule_cron, timezone=UTC)
+        except ValueError:
+            # One unparseable row must not cost every other tenant its schedule: before this the
+            # exception escaped, the boot sync killed the worker and the resync loop tripped over
+            # the same row every minute for the life of the process.
+            log.exception("schedule_job.bad_cron", trigger_id=str(row.id), cron=row.schedule_cron)
+            continue
+        live.add(job_id)
+        if job_id in known and not rewrite_existing:
             continue
         scheduler.add_job(
             run_scheduled_flow,
-            CronTrigger.from_crontab(row.schedule_cron, timezone=UTC),
+            trigger,
             args=[str(row.id), str(row.flow_id), str(row.tenant_id)],
-            id=f"{SCHEDULE_JOB_PREFIX}{row.id}",
+            id=job_id,
             replace_existing=True,
             max_instances=1,
             coalesce=True,
             misfire_grace_time=300,
         )
 
-    live = {f"{SCHEDULE_JOB_PREFIX}{row.id}" for row in rows}
     removed = 0
-    for job in scheduler.get_jobs():
-        if job.id.startswith(SCHEDULE_JOB_PREFIX) and job.id not in live:
-            scheduler.remove_job(job.id)
+    for job_id in known:
+        if job_id.startswith(SCHEDULE_JOB_PREFIX) and job_id not in live:
+            scheduler.remove_job(job_id)
             removed += 1
     if removed:
         log.warning("schedule_job.orphaned_removed", count=removed)

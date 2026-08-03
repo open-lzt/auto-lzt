@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from apscheduler.triggers.cron import CronTrigger
 from lzt_eventus.events.base import EventType
 
 from app.domain.account.model import TenantId
@@ -35,6 +36,16 @@ class TriggerService:
             raise InvalidTriggerDefinition("kind=manual is not a stored trigger; use POST /runs")
         if kind is TriggerKind.SCHEDULE and not schedule_cron:
             raise InvalidTriggerDefinition("schedule_cron is required for kind=schedule")
+        if schedule_cron is not None:
+            # Parsed with the very expression the scheduler will use. Unvalidated, the row was
+            # stored happily and the failure surfaced in the worker instead: the boot sync raised,
+            # and a worker that cannot boot runs nobody's flows, not just this tenant's.
+            try:
+                CronTrigger.from_crontab(schedule_cron)
+            except ValueError as e:
+                raise InvalidTriggerDefinition(
+                    f"schedule_cron is not a cron expression: {e}"
+                ) from e
         if kind is TriggerKind.EVENT and event_type is None:
             raise InvalidTriggerDefinition("event_type is required for kind=event")
         # The model documents "exactly one of schedule_cron/event_type" as enforced at creation, so

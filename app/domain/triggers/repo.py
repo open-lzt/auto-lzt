@@ -87,9 +87,9 @@ class TriggerRepository(BaseSessionmakerRepo[TriggerDefinition, TriggerId]):
     ) -> list[TriggerId]:
         """Remove a flow's triggers (optionally just one kind); returns the ids removed.
 
-        The ids are the point, not a courtesy: the scheduler keys its jobs by trigger id, so the
-        caller needs them to take the corresponding cron jobs down. A trigger row deleted while its
-        job stays registered is an automation that keeps firing after the operator removed it.
+        The API process holds no scheduler, so it cannot take the jobs down itself: the worker's
+        resync does, within ``_SCHEDULE_RESYNC_INTERVAL_S``. The ids are returned for logging and
+        for a caller that does own a scheduler — not as the mechanism.
         """
         stmt = select(TriggerORM).where(
             TriggerORM.tenant_id == tenant_id, TriggerORM.flow_id == flow_id

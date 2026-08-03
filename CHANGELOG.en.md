@@ -3,6 +3,29 @@
 All notable changes to lzt-flow. Format loosely follows [Keep a Changelog](https://keepachangelog.com);
 this project uses a single-tenant, wave-based history — see `ARCHITECTURE.md` for the design record.
 
+## [0.4.1] — 2026-08-03
+
+### Fixed
+- **A deleted flow's schedule no longer survives a worker restart.** The job/table reconciliation
+  ran before the scheduler was started, so it read the list of jobs this process had just queued
+  instead of the persistent store — and removed nothing. The orphaned job came back up with the
+  worker and could fire immediately.
+- **A cron the scheduler cannot parse is refused when it is saved.** It used to be stored happily
+  and fail in the worker instead: on startup that killed the process, and in the resync loop it
+  tripped over the same row every minute, leaving every other tenant without schedules.
+- **Cancelling a job on worker shutdown no longer re-runs it.** The run was marked failed and
+  immediately executed again, from a step that may already have reached the marketplace. Recovering
+  an abandoned run is the periodic sweep's job, and it closes it rather than retrying.
+- The panel moved to kit 0.2.1: a date-time field now submits its time as well, the calendar no
+  longer renders one day twice in the week the clocks change or park the cursor where the keyboard
+  cannot return from, and Escape closes an open list rather than the form under it.
+
+### Changed
+- The minute-by-minute resync now adds only missing jobs instead of rewriting every one: rewriting
+  recomputed each job's next run time every minute and could push a due tick past.
+- `docker-compose.yml` calls the bot by its `lzt-flow-bot` alias again — an image built before the
+  rename has no `auto-lzt-bot`, so updating without a rebuild crash-looped.
+
 ## [0.4.0] — 2026-08-03
 
 ### Fixed
