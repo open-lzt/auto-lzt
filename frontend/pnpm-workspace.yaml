@@ -14,3 +14,10 @@ packages:
 
 allowBuilds:
   esbuild: true
+
+# pnpm rejects any package published less than a day ago — a cooling window against a hijacked
+# registry account. It applies to our own kit too, so a panel release that follows a kit release
+# the same day fails CI. The window buys nothing here: the kit is published by our own workflow
+# from a tag in a repository we control, with provenance.
+minimumReleaseAgeExclude:
+  - '@open-lzt/ui'
