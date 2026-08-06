@@ -42,7 +42,12 @@ class _RecordingTransport(BaseTransport):
 
     async def _send_raw(self, req: Request) -> Response:
         self.requests.append(req)
-        body: dict[str, Any] = {"item": {"item_id": 42, "price": 100}, "items": []}
+        # `price_currency` is what the ceiling compares against — without it `_checked_price`
+        # refuses the lot before the buy, so a fake that omits it cannot reach the buy at all.
+        body: dict[str, Any] = {
+            "item": {"item_id": 42, "price": 100, "price_currency": "rub"},
+            "items": [],
+        }
         return Response(status=200, body=body, text=None, headers={})
 
 
@@ -74,6 +79,22 @@ async def test_a_pooled_purchase_runs_on_the_long_timeout_client() -> None:
 
     assert purchase.requests, "the purchase did not run on the purchase client"
     assert not read.requests, "the purchase leaked onto the stock-timeout read client"
+
+
+async def test_the_price_check_also_runs_on_the_long_timeout_client() -> None:
+    """`purchasing_check` is on the purchase path and measured 8.8-28.2s against a 30s ceiling.
+
+    Its timeout is swallowed into "skip this lot", so on the stock client a slow check costs the
+    sniper the lot with nothing raised anywhere — which is how a run reports "nothing was for
+    sale" while every candidate was actually reachable.
+    """
+    read, purchase, adapter = _pooled_pair()
+
+    await adapter.fast_buy(42, dry_run=False, max_price=100, max_price_currency="rub")
+
+    assert not read.requests, "the price check ran on the stock-timeout client"
+    paths = [r.path for r in purchase.requests]
+    assert len(paths) == 2, f"expected a check and a buy on the purchase client, got {paths}"
 
 
 async def test_a_pooled_read_stays_on_the_stock_timeout_client() -> None:

@@ -45,6 +45,7 @@ from app.domain.market.dtos import (
 from app.domain.market.errors import (
     LotUnavailable,
     MarketApiError,
+    MarketResponseUnparseable,
     PurchaseOutcomeUnknown,
     TokenInvalid,
 )
@@ -85,6 +86,24 @@ PURCHASE_TIMEOUT_S = 120.0
 # can now live — and widening the shared pooled Client would hand every pooled read the same 120s
 # ceiling, which is the wrong number for everything but a purchase. So the slow call runs on its
 # own Client built over the SAME token pool: one rate budget, one quarantine set, two socket pools.
+#
+# BOTH purchase-path calls ride it, not just the buy: `purchasing_check` measured 8.8-28.2s against
+# the same 30s ceiling, and its timeout is swallowed into "skip this lot", so on the stock client a
+# slow check costs the lot silently instead of failing loudly.
+
+
+def _mismatches(exc: ValidationError) -> tuple[str, ...]:
+    """`field: why (got type)` per failure — the names, never the values.
+
+    A value here can be an account's own data, and this string ends up in a log and in an error
+    message. The TYPE that arrived is what identifies the defect anyway: "declared int, got float"
+    is the whole diagnosis.
+    """
+    return tuple(
+        f"{'.'.join(str(part) for part in error['loc'])}: "
+        f"{error['type']} (got {type(error.get('input')).__name__})"
+        for error in exc.errors()
+    )
 
 
 async def _declining[T](item_id: int, call: Awaitable[T]) -> T:
@@ -290,7 +309,11 @@ class MarketAdapter:
             # have been BOUGHT — 2 ₽ left the balance while the trace recorded one 1 ₽ purchase.
             raise PurchaseOutcomeUnknown(item_id, PURCHASE_TIMEOUT_S) from exc
         return FastBuyResult(
-            item_id=response.item.item_id, price=response.item.price, purchased=True
+            item_id=response.item.item_id,
+            price=response.item.price,
+            purchased=True,
+            currency=response.item.price_currency,
+            category_id=response.item.category_id,
         )
 
     async def _checked_price(
@@ -311,7 +334,15 @@ class MarketAdapter:
         """
         try:
             response = await self._call(
-                lambda client: _declining(item_id, client.market.purchasing_check(item_id=item_id))
+                lambda client: _declining(item_id, client.market.purchasing_check(item_id=item_id)),
+                # The same long timeout the buy gets, and for the same measured reason: timed
+                # against prod on 2026-08-06 this call took 8.8s / 22.8s / 28.2s on three
+                # consecutive steam lots, against a 30s stock ceiling. Sitting on the edge is not
+                # a slow-path nuisance here — a timeout is caught below and turns into "skip this
+                # lot", so a check that runs long silently costs the sniper the lot instead of
+                # raising anything. Observed live: `ReadTimeout('')` on four categories in a row,
+                # every candidate skipped, and a run that looked like "nothing was for sale".
+                slow=True,
             )
         except (httpx.HTTPError, MarketApiError) as exc:
             # The transport half of the promise above. `_declining` maps the marketplace's own
@@ -351,10 +382,11 @@ class MarketAdapter:
         try:
             response = await self._call(lambda client: client.market.profile_get())
         except ValidationError as exc:
-            # The upstream answered with a shape pylzt could not parse. Mapped here rather than
-            # let out raw, because this adapter is the boundary whose whole job is that no
-            # pylzt-or-pydantic error reaches the domain wearing its own type.
-            raise MarketApiError(status=502) from exc
+            # Mapped here rather than let out raw, because this adapter is the boundary whose whole
+            # job is that no pylzt-or-pydantic error reaches the domain wearing its own type. What
+            # it maps to matters: this used to be MarketApiError(502), which reads as "the
+            # marketplace is broken" and sends the operator to check a service that answered 200.
+            raise MarketResponseUnparseable("profile", _mismatches(exc)) from exc
         try:
             balance = Decimal(str(response.balance))
         except InvalidOperation:
