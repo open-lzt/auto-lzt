@@ -24,6 +24,7 @@ from pylzt.transport.base import BaseTransport, Request, Response
 
 from app.domain.market import adapter as adapter_module
 from app.domain.market.adapter import PURCHASE_TIMEOUT_S, MarketAdapter
+from app.domain.market.errors import LotUnavailable
 
 pytestmark = pytest.mark.asyncio
 
@@ -33,15 +34,27 @@ STOCK_TIMEOUT = ClientConfig().request_timeout
 class _RecordingTransport(BaseTransport):
     """Answers a fast-buy or a list-user without a socket, keeping every request it was handed."""
 
-    def __init__(self) -> None:
+    def __init__(self, *, omit_price: bool | str = False) -> None:
         self.pool = RoundRobinTokenPool(
             [Token(token_id=TokenId("t0"), credential="tok")], clock=FakeClock()
         )
         super().__init__(token_pool=self.pool)
         self.requests: list[Request] = []
+        self._omit_price = omit_price
 
     async def _send_raw(self, req: Request) -> Response:
         self.requests.append(req)
+        # The ceiling path makes two calls on this same client — the check, then the buy. Omitting
+        # from the buy only (the second) is what the marketplace actually did.
+        if self._omit_price and (self._omit_price == "all" or len(self.requests) > 1):
+            # pylzt types every field as required but parses a missing one as None (its
+            # models/base.py says so outright, and `purchasing_check` omits eleven of them).
+            return Response(
+                status=200,
+                body={"item": {"item_id": 42, "price_currency": "rub"}, "items": []},
+                text=None,
+                headers={},
+            )
         # `price_currency` is what the ceiling compares against — without it `_checked_price`
         # refuses the lot before the buy, so a fake that omits it cannot reach the buy at all.
         body: dict[str, Any] = {
@@ -142,3 +155,35 @@ async def test_a_dry_run_never_reaches_the_wire() -> None:
     await adapter.fast_buy(42, dry_run=True)
 
     assert not purchase.requests and not read.requests, "a dry run must not reach the wire"
+
+
+async def test_a_purchase_with_no_price_in_the_answer_falls_back_to_what_was_pinned() -> None:
+    """A None price used to reach the ledger as `Decimal(None)`, inside a writer that swallows it.
+
+    So the row never appeared, the budget stopped counting that spend, and the run went on buying.
+    The pinned price is the number we agreed to pay, and it is the honest fallback.
+    """
+    read, purchase = _RecordingTransport(), _RecordingTransport(omit_price=True)
+    adapter = MarketAdapter(
+        client=_client(read, timeout=STOCK_TIMEOUT),
+        purchase_client=_client(purchase, timeout=PURCHASE_TIMEOUT_S),
+    )
+
+    result = await adapter.fast_buy(42, dry_run=False, max_price=100, max_price_currency="rub")
+
+    assert result.price == 100, "the pinned ceiling price, not None"
+
+
+async def test_a_price_the_market_never_named_skips_the_lot_instead_of_killing_the_run() -> None:
+    """`price > max_price` on a None raises TypeError, and this call sits outside fast_buy's try —
+    one incomplete answer about one lot ended the whole run."""
+    purchase = _RecordingTransport(omit_price="all")
+    adapter = MarketAdapter(
+        client=_client(_RecordingTransport(), timeout=STOCK_TIMEOUT),
+        purchase_client=_client(purchase, timeout=PURCHASE_TIMEOUT_S),
+    )
+
+    with pytest.raises(LotUnavailable):
+        await adapter.fast_buy(42, dry_run=False, max_price=100, max_price_currency="rub")
+
+    assert len(purchase.requests) == 1, "the buy must not have been attempted"

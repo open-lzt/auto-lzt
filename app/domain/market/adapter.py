@@ -308,9 +308,16 @@ class MarketAdapter:
             # timeout escaped this handler, arq then cancelled the job, and the lot turned out to
             # have been BOUGHT — 2 ₽ left the balance while the trace recorded one 1 ₽ purchase.
             raise PurchaseOutcomeUnknown(item_id, PURCHASE_TIMEOUT_S) from exc
+        # pylzt's static types over-promise: any field of a response may be absent (see its
+        # models/base.py — `purchasing_check` alone omits eleven "required" ones). A None price
+        # reaching the ledger becomes Decimal(None) inside a best-effort writer that swallows it,
+        # so the run silently stops counting money. The pinned price is what we agreed to pay.
+        paid = response.item.price if response.item.price is not None else pinned_price
+        if paid is None:
+            raise MarketResponseUnparseable("purchasing_fast_buy", ("item.price: missing",))
         return FastBuyResult(
             item_id=response.item.item_id,
-            price=response.item.price,
+            price=paid,
             purchased=True,
             currency=response.item.price_currency,
             category_id=response.item.category_id,
@@ -352,6 +359,12 @@ class MarketAdapter:
             raise LotUnavailable(item_id, "цену лота проверить не удалось") from exc
         price = response.item.price
         listed_currency = response.item.price_currency
+        # `price` is typed int but arrives None whenever the marketplace omits it — comparing that
+        # against the ceiling raises TypeError, and this call sits outside `fast_buy`'s try, so one
+        # incomplete answer about one lot killed the whole run. No price means no ceiling check.
+        if price is None:
+            logger.info("fast_buy_ceiling_price_missing", item_id=item_id)
+            raise LotUnavailable(item_id, "маркет не назвал цену лота — сравнить с потолком нельзя")
         if listed_currency is None or max_price_currency is None:
             logger.info("fast_buy_ceiling_currency_unknown", item_id=item_id)
             raise LotUnavailable(item_id, "валюта лота или потолка неизвестна — сравнить нельзя")

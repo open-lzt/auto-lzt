@@ -116,9 +116,17 @@ class FakePurchases:
 
     def __init__(self, *, fail_with: Exception | None = None) -> None:
         self.recorded: list[Purchase] = []
+        # Counted, not just answered: a dry run must never READ the spend, and a test that only
+        # checks the output passes with the skip removed entirely.
+        self.spend_reads = 0
+        # Writes failing while reads keep working is the interesting case, and not an exotic one:
+        # the read is a SELECT over rows that are simply not there, so it succeeds and undercounts.
+        self.record_fails = False
         self._fail_with = fail_with
 
     async def record(self, purchase: Purchase) -> bool:
+        if self.record_fails:
+            raise RuntimeError("ledger write failed")
         if self._fail_with is not None:
             raise self._fail_with
         if any(p.item_id == purchase.item_id for p in self.recorded):
@@ -129,6 +137,7 @@ class FakePurchases:
     async def spent_for_run(self, tenant_id: TenantId, run_id: UUID) -> Decimal:
         """Sums the same rows the real repo would. `fail_with` covers the unreadable-ledger path,
         which is what the budget gate must treat as "exhausted" rather than as zero."""
+        self.spend_reads += 1
         if self._fail_with is not None:
             raise self._fail_with
         return sum((p.price for p in self.recorded if p.run_id == run_id), Decimal(0))

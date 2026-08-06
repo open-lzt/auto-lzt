@@ -42,6 +42,9 @@ class PurchaseORM(Base):
 
     __table_args__ = (
         Index("ix_purchases_tenant_purchased_at", "tenant_id", "purchased_at"),
+        # The budget gate reads this once per candidate lot; without it the scan is over the
+        # tenant's whole purchase history, which nothing prunes.
+        Index("ix_purchases_tenant_run", "tenant_id", "run_id"),
         # A lot can be bought exactly once, so the natural key is also the idempotency key: a
         # replayed step re-inserts and the index refuses it, instead of bookkeeping we would have
         # to keep correct by hand.

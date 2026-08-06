@@ -102,8 +102,13 @@ async def _affordable(ctx: RunContext, run_budget: int | None, max_price: int) -
     return spent + Decimal(max_price) <= Decimal(run_budget)
 
 
-async def _record(ctx: RunContext, result: FastBuyResult) -> None:
+async def _record(ctx: RunContext, result: FastBuyResult) -> bool:
     """Append the purchase to the ledger. NEVER lets a ledger failure fail the purchase.
+
+    Returns whether the ledger now holds this purchase. ``False`` means the spend became invisible:
+    the budget gate reads the ledger, so it would go on authorising purchases against a total that
+    stopped growing. The caller turns that into ``budget_exhausted`` — the run stops instead of
+    spending blind. Without it the SAME database outage fails closed on a read and open on a write.
 
     By the time this runs the money has left. Raising here would report a completed purchase as a
     failed step, and the engine's retry would then buy a SECOND lot — the same trade
@@ -129,10 +134,12 @@ async def _record(ctx: RunContext, result: FastBuyResult) -> None:
         logger.exception(
             "purchase_ledger_write_failed", item_id=result.item_id, node_id=ctx.node.id
         )
-        return
+        return False
     if not recorded:
-        # The step was replayed; the lot is already in the ledger. Normal, not an incident.
+        # The step was replayed; the lot is already in the ledger. Normal, not an incident — the
+        # row is there, so the spend is still visible and the budget still counts it.
         logger.info("purchase_already_in_ledger", item_id=result.item_id, node_id=ctx.node.id)
+    return True
 
 
 class FastBuyOutput(BaseSchema):
@@ -362,8 +369,16 @@ class FastBuyNode(BaseNode):
                 },
             )
 
-        if result.purchased:
-            await _record(ctx, result)
+        ledger_ok = await _record(ctx, result) if result.purchased else True
+        # A lost ledger row makes this spend invisible to the gate, which reads the ledger and
+        # nothing else. Stopping is the only honest answer left: carrying on would authorise every
+        # remaining lot against a total that no longer moves. Without a budget there is nothing to
+        # overrun, so a broken ledger there is bookkeeping, not a hazard.
+        budget_blind = run_budget is not None and result.purchased and not ledger_ok
+        if budget_blind:
+            logger.warning(
+                "run_spend_unrecorded_stopping_run", item_id=result.item_id, node_id=ctx.node.id
+            )
 
         return StepResultDTO(
             node_id=ctx.node.id,
@@ -372,6 +387,6 @@ class FastBuyNode(BaseNode):
                 "price": result.price,
                 "purchased": result.purchased,
                 "unavailable_reason": "",
-                "budget_exhausted": False,
+                "budget_exhausted": budget_blind,
             },
         )

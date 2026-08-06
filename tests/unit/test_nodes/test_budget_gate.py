@@ -133,3 +133,54 @@ async def test_a_dry_run_never_consults_the_budget() -> None:
 
     assert result.output["purchased"] is False
     assert result.output.get("budget_exhausted", False) is False
+    # The count, not the output: asserting only on the output passes with the skip deleted, because
+    # a dry run reports the same thing whether or not it asked the ledger anything.
+    assert ledger.spend_reads == 0
+
+
+async def test_a_spend_that_never_reached_the_ledger_stops_the_run() -> None:
+    """The same outage must not fail closed on a read and open on a write.
+
+    The write is best-effort, so a lost row does not fail the purchase — but the gate reads the
+    ledger and nothing else, so that spend is now invisible and every later lot would be authorised
+    against a total that stopped moving. Numbers from the review: budget 1000, ceiling 300, ledger
+    down — the run would buy twenty lots for 6000 without raising anything.
+    """
+    market, ledger = FakeMarket(), FakePurchases()
+    ledger.record_fails = True
+    node = _buy_node(
+        item_id=7, dry_run=False, max_price=300, max_price_currency="rub", run_budget=1000
+    )
+
+    result = await FastBuyNode().execute(build_ctx(node, market, FakeGuard(), purchases=ledger))
+
+    assert result.output["purchased"] is True, "the purchase happened; it must not be undone"
+    assert result.output["budget_exhausted"] is True
+
+
+async def test_a_lost_ledger_row_without_a_budget_is_only_bookkeeping() -> None:
+    """Nothing to overrun, so a broken ledger has no reason to stop the run."""
+    market, ledger = FakeMarket(), FakePurchases()
+    ledger.record_fails = True
+
+    result = await FastBuyNode().execute(
+        build_ctx(_buy_node(item_id=7, dry_run=False), market, FakeGuard(), purchases=ledger)
+    )
+
+    assert result.output["purchased"] is True
+    assert result.output["budget_exhausted"] is False
+
+
+async def test_the_budget_allows_a_purchase_that_lands_exactly_on_it() -> None:
+    """`<=`, not `<`: spending the last rouble of the budget is inside it."""
+    market, ledger = FakeMarket(), FakePurchases()
+    ctx = build_ctx(
+        _buy_node(item_id=7, dry_run=False, max_price=100, max_price_currency="rub", run_budget=100),
+        market,
+        FakeGuard(),
+        purchases=ledger,
+    )
+
+    result = await FastBuyNode().execute(ctx)
+
+    assert result.output["purchased"] is True

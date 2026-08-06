@@ -57,7 +57,11 @@ class PurchaseRepository(BaseSessionmakerRepo[Purchase, PurchaseId]):
                         purchased_at=purchase.purchased_at,
                     )
                 )
-        except IntegrityError:
+        except IntegrityError as exc:
+            # Only the duplicate is normal. Any other constraint means the row was NOT written, and
+            # reporting that as "already recorded" would lose a purchase that really happened.
+            if "uq_purchases_tenant_item" not in str(exc.orig):
+                raise
             return False
         return True
 
