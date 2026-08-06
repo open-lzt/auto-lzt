@@ -11,10 +11,12 @@ to know what the marketplace sells, and the API layer's job to serialize the ans
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from enum import StrEnum
-from typing import NamedTuple
+from typing import Any, Final, NamedTuple
 
 import pylzt
+from pylzt import Client
 
 
 class MarketCategory(NamedTuple):
@@ -58,6 +60,38 @@ class SearchableCategory(StrEnum):
     LLM = "llm"
 
 
+# Slug -> the facade method that searches it. Spelled out because the slug is NOT the method name
+# (`epicgames` -> `category_epic_games`, `tiktok` -> `category_tik_tok`), so a built name would be
+# wrong for five of these; and because a getattr here would let any string reach the facade.
+# `test_search_category` pins this to SearchableCategory in both directions.
+#
+# Lives beside the enum rather than in the adapter because two callers need it and neither owns the
+# other: the adapter calls these methods, and ``filters.filter_schema`` reflects their signatures.
+CATEGORY_METHODS: Final[dict[SearchableCategory, Callable[[Client], Any]]] = {
+    SearchableCategory.STEAM: lambda c: c.market.category_steam,
+    SearchableCategory.FORTNITE: lambda c: c.market.category_fortnite,
+    SearchableCategory.RIOT: lambda c: c.market.category_riot,
+    SearchableCategory.TELEGRAM: lambda c: c.market.category_telegram,
+    SearchableCategory.DISCORD: lambda c: c.market.category_discord,
+    SearchableCategory.ROBLOX: lambda c: c.market.category_roblox,
+    SearchableCategory.EPICGAMES: lambda c: c.market.category_epic_games,
+    SearchableCategory.BATTLENET: lambda c: c.market.category_battle_net,
+    SearchableCategory.EA: lambda c: c.market.category_ea,
+    SearchableCategory.ESCAPEFROMTARKOV: lambda c: c.market.category_escape_from_tarkov,
+    SearchableCategory.GIFTS: lambda c: c.market.category_gifts,
+    SearchableCategory.INSTAGRAM: lambda c: c.market.category_instagram,
+    SearchableCategory.MINECRAFT: lambda c: c.market.category_minecraft,
+    SearchableCategory.SOCIALCLUB: lambda c: c.market.category_social_club,
+    SearchableCategory.SUPERCELL: lambda c: c.market.category_supercell,
+    SearchableCategory.TIKTOK: lambda c: c.market.category_tik_tok,
+    SearchableCategory.UPLAY: lambda c: c.market.category_uplay,
+    SearchableCategory.VPN: lambda c: c.market.category_vpn,
+    SearchableCategory.WARFACE: lambda c: c.market.category_warface,
+    SearchableCategory.HYTALE: lambda c: c.market.category_hytale,
+    SearchableCategory.LLM: lambda c: c.market.category_llm,
+}
+
+
 # Keyed by the pylzt Category value (slug). Order is display order in the picker.
 MARKET_CATEGORIES: tuple[MarketCategory, ...] = (
     MarketCategory("steam", "Steam"),
@@ -89,6 +123,15 @@ MARKET_CATEGORIES: tuple[MarketCategory, ...] = (
 )
 
 _LABELS = {c.slug: c.label for c in MARKET_CATEGORIES}
+
+
+def label_for(category: SearchableCategory) -> str:
+    """Human label for a searchable category, falling back to a title-cased slug.
+
+    Falls back rather than raising: a pylzt upgrade that adds a category surfaces it here with a
+    passable name, and `test_market_categories` is what fails loudly so a real label gets written.
+    """
+    return _LABELS.get(category.value, category.value.title())
 
 
 def list_categories() -> list[MarketCategory]:

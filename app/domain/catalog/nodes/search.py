@@ -37,6 +37,15 @@ class SearchInput(BaseSchema):
         description="Раздел маркета, в котором искать.",
         json_schema_extra={"x-ui": {"widget": "select"}},
     )
+    filters: str = Field(
+        default="{}",
+        title="Фильтры",
+        description="JSON-объект фильтров выбранной категории. Пустой — искать по всему разделу.",
+        # One string port, not 123 ports: the set of filters changes with the category, and a node
+        # whose port list changed shape would have to be recompiled on every category switch. The
+        # canvas renders this from `/catalog/filters/{category}` — see `market.filters.json_schema`.
+        json_schema_extra={"x-ui": {"widget": "filters"}},
+    )
 
 
 class SearchOutput(BaseSchema):
@@ -70,6 +79,27 @@ def _as_category(value: str | int | float | bool | None) -> SearchableCategory:
         raise ValueError(f"unknown category {value!r}; searchable categories: {known}") from exc
 
 
+def _as_filters(value: str | int | float | bool | None) -> dict[str, object]:
+    """Unwired or empty means "no extra filters" — the historical behaviour, so existing flows keep
+    working unchanged.
+
+    Only the JSON shape is checked here. Which names are legal, and what each value must be coerced
+    to, belongs to the category's own signature and is enforced once in ``MarketService`` — both the
+    pinned and the pooled path go through it, so neither can reach the marketplace unchecked.
+    """
+    if value is None or value == "":
+        return {}
+    if not isinstance(value, str):
+        raise ValueError(f"filters must be a JSON object string, got {value!r}")
+    try:
+        parsed = json.loads(value)
+    except ValueError as exc:
+        raise ValueError(f"filters is not valid JSON: {value!r}") from exc
+    if not isinstance(parsed, dict):
+        raise ValueError(f"filters must decode to a JSON object, got {parsed!r}")
+    return parsed
+
+
 class SearchNode(BaseNode):
     node_type = "market.search"
     category = NodeCategory.LOGIC
@@ -82,16 +112,17 @@ class SearchNode(BaseNode):
     async def execute(self, ctx: RunContext) -> StepResultDTO:
         max_price = _as_float(ctx.resolve_input("max_price"), "max_price")
         category = _as_category(ctx.resolve_optional("category"))
+        filters = _as_filters(ctx.resolve_optional("filters"))
 
         account_ref = ctx.active_account_id or ctx.node.account_ref
         if account_ref is not None:
             account = await ctx.deps.load_account(ctx.tenant_id, account_ref)
             result = await ctx.deps.market.search_category(
-                account, category=category, pmax=max_price
+                account, category=category, pmax=max_price, filters=filters
             )
         else:
             result = await ctx.deps.market.search_category_via_pool(
-                ctx.tenant_id, category=category, pmax=max_price
+                ctx.tenant_id, category=category, pmax=max_price, filters=filters
             )
 
         prices = [hit.price for hit in result.hits]

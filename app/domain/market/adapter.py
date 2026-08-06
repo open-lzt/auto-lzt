@@ -15,10 +15,10 @@ No other module (besides TokenPool, which legitimately constructs the pool/Clien
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping
 from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
-from typing import Any, Final
+from typing import Final
 from uuid import UUID
 
 import httpx
@@ -30,7 +30,7 @@ from pylzt.transport.base import RequestOptions
 from pylzt.types import Currency, ItemOrigin, OrderBy
 
 from app.domain.account.model import AccountId
-from app.domain.market.categories import SearchableCategory
+from app.domain.market.categories import CATEGORY_METHODS, SearchableCategory
 from app.domain.market.dtos import (
     BumpResult,
     FastBuyResult,
@@ -49,6 +49,7 @@ from app.domain.market.errors import (
     PurchaseOutcomeUnknown,
     TokenInvalid,
 )
+from app.domain.market.filters import RESERVED_FILTERS
 
 logger = structlog.get_logger()
 
@@ -85,34 +86,6 @@ PURCHASE_TIMEOUT_S = 120.0
 # every pooled read the same 120s ceiling, which is the wrong number for everything but a purchase.
 # pylzt 0.2.0 takes the timeout per call, so both paths get it without anyone owning a client.
 _PURCHASE_OPTIONS: Final = RequestOptions(timeout=PURCHASE_TIMEOUT_S)
-
-# Slug -> the facade method that searches it. Spelled out because the slug is NOT the method name
-# (`epicgames` -> `category_epic_games`, `tiktok` -> `category_tik_tok`), so a built name would be
-# wrong for five of these; and because a getattr here would let any string reach the facade.
-# `test_search_category` pins this to SearchableCategory in both directions.
-_CATEGORY_METHODS: Final[dict[SearchableCategory, Callable[[Client], Any]]] = {
-    SearchableCategory.STEAM: lambda c: c.market.category_steam,
-    SearchableCategory.FORTNITE: lambda c: c.market.category_fortnite,
-    SearchableCategory.RIOT: lambda c: c.market.category_riot,
-    SearchableCategory.TELEGRAM: lambda c: c.market.category_telegram,
-    SearchableCategory.DISCORD: lambda c: c.market.category_discord,
-    SearchableCategory.ROBLOX: lambda c: c.market.category_roblox,
-    SearchableCategory.EPICGAMES: lambda c: c.market.category_epic_games,
-    SearchableCategory.BATTLENET: lambda c: c.market.category_battle_net,
-    SearchableCategory.EA: lambda c: c.market.category_ea,
-    SearchableCategory.ESCAPEFROMTARKOV: lambda c: c.market.category_escape_from_tarkov,
-    SearchableCategory.GIFTS: lambda c: c.market.category_gifts,
-    SearchableCategory.INSTAGRAM: lambda c: c.market.category_instagram,
-    SearchableCategory.MINECRAFT: lambda c: c.market.category_minecraft,
-    SearchableCategory.SOCIALCLUB: lambda c: c.market.category_social_club,
-    SearchableCategory.SUPERCELL: lambda c: c.market.category_supercell,
-    SearchableCategory.TIKTOK: lambda c: c.market.category_tik_tok,
-    SearchableCategory.UPLAY: lambda c: c.market.category_uplay,
-    SearchableCategory.VPN: lambda c: c.market.category_vpn,
-    SearchableCategory.WARFACE: lambda c: c.market.category_warface,
-    SearchableCategory.HYTALE: lambda c: c.market.category_hytale,
-    SearchableCategory.LLM: lambda c: c.market.category_llm,
-}
 
 
 async def _declining[T](item_id: int, call: Awaitable[T]) -> T:
@@ -216,6 +189,7 @@ class MarketAdapter:
         pmax: float,
         page: int = 1,
         order_by: OrderBy = OrderBy.PRICE_ASC,
+        filters: Mapping[str, object] | None = None,
     ) -> SearchResult:
         """Wraps the per-category ``category_*`` search — the buyer-side counterpart of
         ``list_lots_page``.
@@ -224,14 +198,25 @@ class MarketAdapter:
         ceiling never reaches the buy node. That is where the ceiling is enforced — ``fast_buy``
         gets an id, not a price, once ``for-each-lot`` has fanned the list out.
 
-        Only ``pmax``/``page``/``order_by`` are passed, and always by keyword. Those three sit in
+        Everything is passed by keyword, without exception. ``pmax``/``page``/``order_by`` sit in
         the argument head every ``category_*`` method shares; the per-category tails diverge (steam
-        takes 126 arguments, ``vpn`` 25) and ``category_steam``/``category_fortnite`` even order the
+        takes 127 arguments, ``vpn`` 26) and ``category_steam``/``category_fortnite`` even order the
         ``email_*`` arguments differently from the rest — so nothing here may be positional.
+
+        ``filters`` carries the rest of that tail. It arrives already coerced and already checked
+        against this category's signature (``filters.coerce_filters``), which is also what keeps it
+        from colliding with the three explicit kwargs: ``RESERVED_FILTERS`` excludes them from the
+        schema, so a name that would raise ``TypeError: got multiple values`` cannot be in here.
+        The assertion below is the belt to that braces — this is the money path's search, and a
+        caller that skipped coercion must fail here rather than reach the marketplace.
         """
-        method = _CATEGORY_METHODS[category]
+        extra = dict(filters or {})
+        collisions = extra.keys() & RESERVED_FILTERS
+        if collisions:
+            raise ValueError(f"filters may not set reserved names: {sorted(collisions)}")
+        method = CATEGORY_METHODS[category]
         response = await self._call(
-            lambda client: method(client)(pmax=pmax, page=page, order_by=order_by)
+            lambda client: method(client)(pmax=pmax, page=page, order_by=order_by, **extra)
         )
         return SearchResult(
             hits=tuple(

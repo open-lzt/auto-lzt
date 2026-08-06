@@ -57,11 +57,32 @@ async def test_it_fails_loud_on_anything_that_is_not_a_json_list(bad: str) -> No
         await _run(items=bad, count=1)
 
 
-@pytest.mark.parametrize("bad", [0, -1, "3", True])
-async def test_a_count_that_is_not_a_positive_int_fails_rather_than_silently_emptying(
-    bad: object,
-) -> None:
+@pytest.mark.parametrize("bad", [-1, "3", True, 2.5])
+async def test_a_count_that_is_not_a_whole_non_negative_number_fails(bad: object) -> None:
     """`True` is in this list deliberately: it is an int in Python, and `items[:True]` would quietly
-    return one element instead of rejecting an obviously wrong input."""
+    return one element instead of rejecting an obviously wrong input. `2.5` is here because the
+    autobuy derives its count arithmetically, and a fraction means the budget maths is wrong."""
     with pytest.raises(RunFailed):
         await _run(items=json.dumps([1, 2, 3]), count=bad)
+
+
+async def test_count_zero_takes_nothing_instead_of_failing_the_run() -> None:
+    """The autobuy's budget gate emits 0 when the budget does not cover one lot at the ceiling.
+
+    That is a green run with nothing bought. Failing here instead would turn "прайс сегодня выше
+    бюджета" into a red scheduled run every N minutes, which is an alarm nobody can act on.
+    """
+    output = await _run(items=json.dumps([1, 2, 3]), count=0)
+    assert json.loads(output["items"]) == []
+    assert output["count"] == 0
+    assert output["truncated"] is True
+
+
+async def test_an_integral_float_count_is_accepted_because_logic_math_emits_float() -> None:
+    """`logic.math` types every result as float, so `budget // max_price` arrives as `3.0`.
+
+    Pinning this is the point: a hand-typed `3` always worked, so rejecting `3.0` broke only the
+    derived path — the one the autobuy template actually uses.
+    """
+    output = await _run(items=json.dumps([1, 2, 3, 4]), count=3.0)
+    assert json.loads(output["items"]) == [1, 2, 3]

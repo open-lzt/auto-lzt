@@ -347,6 +347,7 @@ class FakeMarket:
         self.fast_buy_price: int = 100
         self.fast_buy_unavailable: str | None = None
         self.search_calls: list[tuple[SearchableCategory, float]] = []
+        self.filter_calls: list[dict[str, object]] = []
         self.search_hits: tuple[SearchHit, ...] = ()
 
     async def fast_buy(
@@ -419,15 +420,27 @@ class FakeMarket:
         return self.pages.get((account.id, page), LotsPage(item_ids=(), has_next_page=False))
 
     async def search_category_via_pool(
-        self, tenant_id: TenantId, *, category: SearchableCategory, pmax: float
+        self,
+        tenant_id: TenantId,
+        *,
+        category: SearchableCategory,
+        pmax: float,
+        filters: Mapping[str, object] | None = None,
     ) -> SearchResult:
         self.search_calls.append((category, pmax))
+        self.filter_calls.append(dict(filters or {}))
         return SearchResult(hits=self.search_hits)
 
     async def search_category(
-        self, account: Account, *, category: SearchableCategory, pmax: float
+        self,
+        account: Account,
+        *,
+        category: SearchableCategory,
+        pmax: float,
+        filters: Mapping[str, object] | None = None,
     ) -> SearchResult:
         self.search_calls.append((category, pmax))
+        self.filter_calls.append(dict(filters or {}))
         return SearchResult(hits=self.search_hits)
 
 
