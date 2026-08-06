@@ -30,8 +30,11 @@ from app.domain.flow_engine.dtos import StepResultDTO
 from app.domain.flow_engine.errors import DuplicatePresetFlow
 from app.domain.flow_engine.ir_node import (
     EnvRef,
+    FieldSegment,
+    IndexSegment,
     IRNode,
     LiteralValue,
+    PathSegment,
     PortRef,
     StopCondition,
 )
@@ -61,9 +64,26 @@ def _rowcount(result: Result[Any]) -> int:
     return cast("CursorResult[Any]", result).rowcount
 
 
+def _segment_to_json(segment: PathSegment) -> dict[str, Any]:
+    if isinstance(segment, FieldSegment):
+        return {"kind": "field", "name": segment.name}
+    return {"kind": "index", "index": segment.index}
+
+
+def _segment_from_json(data: dict[str, Any]) -> PathSegment:
+    if data["kind"] == "field":
+        return FieldSegment(name=data["name"])
+    return IndexSegment(index=data["index"])
+
+
 def _input_to_json(value: PortRef | LiteralValue | EnvRef) -> dict[str, Any]:
     if isinstance(value, PortRef):
-        return {"kind": "ref", "node_id": value.node_id, "port": value.port}
+        return {
+            "kind": "ref",
+            "node_id": value.node_id,
+            "port": value.port,
+            "path": [_segment_to_json(segment) for segment in value.path],
+        }
     if isinstance(value, EnvRef):
         # Name only — the secret value is never resolved at compile time, so it is never here to
         # persist; a leaked FlowIR export carries the name, never the credential.
@@ -73,7 +93,12 @@ def _input_to_json(value: PortRef | LiteralValue | EnvRef) -> dict[str, Any]:
 
 def _input_from_json(data: dict[str, Any]) -> PortRef | LiteralValue | EnvRef:
     if data["kind"] == "ref":
-        return PortRef(node_id=data["node_id"], port=data["port"])
+        # Rows written before F-13 carry no "path" key at all — an absent path is an empty one.
+        return PortRef(
+            node_id=data["node_id"],
+            port=data["port"],
+            path=tuple(_segment_from_json(segment) for segment in data.get("path", ())),
+        )
     if data["kind"] == "env":
         return EnvRef(name=data["name"])
     return LiteralValue(value=data["value"])

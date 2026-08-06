@@ -14,8 +14,20 @@ from __future__ import annotations
 
 import dataclasses
 
-from app.domain.flow_engine.ir_node import IRNode, LiteralValue, PortRef, StopCondition
-from app.domain.flow_engine.repo import _ir_node_from_json, _ir_node_to_json
+from app.domain.flow_engine.ir_node import (
+    FieldSegment,
+    IndexSegment,
+    IRNode,
+    LiteralValue,
+    PortRef,
+    StopCondition,
+)
+from app.domain.flow_engine.repo import (
+    _input_from_json,
+    _input_to_json,
+    _ir_node_from_json,
+    _ir_node_to_json,
+)
 
 
 def test_every_field_of_ir_node_is_persisted() -> None:
@@ -30,6 +42,31 @@ def test_every_field_of_ir_node_is_persisted() -> None:
     assert declared - persisted == set(), (
         f"IRNode fields compiled but never written to the database: {sorted(declared - persisted)}"
     )
+
+
+def test_every_field_of_a_port_ref_is_persisted() -> None:
+    """The same guard one level down: `path` was dropped here long after IRNode was fixed."""
+    persisted = set(_input_to_json(PortRef(node_id="n", port="p")))
+    declared = {f.name for f in dataclasses.fields(PortRef)}
+
+    assert declared - persisted == set(), (
+        f"PortRef fields compiled but never written to the database: {sorted(declared - persisted)}"
+    )
+
+
+def test_a_path_reference_survives_the_round_trip() -> None:
+    """An F-13 path walks into the port's value; losing it silently reads the wrong field."""
+    ref = PortRef(
+        node_id="search", port="items", path=(IndexSegment(index=0), FieldSegment(name="price"))
+    )
+
+    assert _input_from_json(_input_to_json(ref)) == ref
+
+
+def test_a_reference_written_before_paths_existed_still_reads() -> None:
+    legacy = {"kind": "ref", "node_id": "search", "port": "items"}
+
+    assert _input_from_json(legacy) == PortRef(node_id="search", port="items")
 
 
 def test_a_stop_condition_survives_the_round_trip() -> None:
