@@ -8,11 +8,10 @@ once; the categories are data.
 
 The graph, and why each node is there:
 
-    cap    budget // max_price      how many lots the budget covers, floored
-      -> search   filtered search, price-capped server-side
-      -> take     cut the result to `cap` — THIS is the spend ceiling
+    search   filtered search, price-capped server-side
+      -> take     cut to `max_lots` — a CANDIDATE cap, not the spend ceiling
       -> loop     fan out over what survived
-           body -> buy      fast_buy, dry_run by default
+           body -> buy      fast_buy, dry_run by default — THIS is the spend ceiling
                 -> bought   purchased?
                 -> tg_lot   is Telegram even configured?
                 -> lot_text + notify
@@ -21,9 +20,17 @@ The graph, and why each node is there:
 
 Two things in there are load-bearing and were both learned the hard way:
 
-``cap`` is the budget gate, and it must be integer division. A per-iteration ``stop_condition`` on
-``loop`` does not work — the runtime evaluates a stop condition before the fan-out, against the
-loop's own output, so a budget of 1000 with twenty lots at 300 bought all twenty.
+**The budget gate counts money, not candidates, and that took two attempts.** It began as
+``cap = budget // max_price`` feeding ``take``, which limited how many lots were LOOKED AT: a lot
+refused with 403 burned a slot while moving nothing, so three contested lots in a row bought
+nothing with the budget untouched and lot #4 in the same page. Refusal is the normal outcome on
+cheap lots — measured 3 of 5 against prod. The gate now lives on ``buy``, which sums what the run
+actually paid (the `purchases` ledger, keyed by run) and refuses the next lot that will not fit.
+
+A ``stop_condition`` on ``loop`` still does not work — the runtime evaluates it before the fan-out
+against the loop's own output, so a budget of 1000 with twenty lots at 300 bought all twenty. On
+``buy``, inside the body, it is evaluated right after that step commits; the fan-out is sequential
+and checks its abort flag per item, so the first refusal ends the loop.
 
 The Telegram nodes sit behind ``bot_token != ""``. Without that gate a run with no Telegram
 configured fails on its LAST node, after the purchases, and reports itself failed — observed against
@@ -40,6 +47,7 @@ from app.domain.flow_engine.spec import (
     ParamControl,
     ParamOption,
     ParamSpec,
+    StopConditionSpec,
 )
 from app.domain.market.categories import SearchableCategory, label_for
 
@@ -72,9 +80,21 @@ def _params(category: SearchableCategory) -> list[ParamSpec]:
             minimum=1,
             group="Деньги",
             description=(
-                "Сколько всего можно потратить за один запуск. Число лотов = бюджет / цена "
-                "за лот, с округлением вниз. Бюджет меньше одного лота — прогон завершится, "
-                "ничего не купив."
+                "Сколько всего можно потратить за один запуск. Считается ПОТРАЧЕННОЕ: лот, по "
+                "которому маркет отказал, денег не стоит и бюджет не расходует. Как только "
+                "следующий лот в остаток не влезает, прогон останавливается."
+            ),
+        ),
+        ParamSpec(
+            key="max_lots",
+            label="Сколько лотов смотреть",
+            control=ParamControl.NUMBER,
+            default=40,
+            minimum=1,
+            group="Деньги",
+            description=(
+                "Верхняя граница числа кандидатов из выдачи, а не числа покупок — тратой "
+                "управляет бюджет. Одна страница поиска даёт 40 лотов; больше смотреть незачем."
             ),
         ),
         ParamSpec(
@@ -140,18 +160,6 @@ def _nodes() -> list[NodeSpec]:
     }
     return [
         NodeSpec(
-            id="cap",
-            type="logic.math",
-            inputs={
-                # idiv, not div: `logic.take` refuses a fractional count, so `1000 / 300` failed
-                # every run — while `900 / 300` passed, hiding the defect behind round numbers.
-                "op": InputSpec(literal="idiv"),
-                "a": InputSpec(literal="{{vars.budget}}"),
-                "b": InputSpec(literal="{{vars.max_price}}"),
-            },
-            edges={"next": "search"},
-        ),
-        NodeSpec(
             id="search",
             type="market.search",
             inputs={
@@ -166,7 +174,13 @@ def _nodes() -> list[NodeSpec]:
             type="logic.take",
             inputs={
                 "items": InputSpec(ref="search.item_ids"),
-                "count": InputSpec(ref="cap.result"),
+                # A CANDIDATE cap, not the spend ceiling. It used to be `budget // max_price`, and
+                # that conflated "how many I can afford" with "how many I will look at": a lot
+                # refused with 403 burned a slot while moving no money, so three contested lots in
+                # a row bought nothing with the budget untouched and lot #4 sitting in the same
+                # page. Refusal is the NORMAL outcome on cheap lots — measured 3 of 5 live. The
+                # money gate now lives on `buy`, which counts what was SPENT.
+                "count": InputSpec(literal="{{vars.max_lots}}"),
             },
             edges={"next": "loop"},
         ),
@@ -186,8 +200,17 @@ def _nodes() -> list[NodeSpec]:
                 "item_id": InputSpec(ref="loop.item_id"),
                 "max_price": InputSpec(literal="{{vars.max_price}}"),
                 "max_price_currency": InputSpec(literal="{{vars.currency}}"),
+                "run_budget": InputSpec(literal="{{vars.budget}}"),
                 "dry_run": InputSpec(literal="{{vars.dry_run}}"),
             },
+            # The spend ceiling, and the reason it works here where it did not on the loop: a
+            # stop_condition on `loop` is evaluated BEFORE the fan-out against the loop's own
+            # output, so a budget of 1000 with twenty lots at 300 bought all twenty. On a node
+            # INSIDE the body it is evaluated right after that step commits, and the fan-out is
+            # sequential with an abort flag checked per item — so the first refusal ends the loop.
+            stop_condition=StopConditionSpec(
+                output_key="budget_exhausted", equals=True, action="abort"
+            ),
             edges={"next": "bought"},
         ),
         NodeSpec(
@@ -273,7 +296,7 @@ def autobuy_spec(category: SearchableCategory) -> FlowSpec:
     """
     return FlowSpec(
         name=f"Автобай {label_for(category)} — снайпер",
-        entry_node_id="cap",
+        entry_node_id="search",
         params=_params(category),
         nodes=_nodes(),
         maturity=FlowMaturity.EXPERIMENTAL,

@@ -61,12 +61,45 @@ class FastBuyInput(BaseSchema):
         "в другой валюте — не потолок. Лот в другой валюте пропускается, а не пересчитывается.",
         json_schema_extra={"x-ui": {"widget": "select"}},
     )
+    run_budget: int | None = Field(
+        default=None,
+        gt=0,
+        title="Бюджет прогона",
+        description="Пусто — прогон не ограничен по сумме. Задано — узел складывает уже "
+        "потраченное этим прогоном и отказывается покупать, если следующий лот в бюджет не "
+        "влезает. Считается ПОТРАЧЕННОЕ, а не просмотренное: отказ маркета по лоту денег не "
+        "стоит и бюджет не расходует.",
+        json_schema_extra={"x-ui": {"widget": "number"}},
+    )
     dry_run: bool = Field(
         default=True,
         title="Холостой прогон",
         description="Включено — покупка не выполняется, узел только сообщает что купил бы.",
         json_schema_extra={"x-ui": {"widget": "switch"}},
     )
+
+
+async def _affordable(ctx: RunContext, run_budget: int | None, max_price: int) -> bool:
+    """Would buying one more lot at `max_price` stay inside the run's budget?
+
+    Checked BEFORE the money moves, so the budget is never exceeded rather than found exceeded
+    afterwards. `max_price` is the right number to test against: it is the most this purchase can
+    cost, since `fast_buy` pins that ceiling onto the buy itself.
+
+    **Fail-closed.** If the spend cannot be established — the ledger is unreachable, or the run
+    bought in several currencies and has no honest total — this answers "no". The ledger write is
+    best-effort by design (it must never fail a purchase that already happened), so an unreadable
+    ledger genuinely might be undercounting. Refusing the NEXT purchase costs a run that stops
+    early; authorising it on a number we cannot verify costs the budget.
+    """
+    if run_budget is None:
+        return True
+    try:
+        spent = await ctx.deps.purchases.spent_for_run(ctx.tenant_id, ctx.run_id)
+    except Exception:  # noqa: BLE001 — see the docstring: unknown spend is treated as exhausted
+        logger.exception("run_spend_unreadable_refusing_purchase", node_id=ctx.node.id)
+        return False
+    return spent + Decimal(max_price) <= Decimal(run_budget)
 
 
 async def _record(ctx: RunContext, result: FastBuyResult) -> None:
@@ -112,6 +145,12 @@ class FastBuyOutput(BaseSchema):
         description="Заполняется, когда маркет отказал именно по этому лоту — например он уже в "
         "очереди на покупку у другого снайпера. Прогон при этом продолжается.",
     )
+    budget_exhausted: bool = Field(
+        default=False,
+        title="Бюджет прогона исчерпан",
+        description="Этот лот не куплен, потому что он не влезает в оставшийся бюджет прогона. "
+        "Служит сигналом остановки для цикла: смотреть следующие лоты уже незачем.",
+    )
 
 
 def as_int(value: str | int | float | bool | None, port: str) -> int:
@@ -154,6 +193,26 @@ def _as_currency(value: str | int | float | bool | None, max_price: int | None) 
     if not isinstance(value, str) or not value.strip():
         raise ValueError(f"max_price_currency is required when max_price is set, got {value!r}")
     return value.strip()
+
+
+def _as_run_budget(value: str | int | float | bool | None, max_price: int | None) -> int | None:
+    """The run's total spend ceiling — unwired means no gate, exactly as every flow behaves today.
+
+    Requires `max_price`, because the gate tests "one more lot at its ceiling" against the budget.
+    Without a per-lot ceiling the next purchase has no known maximum cost, so a budget could be
+    blown by a single lot and the gate would be decoration.
+    """
+    if value is None:
+        return None
+    try:
+        budget = as_int(value, "run_budget")
+    except ValueError as exc:
+        raise ValueError(f"run_budget must be an int, got {value!r}") from exc
+    if budget <= 0:
+        raise ValueError(f"run_budget must be positive, got {value!r}")
+    if max_price is None:
+        raise ValueError("run_budget requires max_price — without it a lot has no known max cost")
+    return budget
 
 
 _TRUE_WORDS = frozenset({"1", "true", "yes", "on", "да"})
@@ -200,11 +259,28 @@ class FastBuyNode(BaseNode):
             dry_run = True if raw_dry_run is None else _as_bool(raw_dry_run, "dry_run")
             max_price = _as_ceiling(ctx.resolve_optional("max_price"))
             max_price_currency = _as_currency(ctx.resolve_optional("max_price_currency"), max_price)
+            run_budget = _as_run_budget(ctx.resolve_optional("run_budget"), max_price)
         except ValueError as exc:
             # `relist` already raised RunFailed for the same class of defect while this node let a
             # bare ValueError out to be re-wrapped by the runtime — same failure, two shapes, and
             # the operator saw a nested message for one of them.
             raise RunFailed(ctx.run_id, ctx.node.id, str(exc)) from exc
+
+        # Before the idempotency guard, because refusing here spends nothing and must not burn the
+        # key. Skipped on a dry run: a rehearsal records no purchase, so the spend is always 0 and
+        # the gate would only cost a query to answer "yes".
+        if not dry_run and not await _affordable(ctx, run_budget, max_price or 0):
+            logger.info("fast_buy_budget_exhausted", item_id=item_id, node_id=ctx.node.id)
+            return StepResultDTO(
+                node_id=ctx.node.id,
+                output={
+                    "item_id": item_id,
+                    "price": 0,
+                    "purchased": False,
+                    "unavailable_reason": "бюджет прогона исчерпан",
+                    "budget_exhausted": True,
+                },
+            )
 
         first = await ctx.deps.guard.check_and_set(ctx.idempotency_key)
         if not first or ctx.step_replay:
@@ -278,6 +354,11 @@ class FastBuyNode(BaseNode):
                     "price": 0,
                     "purchased": False,
                     "unavailable_reason": exc.reason or "маркет отказал по этому лоту",
+                    # Explicitly false, not absent. The template's stop_condition matches this key
+                    # against True, and a money gate must not rest on "the key wasn't there".
+                    # This is also the whole point of the fix: a refused lot cost no money, so the
+                    # run has no reason to stop.
+                    "budget_exhausted": False,
                 },
             )
 
@@ -291,5 +372,6 @@ class FastBuyNode(BaseNode):
                 "price": result.price,
                 "purchased": result.purchased,
                 "unavailable_reason": "",
+                "budget_exhausted": False,
             },
         )

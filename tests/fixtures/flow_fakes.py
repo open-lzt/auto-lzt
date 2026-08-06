@@ -12,9 +12,10 @@ from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from dataclasses import replace
 from datetime import UTC, datetime
+from decimal import Decimal
 from functools import lru_cache
 from typing import Any
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from pylzt import Client
 from pylzt.types import Currency, ItemOrigin
@@ -124,6 +125,13 @@ class FakePurchases:
             return False
         self.recorded.append(purchase)
         return True
+
+    async def spent_for_run(self, tenant_id: TenantId, run_id: UUID) -> Decimal:
+        """Sums the same rows the real repo would. `fail_with` covers the unreadable-ledger path,
+        which is what the budget gate must treat as "exhausted" rather than as zero."""
+        if self._fail_with is not None:
+            raise self._fail_with
+        return sum((p.price for p in self.recorded if p.run_id == run_id), Decimal(0))
 
 
 def build_node_deps(

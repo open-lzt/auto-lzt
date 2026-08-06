@@ -7,12 +7,16 @@ by the time it runs, so it may not be rolled back by anything happening around i
 
 from __future__ import annotations
 
+from decimal import Decimal
+from uuid import UUID
+
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
 from app.db.base import BaseSessionmakerRepo, session_scope
 from app.db.models import PurchaseORM
 from app.domain.account.model import TenantId
+from app.domain.purchases.errors import MixedCurrencySpend
 from app.domain.purchases.model import Purchase, PurchaseId
 
 
@@ -56,6 +60,29 @@ class PurchaseRepository(BaseSessionmakerRepo[Purchase, PurchaseId]):
         except IntegrityError:
             return False
         return True
+
+    async def spent_for_run(self, tenant_id: TenantId, run_id: UUID) -> Decimal:
+        """What this run has already paid, in the currency its rows share.
+
+        This is the autobuy's budget accumulator, and it lives here rather than in flow state
+        because the table already holds the fact: a counter carried between loop iterations would
+        be a second source of truth for one number, and the weaker of the two — it would not
+        survive a restart, a replay or a redis flush.
+
+        Rows in more than one currency RAISE. Summing 100 RUB and 100 USD produces a number that is
+        not money, and this number authorises the next purchase.
+        """
+        async with session_scope(self._sm) as session:
+            rows = await session.execute(
+                select(PurchaseORM.price, PurchaseORM.currency).where(
+                    PurchaseORM.tenant_id == tenant_id, PurchaseORM.run_id == run_id
+                )
+            )
+            paid = rows.all()
+        currencies = {c for _, c in paid if c is not None}
+        if len(currencies) > 1:
+            raise MixedCurrencySpend(run_id, tuple(sorted(currencies)))
+        return sum((price for price, _ in paid), Decimal(0))
 
     async def list(self, tenant_id: TenantId, *, limit: int = 100) -> list[Purchase]:
         """Newest first — "what did it buy" is almost always a question about today."""
