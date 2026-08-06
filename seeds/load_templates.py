@@ -15,6 +15,7 @@ from pathlib import Path
 from app.domain.account.model import TenantId
 from app.domain.flow_engine.repo import FlowRepository
 from app.domain.flow_engine.spec import FlowSpec
+from seeds.autobuy import autobuy_specs
 
 TEMPLATES_DIR = Path(__file__).resolve().parent / "templates"
 
@@ -26,11 +27,17 @@ class LoadReport:
 
 
 def load_specs() -> list[FlowSpec]:
-    """Parse+validate every seed template FlowSpec (raises on a malformed/invalid seed)."""
-    return [
+    """Every seed FlowSpec: the hand-written JSON ones, plus the generated autobuy snipers.
+
+    The autobuy family is built in code rather than shipped as 21 near-identical JSON files — they
+    would differ in three fields out of a twelve-node graph, and a fix to the money path would have
+    to land twenty-one times. See ``seeds/autobuy.py``.
+    """
+    from_json = [
         FlowSpec.model_validate_json(path.read_text(encoding="utf-8"))
         for path in sorted(TEMPLATES_DIR.glob("*.json"))
     ]
+    return [*from_json, *autobuy_specs()]
 
 
 async def load_seed_templates(flows: FlowRepository, tenant_id: TenantId) -> LoadReport:
