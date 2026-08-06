@@ -98,6 +98,23 @@
   font-weight: 600;
 }
 
+/* Quiet by design: a muted tag next to the name, not a coloured banner. The flow still runs and the
+   operator still owns the decision — this states a fact, it does not raise an alarm. */
+.flow-list__tag {
+  margin-left: 8px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--text-faint);
+  font-size: 11px;
+  font-weight: 500;
+  vertical-align: middle;
+}
+
+.flow-list__tag--testnet {
+  color: var(--text-muted);
+}
+
 .flow-list__name {
   flex: 1;
   min-width: 0;

@@ -80,9 +80,23 @@ describe("request()", () => {
   });
 
   it("renames the wire's flow_id to id so the UI never sees an undefined identifier", async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse([{ flow_id: "f1", name: "Flow 1", maturity: "experimental", testnet: true }]),
+    );
+
+    await expect(fetchFlows()).resolves.toEqual([
+      { id: "f1", name: "Flow 1", maturity: "experimental", testnet: true },
+    ]);
+  });
+
+  it("treats a backend that omits maturity/testnet as a stable live flow", async () => {
+    // Both keys are newer than the endpoint. Throwing on their absence would make the canvas
+    // unopenable against an older backend for the sake of a badge a stable flow does not need.
     fetchMock.mockResolvedValue(jsonResponse([{ flow_id: "f1", name: "Flow 1" }]));
 
-    await expect(fetchFlows()).resolves.toEqual([{ id: "f1", name: "Flow 1" }]);
+    await expect(fetchFlows()).resolves.toEqual([
+      { id: "f1", name: "Flow 1", maturity: "stable", testnet: false },
+    ]);
   });
 });
 

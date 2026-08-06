@@ -107,14 +107,22 @@ export function fetchFlowStatus(flowId: string): Promise<FlowStatusResponse> {
   return request<FlowStatusResponse>(`/flows/${flowId}/status`);
 }
 
+/** How proven a flow is. Declared by its author, never inferred — nothing measures it. */
+export type FlowMaturity = "stable" | "experimental";
+
 export interface FlowSummary {
   id: string;
   name: string;
+  maturity: FlowMaturity;
+  /** Marketplace calls go to the lzt-testnet mock instead of the live market. */
+  testnet: boolean;
 }
 
 interface FlowSummaryWire {
   flow_id: string;
   name: string;
+  maturity?: FlowMaturity;
+  testnet?: boolean;
 }
 
 /** Three states: required=true → key demanded; required=false,open=true → dev hatch, anyone in;
@@ -130,7 +138,14 @@ export function authRequired(): Promise<AuthPosture> {
 
 export async function fetchFlows(): Promise<FlowSummary[]> {
   const wire = await request<FlowSummaryWire[]>("/flows/list");
-  return wire.map((flow) => ({ id: flow.flow_id, name: flow.name }));
+  // Defaults applied here, not asserted: an older backend omits both keys, and a canvas that threw
+  // on their absence would be unopenable against it for a badge nobody needs on a stable flow.
+  return wire.map((flow) => ({
+    id: flow.flow_id,
+    name: flow.name,
+    maturity: flow.maturity ?? "stable",
+    testnet: flow.testnet ?? false,
+  }));
 }
 
 export function deleteFlow(flowId: string): Promise<void> {

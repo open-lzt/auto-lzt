@@ -17,7 +17,9 @@ from app.core.schema import BaseSchema
 from app.domain.catalog.capabilities import NodeCapability, NodeCategory
 from app.domain.catalog.registry import NodeRegistry
 from app.domain.flow_engine.errors import EntityNotFound
-from app.domain.market.categories import list_categories
+from app.domain.market.categories import SearchableCategory, list_categories
+from app.domain.market.curated import curated_filters
+from app.domain.market.filters import filter_schema, json_schema
 from app.domain.market.introspection import (
     UnknownFacade,
     UnknownMethod,
@@ -27,7 +29,9 @@ from app.domain.market.introspection import (
 
 # Bumped whenever the response shape changes in a way a client must notice. A client that reads a
 # version it does not know should refuse to render rather than guess.
-CATALOG_SCHEMA_VERSION: Final = 1
+# 2 — `market.search` gained the `filters` port. The client THROWS on a mismatch rather than
+# degrading, so this bump and the frontend ship together or the canvas will not open.
+CATALOG_SCHEMA_VERSION: Final = 2
 
 router = APIRouter(prefix="/catalog", tags=["catalog"])
 
@@ -68,10 +72,39 @@ class DynamicMethodDetailResponse(BaseSchema):
     returns: dict[str, Any]
 
 
+class CategoryFiltersResponse(BaseSchema):
+    category: str
+    count: int
+    # JSON Schema, so the canvas renders it with the same AutoForm it already uses for node inputs
+    # — no second form engine and no parallel field DTO to drift from the schema.
+    json_schema: dict[str, Any]
+    # Names to show above the collapsed "Все фильтры". A subset of the schema's properties, checked
+    # against the live signature by `test_curated_names_all_exist`.
+    curated: list[str]
+
+
 @router.get("/categories")
 async def list_market_categories() -> list[CategoryResponse]:
     """Market categories for the category_picker control — live from the pylzt Category enum."""
     return [CategoryResponse(slug=cat.slug, label=cat.label) for cat in list_categories()]
+
+
+@router.get("/categories/{category}/filters")
+async def describe_category_filters(category: SearchableCategory) -> CategoryFiltersResponse:
+    """JSON Schema of one category's search filters — what the ``market.search`` form renders from.
+
+    Nested under the category rather than a flat ``/filters/{category}``: the filter set has no
+    meaning apart from the category it belongs to, and a flat path invites callers to cache it as
+    if it were global. FastAPI validates the slug against ``SearchableCategory``, so an unsearchable
+    category (``mihoyo``, ``wot``) is a 422 here instead of an ``AttributeError`` at search time.
+    """
+    schema = filter_schema(category)
+    return CategoryFiltersResponse(
+        category=category.value,
+        count=len(schema.fields),
+        json_schema=json_schema(category),
+        curated=list(curated_filters(category)),
+    )
 
 
 @router.get("/list")

@@ -12,6 +12,7 @@ import {
   type PickerOption,
 } from "./controls";
 import { AccountMultiPicker, CategorySelect } from "./DataPickers";
+import { FiltersField } from "./FiltersField";
 import { diagnoseVarRef } from "./varRefs";
 import "./autoform.css";
 
@@ -145,7 +146,16 @@ export function AutoForm({ schema, values, onChange, varKeys }: AutoFormProps) {
             required={field.required}
             hint={field.description}
           >
-            {field.widget === "account_ref" ? (
+            {field.widget === "filters" ? (
+              // The only control that reads a SIBLING field: a filter set belongs to a category,
+              // and `category` is the field next to it. Passing the whole form's values instead
+              // would hand every control a dependency it does not have.
+              <FiltersField
+                value={raw}
+                onChange={(v) => onChange(field.key, v)}
+                category={String(values.category ?? "")}
+              />
+            ) : field.widget === "account_ref" ? (
               <AccountMultiPicker value={raw} onChange={(v) => onChange(field.key, v)} />
             ) : field.widget === "category_picker" ? (
               <CategorySelect value={raw} onChange={(v) => onChange(field.key, v)} />

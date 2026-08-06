@@ -216,6 +216,19 @@ export function FlowList({
               ) : (
                 <button type="button" className="flow-list__name" onClick={() => onSelect(flow.id)}>
                   {flow.name}
+                  {flow.maturity === "experimental" ? (
+                    <span className="flow-list__tag" title="Шаблон ещё не проверен на живом маркете">
+                      в тестах
+                    </span>
+                  ) : null}
+                  {flow.testnet ? (
+                    <span
+                      className="flow-list__tag flow-list__tag--testnet"
+                      title="Все обращения к маркету идут в мок lzt-testnet, а не на настоящий маркет"
+                    >
+                      тестнет
+                    </span>
+                  ) : null}
                 </button>
               )}
               <span className="flow-list__actions">
