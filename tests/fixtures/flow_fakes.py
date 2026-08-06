@@ -49,6 +49,7 @@ from app.domain.market.dtos import (
     SearchResult,
 )
 from app.domain.market.errors import LotUnavailable
+from app.domain.purchases.model import Purchase
 
 TENANT = TenantId(uuid4())
 
@@ -104,6 +105,27 @@ def build_account(tenant_id: TenantId = TENANT, account_id: AccountId | None = N
     )
 
 
+class FakePurchases:
+    """In-memory purchase ledger. ``recorded`` is what a test asserts against.
+
+    Enforces the real unique constraint (one row per lot) rather than appending blindly, so a test
+    for the replay path fails here the way Postgres would rather than passing on a fake that is
+    more permissive than the database.
+    """
+
+    def __init__(self, *, fail_with: Exception | None = None) -> None:
+        self.recorded: list[Purchase] = []
+        self._fail_with = fail_with
+
+    async def record(self, purchase: Purchase) -> bool:
+        if self._fail_with is not None:
+            raise self._fail_with
+        if any(p.item_id == purchase.item_id for p in self.recorded):
+            return False
+        self.recorded.append(purchase)
+        return True
+
+
 def build_node_deps(
     market: FakeMarket,
     guard: DedupGuard,
@@ -113,6 +135,7 @@ def build_node_deps(
     get_client: Callable[[TenantId, AccountId | None], AbstractAsyncContextManager[Client]]
     | None = None,
     http: object | None = None,
+    purchases: FakePurchases | None = None,
 ) -> NodeDeps:
     async def _default_load_account(tenant_id: TenantId, account_id: AccountId) -> Account:
         raise AssertionError("this test does not exercise the pinned-account path")
@@ -130,6 +153,7 @@ def build_node_deps(
     return NodeDeps(
         market=market,  # type: ignore[arg-type]
         guard=guard,
+        purchases=purchases or FakePurchases(),  # type: ignore[arg-type]
         load_account=load_account or _default_load_account,
         list_accounts=list_accounts or _default_list_accounts,
         get_client=get_client or _default_get_client,
@@ -345,6 +369,8 @@ class FakeMarket:
         self.fast_buy_ceilings: list[int | None] = []
         self.fast_buy_ceiling_currencies: list[str | None] = []
         self.fast_buy_price: int = 100
+        self.fast_buy_currency: str | None = "rub"
+        self.fast_buy_category_id: int | None = 100
         self.fast_buy_unavailable: str | None = None
         self.search_calls: list[tuple[SearchableCategory, float]] = []
         self.filter_calls: list[dict[str, object]] = []
@@ -380,7 +406,15 @@ class FakeMarket:
         if self.fast_buy_unavailable is not None:
             raise LotUnavailable(item_id, self.fast_buy_unavailable)
         self.fast_buy_pooled_calls.append((tenant_id, item_id, dry_run))
-        return FastBuyResult(item_id=item_id, price=self.fast_buy_price, purchased=not dry_run)
+        return FastBuyResult(
+            item_id=item_id,
+            price=self.fast_buy_price,
+            purchased=not dry_run,
+            # Only a real purchase has a response to read these off — a dry run never called the
+            # marketplace, so leaving them None on that branch is the honest shape, not a shortcut.
+            currency=None if dry_run else self.fast_buy_currency,
+            category_id=None if dry_run else self.fast_buy_category_id,
+        )
 
     async def bump_via_pool(self, tenant_id: TenantId, item_id: int) -> BumpResult:
         self.bump_calls.append(item_id)
@@ -482,6 +516,7 @@ def build_ctx(
     get_client: object | None = None,
     loop_iteration: int = 0,
     step_replay: bool = False,
+    purchases: FakePurchases | None = None,
 ) -> RunContext:
     """A RunContext for a single node's ``execute()``, resolving inputs the same way the real
     interpreter's ``_make_resolver`` does — direct node-level tests don't need the full runtime."""
@@ -506,6 +541,7 @@ def build_ctx(
             load_account=load_account,
             list_accounts=list_accounts,
             get_client=get_client,  # type: ignore[arg-type]
+            purchases=purchases,
         ),
         active_account_id=active_account,
         step_replay=step_replay,

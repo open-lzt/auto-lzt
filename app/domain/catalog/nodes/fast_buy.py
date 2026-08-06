@@ -25,6 +25,10 @@ the affordable direction: refusing costs one manual check, buying twice costs th
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
+from decimal import Decimal
+from uuid import uuid4
+
 import structlog
 from pydantic import Field
 
@@ -33,7 +37,9 @@ from app.domain.catalog.capabilities import MARKET_MUTATE_MONEY, NodeCategory
 from app.domain.flow_engine.base_node import BaseNode, RunContext
 from app.domain.flow_engine.dtos import StepResultDTO
 from app.domain.flow_engine.errors import RunFailed
+from app.domain.market.dtos import FastBuyResult
 from app.domain.market.errors import LotUnavailable
+from app.domain.purchases.model import Purchase, PurchaseId
 
 logger = structlog.get_logger()
 
@@ -61,6 +67,39 @@ class FastBuyInput(BaseSchema):
         description="Включено — покупка не выполняется, узел только сообщает что купил бы.",
         json_schema_extra={"x-ui": {"widget": "switch"}},
     )
+
+
+async def _record(ctx: RunContext, result: FastBuyResult) -> None:
+    """Append the purchase to the ledger. NEVER lets a ledger failure fail the purchase.
+
+    By the time this runs the money has left. Raising here would report a completed purchase as a
+    failed step, and the engine's retry would then buy a SECOND lot — the same trade
+    ``PurchaseOutcomeUnknown`` exists for, and the same direction: a missing ledger row is an
+    accounting gap, a double purchase is a loss. So the write is best-effort and the failure is
+    loud in the log instead of in the run.
+    """
+    try:
+        recorded = await ctx.deps.purchases.record(
+            Purchase(
+                id=PurchaseId(uuid4()),
+                tenant_id=ctx.tenant_id,
+                item_id=result.item_id,
+                price=Decimal(result.price),
+                currency=result.currency,
+                category_id=result.category_id,
+                run_id=ctx.run_id,
+                node_id=ctx.node.id,
+                purchased_at=datetime.now(UTC),
+            )
+        )
+    except Exception:  # noqa: BLE001 — see the docstring: money already moved, nothing may raise
+        logger.exception(
+            "purchase_ledger_write_failed", item_id=result.item_id, node_id=ctx.node.id
+        )
+        return
+    if not recorded:
+        # The step was replayed; the lot is already in the ledger. Normal, not an incident.
+        logger.info("purchase_already_in_ledger", item_id=result.item_id, node_id=ctx.node.id)
 
 
 class FastBuyOutput(BaseSchema):
@@ -241,6 +280,9 @@ class FastBuyNode(BaseNode):
                     "unavailable_reason": exc.reason or "маркет отказал по этому лоту",
                 },
             )
+
+        if result.purchased:
+            await _record(ctx, result)
 
         return StepResultDTO(
             node_id=ctx.node.id,

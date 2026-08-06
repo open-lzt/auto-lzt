@@ -55,6 +55,14 @@ class FastBuyResult:
     price: int
     # False when the node ran with dry_run — nothing was bought and no money moved.
     purchased: bool
+    # Both read off the buy response, both `None` on a dry run (there is no response to read).
+    #
+    # `currency` is not decoration: `price` alone is a number, and this codebase does not let an
+    # amount travel without its unit (`accounts.balance_currency` says the same). `category_id` is
+    # the marketplace's own id rather than our slug — the flow's `category` parameter records what
+    # we ASKED for, and the case worth having in a ledger is the one where the two disagree.
+    currency: str | None = None
+    category_id: int | None = None
 
 
 @dataclass(slots=True, frozen=True)

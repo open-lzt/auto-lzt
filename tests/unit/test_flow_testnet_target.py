@@ -36,6 +36,7 @@ def _deps(*, with_testnet: bool) -> NodeDeps:
     return NodeDeps(
         market=Mock(name="live"),
         guard=Mock(),
+        purchases=Mock(),
         load_account=Mock(),
         list_accounts=Mock(),
         get_client=Mock(),

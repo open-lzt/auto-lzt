@@ -31,6 +31,7 @@ from app.domain.flow_engine.idempotency import DedupGuard
 from app.domain.flow_engine.ir_node import IRInput, IRNode
 from app.domain.flow_engine.model import RunId
 from app.domain.market.service import MarketService
+from app.domain.purchases.repo import PurchaseRepository
 
 if TYPE_CHECKING:
     # Type-only: no domain module besides TokenPool/MarketAdapter imports pylzt at runtime.
@@ -57,6 +58,13 @@ class NodeDeps:
 
     market: MarketService
     guard: DedupGuard
+    purchases: PurchaseRepository
+    """The purchase ledger `fast_buy` appends to once money has actually moved.
+
+    Concrete, not a Protocol: one implementation exists, so an interface here would be a seam with
+    nothing on the other side of it. Inventory only — no credential of a purchased account is
+    fetched or stored anywhere in this system.
+    """
     load_account: Callable[[TenantId, AccountId], Awaitable[Account]]
     list_accounts: Callable[[TenantId], Awaitable[list[Account]]]
     get_client: Callable[[TenantId, AccountId | None], AbstractAsyncContextManager[Client]]
