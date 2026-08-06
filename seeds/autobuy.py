@@ -257,10 +257,19 @@ def _nodes() -> list[NodeSpec]:
 def autobuy_spec(category: SearchableCategory) -> FlowSpec:
     """One sniper, aimed at one category.
 
-    ``testnet`` is on and ``maturity`` is experimental: the filter surface is reflected out of
-    pylzt's signatures, and a signature proves a filter's NAME and TYPE — not that the marketplace
-    narrows anything by it. Until that is checked against the live market, the first run of a
-    shipped template should not be able to spend money.
+    ``testnet`` is on and ``maturity`` is experimental.
+
+    The PLUMBING is verified against the live marketplace (2026-08-06, read-only searches): a
+    control of two identical searches churned zero lots, so set differences mean something; then
+    ``pmin=1000`` returned forty lots all at or above 1000 against a baseline where every lot cost
+    1; ``title=cs`` returned forty of forty titles containing "cs"; ``origin=autoreg`` and
+    ``origin=brute`` returned disjoint pages; and the two combined narrowed forty lots to one.
+    Filters reach the marketplace and the marketplace applies them.
+
+    What is still unverified is each of the other ~1000 filters individually — a signature gives a
+    name and a type, never a guarantee that this particular name narrows anything. Five checked out
+    of 1012 is evidence about the mechanism, not about the surface, so a shipped template still
+    starts unable to spend: aimed at the mock, dry_run on, labelled experimental.
     """
     return FlowSpec(
         name=f"Автобай {label_for(category)} — снайпер",
