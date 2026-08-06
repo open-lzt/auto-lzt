@@ -10,7 +10,6 @@ from typing import Any
 import fakeredis.aioredis
 import pytest
 from arq.connections import ArqRedis
-
 from lzt_eventus.config import EngineConfig
 
 from app.bot.config import BotSettings

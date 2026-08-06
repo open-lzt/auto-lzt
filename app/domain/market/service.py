@@ -157,9 +157,7 @@ class MarketService:
         checked = coerce_filters(category, dict(filters or {}))
         try:
             async with self._pool.lease(tenant_id) as adapter:
-                return await adapter.search_category(
-                    category=category, pmax=pmax, filters=checked
-                )
+                return await adapter.search_category(category=category, pmax=pmax, filters=checked)
         except TokenInvalid as exc:
             if self._excluder is not None:
                 await self._excluder.exclude_account(tenant_id, exc.account_id)
