@@ -139,7 +139,17 @@ class Settings(BaseSettings):
     # means production pylzt behavior is unchanged; set to opt into testnet mode.
     market_base_url: str | None = Field(default=None)
 
-    @field_validator("market_base_url", mode="before")
+    # Where a flow compiled with `testnet=True` sends its marketplace calls. NOT the same knob as
+    # `market_base_url` above: that one redirects the WHOLE deployment, so using it to try an
+    # autobuy safely would also redirect every live automation the operator already runs. This one
+    # is per-flow and leaves the rest on the real market.
+    #
+    # Defaults to lzt-testnet's own documented address, so a shipped testnet template works against
+    # `scripts/run.sh` in that repo without configuration. Nothing connects until a testnet flow
+    # actually runs, and if the mock is not up the failure names this port.
+    market_testnet_base_url: str | None = Field(default="http://127.0.0.1:8765")
+
+    @field_validator("market_base_url", "market_testnet_base_url", mode="before")
     @classmethod
     def _blank_is_unset(cls, value: object) -> object:
         """An empty env var means "not configured", not "configure me with an empty URL".

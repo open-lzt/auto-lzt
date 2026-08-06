@@ -106,6 +106,7 @@ def compile_flow(
         version=flow.version,
         nodes=tuple(ir_nodes),
         entry_node_id=entry_node_id,
+        testnet=flow.spec.testnet,
     )
 
 

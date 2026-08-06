@@ -33,7 +33,7 @@ from app.domain.flow_engine.repo import (
     RunTraceRepository,
 )
 from app.domain.flow_engine.service import FlowService, RunService
-from app.domain.flow_engine.spec import FlowSpec
+from app.domain.flow_engine.spec import FlowMaturity, FlowSpec
 from app.domain.triggers.repo import TriggerRepository
 from app.worker.arq_settings import build_invoke_node_deps
 from app.worker.runtime import execute_run
@@ -66,6 +66,10 @@ class FlowSummary(BaseSchema):
     flow_id: str
     name: str
     compiled: bool
+    # Carried on the SUMMARY, not just the detail: the list is where an operator decides which flow
+    # to open and arm, so a warning that only appears after opening it arrives too late to matter.
+    maturity: FlowMaturity
+    testnet: bool
 
 
 class FlowDetailResponse(BaseSchema):
@@ -169,7 +173,15 @@ async def list_flows(
     summaries = []
     for flow in flows:
         compiled = await svc.is_compiled(tenant_id, flow.id)
-        summaries.append(FlowSummary(flow_id=str(flow.id), name=flow.name, compiled=compiled))
+        summaries.append(
+            FlowSummary(
+                flow_id=str(flow.id),
+                name=flow.name,
+                compiled=compiled,
+                maturity=flow.spec.maturity,
+                testnet=flow.spec.testnet,
+            )
+        )
     return summaries
 
 

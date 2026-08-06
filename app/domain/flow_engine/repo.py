@@ -231,6 +231,7 @@ class FlowIrRepository(BaseSessionmakerRepo[FlowIR, FlowIrId]):
             version=ir.version,
             nodes=[_ir_node_to_json(n) for n in ir.nodes],
             entry_node_id=ir.entry_node_id,
+            testnet=ir.testnet,
             created_at=_now(),
         )
         async with session_scope(self._sm) as session:
@@ -262,6 +263,7 @@ def _flow_ir_from_orm(orm: FlowIrORM) -> FlowIR:
         version=orm.version,
         nodes=tuple(_ir_node_from_json(n) for n in orm.nodes),
         entry_node_id=orm.entry_node_id,
+        testnet=orm.testnet,
     )
 
 

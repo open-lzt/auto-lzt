@@ -61,6 +61,14 @@ class NodeDeps:
     list_accounts: Callable[[TenantId], Awaitable[list[Account]]]
     get_client: Callable[[TenantId, AccountId | None], AbstractAsyncContextManager[Client]]
     http: HttpTransport
+    market_testnet: MarketService | None = None
+    """The same service aimed at the lzt-testnet mock, for flows compiled with ``testnet=True``.
+
+    ``None`` when the deployment has no testnet configured. The runtime then REFUSES to start such a
+    flow rather than falling back to ``market`` — a flow that asked for the mock and silently got
+    the live marketplace would report real purchases as rehearsals. Absent config is a stop, not a
+    default.
+    """
 
 
 @dataclass(slots=True, frozen=True)

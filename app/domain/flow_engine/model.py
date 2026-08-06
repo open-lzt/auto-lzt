@@ -70,6 +70,10 @@ class FlowIR:
     version: int
     nodes: tuple[IRNode, ...]
     entry_node_id: str
+    # Which marketplace this graph talks to. Compiled in rather than read from the flow's spec at
+    # run time: editing a flow mid-run must not move an in-flight run from the mock to the live
+    # market. Defaults false so an IR compiled before this existed keeps aiming at the live market.
+    testnet: bool = False
 
 
 @dataclass(slots=True)
