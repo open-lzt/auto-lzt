@@ -174,12 +174,10 @@ async def test_a_lost_ledger_row_without_a_budget_is_only_bookkeeping() -> None:
 async def test_the_budget_allows_a_purchase_that_lands_exactly_on_it() -> None:
     """`<=`, not `<`: spending the last rouble of the budget is inside it."""
     market, ledger = FakeMarket(), FakePurchases()
-    ctx = build_ctx(
-        _buy_node(item_id=7, dry_run=False, max_price=100, max_price_currency="rub", run_budget=100),
-        market,
-        FakeGuard(),
-        purchases=ledger,
+    node = _buy_node(
+        item_id=7, dry_run=False, max_price=100, max_price_currency="rub", run_budget=100
     )
+    ctx = build_ctx(node, market, FakeGuard(), purchases=ledger)
 
     result = await FastBuyNode().execute(ctx)
 

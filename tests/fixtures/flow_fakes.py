@@ -29,7 +29,6 @@ from app.domain.flow_engine.dtos import StepResultDTO
 from app.domain.flow_engine.events import RunEvent
 from app.domain.flow_engine.idempotency import DedupGuard
 from app.domain.flow_engine.ir_node import IRNode, LiteralValue, PortRef
-from app.domain.flow_engine.repo import _ir_node_from_json, _ir_node_to_json
 from app.domain.flow_engine.model import (
     FlowId,
     FlowIR,
@@ -40,6 +39,7 @@ from app.domain.flow_engine.model import (
     RunStep,
     RunTrace,
 )
+from app.domain.flow_engine.repo import _ir_node_from_json, _ir_node_to_json
 from app.domain.market.categories import SearchableCategory
 from app.domain.market.dtos import (
     BumpResult,
