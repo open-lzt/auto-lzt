@@ -15,11 +15,13 @@ from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
 import pytest
+from pylzt import ClientConfig
 
 import app.domain.account.pool as pool_mod
 from app.domain.account.errors import NoAvailableAccount
 from app.domain.account.model import Account, AccountId, AccountStatus, TenantId
 from app.domain.account.pool import TokenPool
+from app.domain.market.adapter import PURCHASE_TIMEOUT_S
 
 
 class _FakeSession:
@@ -74,7 +76,7 @@ def patched_lztforge(monkeypatch: pytest.MonkeyPatch) -> list[_FakePool]:
         return pool
 
     monkeypatch.setattr(pool_mod, "RoundRobinTokenPool", _make_pool)
-    monkeypatch.setattr(pool_mod, "Client", lambda **kwargs: MagicMock())
+    monkeypatch.setattr(pool_mod, "Client", lambda **kwargs: _fake_client())
     monkeypatch.setattr(
         pool_mod, "Token", lambda token_id, credential: SimpleNamespace(token_id=token_id)
     )
@@ -86,6 +88,11 @@ def _patch_repo(monkeypatch: pytest.MonkeyPatch, accounts: list[Account]) -> Mag
     repo.list = AsyncMock(side_effect=lambda tenant_id: list(accounts))
     monkeypatch.setattr(pool_mod, "AccountRepository", MagicMock(return_value=repo))
     return repo
+
+
+def _fake_client() -> MagicMock:
+    """A stand-in Client whose ``aclose`` can be awaited — `_TenantPool.aclose` closes both."""
+    return MagicMock(aclose=AsyncMock())
 
 
 def _token_pool() -> TokenPool:
@@ -171,7 +178,9 @@ async def test_market_base_url_reaches_pooled_client_config(
     BOTH the market and forum hosts — otherwise a testnet-mode run leaks to real prod-api hosts."""
     captured: list[dict[str, object]] = []
     monkeypatch.setattr(pool_mod, "RoundRobinTokenPool", lambda tokens, **kw: _FakePool(tokens))
-    monkeypatch.setattr(pool_mod, "Client", lambda **kwargs: captured.append(kwargs) or MagicMock())
+    monkeypatch.setattr(
+        pool_mod, "Client", lambda **kwargs: captured.append(kwargs) or _fake_client()
+    )
     monkeypatch.setattr(
         pool_mod, "Token", lambda token_id, credential: SimpleNamespace(token_id=token_id)
     )
@@ -192,19 +201,24 @@ async def test_market_base_url_reaches_pooled_client_config(
     assert config.forum_base_url == testnet
 
 
-async def test_the_pooled_client_does_not_carry_a_purchase_ceiling(
+async def test_only_the_purchase_client_carries_the_purchase_ceiling(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Without a testnet override the pooled Client keeps the real prod hosts and no config at all.
+    """Two Clients over ONE token pool: the read one stock, the purchase one at 120s.
 
-    It used to be born with the 120s that ``fast-buy`` needs, because a shared Client could not be
-    widened for one call. That made every pooled read wait 120s before giving up for the sake of one
-    slow POST. The purchase now carries its own timeout on the request, so this asserts the read
-    side got its default back — see ``test_purchase_timeout.py`` for the other half.
+    A single shared Client at 120s (what this used to be) made every pooled read wait two minutes
+    before giving up for the sake of one slow POST; a single shared Client at the stock 30s bought
+    on a timeout shorter than ``fast-buy`` itself. Both halves are asserted here because fixing
+    either one alone is what produced the other.
+
+    The pool object must be the SAME instance: rate budget, quarantine and proxy stickiness live
+    there, so a second pool would silently give the tenant a second rate allowance.
     """
     captured: list[dict[str, object]] = []
     monkeypatch.setattr(pool_mod, "RoundRobinTokenPool", lambda tokens, **kw: _FakePool(tokens))
-    monkeypatch.setattr(pool_mod, "Client", lambda **kwargs: captured.append(kwargs) or MagicMock())
+    monkeypatch.setattr(
+        pool_mod, "Client", lambda **kwargs: captured.append(kwargs) or _fake_client()
+    )
     monkeypatch.setattr(
         pool_mod, "Token", lambda token_id, credential: SimpleNamespace(token_id=token_id)
     )
@@ -217,8 +231,17 @@ async def test_the_pooled_client_does_not_carry_a_purchase_ceiling(
     async with pool.lease(tenant_id):
         pass
 
-    assert captured[-1].get("config") is None, (
-        "a pooled Client built with a config against prod hosts is the purchase ceiling coming back"
+    assert len(captured) == 2, "expected exactly a read Client and a purchase Client"
+    read, purchase = captured
+    stock = ClientConfig().request_timeout
+    assert read["config"].request_timeout == stock, (  # type: ignore[union-attr]
+        "the pooled READ client carries the purchase ceiling — every read now waits 120s"
+    )
+    assert purchase["config"].request_timeout == PURCHASE_TIMEOUT_S, (  # type: ignore[union-attr]
+        "the purchase client lost its ceiling — fast-buy is back on a timeout shorter than itself"
+    )
+    assert read["token_pool"] is purchase["token_pool"], (
+        "two token pools means two rate budgets and two quarantine sets for one tenant"
     )
 
 

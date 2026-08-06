@@ -49,7 +49,10 @@ class _PricedTransport(BaseTransport):
 
 
 def _adapter(transport: _PricedTransport) -> MarketAdapter:
-    return MarketAdapter(client=Client(transport=transport, token_pool=transport.pool))
+    # One Client in both roles on purpose: these assert the ORDER of check-then-buy on a single
+    # transport. Which client carries the purchase timeout is `test_purchase_timeout.py`'s subject.
+    client = Client(transport=transport, token_pool=transport.pool)
+    return MarketAdapter(client=client, purchase_client=client)
 
 
 async def test_a_lot_repriced_above_the_ceiling_is_declined_and_never_paid() -> None:

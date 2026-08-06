@@ -34,7 +34,10 @@ dependencies = [
     # Marketplace transport SDK + event engine — git sources, see [tool.uv.sources] below.
     # >=0.2.0 for per-call RequestOptions — the pooled purchase path needs a timeout it can set
     # on the request itself, since it does not own the shared Client whose config it would edit.
-    "pylzt>=0.2.0",
+    # 0.2.3 is a floor, not a preference: 0.2.x before it lacks `Forbidden.scope` and still ships
+    # `RequestOptions`, and it parses `purchasing_check` — the price read before money moves — as a
+    # validation error against the live API.
+    "pylzt>=0.2.3",
     "lzt-eventus[engine]",
 ]
 

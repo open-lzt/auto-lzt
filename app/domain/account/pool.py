@@ -30,7 +30,7 @@ from app.domain.account.crypto import EnvelopeCipher
 from app.domain.account.errors import NoAvailableAccount
 from app.domain.account.model import AccountId, AccountStatus, TenantId
 from app.domain.account.repo import AccountRepository
-from app.domain.market.adapter import MarketAdapter
+from app.domain.market.adapter import PURCHASE_TIMEOUT_S, MarketAdapter
 
 log = structlog.get_logger()
 
@@ -39,12 +39,32 @@ log = structlog.get_logger()
 class _TenantPool:
     pool: RoundRobinTokenPool
     client: Client
+    # Same tokens, same pool object, one difference: `request_timeout` is wide enough for
+    # `fast-buy`. Kept apart from `client` so a pooled READ still gives up at the stock timeout
+    # instead of hanging for two minutes on a call that should answer in one second.
+    purchase_client: Client
     token_ids: dict[AccountId, TokenId] = field(default_factory=dict)
     # How many `lease`/`lease_client` blocks are currently inside this entry. The pool may only be
     # closed at zero.
     leases: int = 0
     # Dropped from the cache; waiting for the last lease to leave before aclose().
     retired: bool = False
+
+    async def aclose(self) -> None:
+        """Close both Clients, and with them their httpx connection pools.
+
+        Closing the token pool alone (what this used to do) released nothing that holds a socket —
+        `BaseTokenPool.aclose` is a no-op by default and the sockets live on the Clients'
+        transports, so every retired tenant leaked its connections. `Client.aclose` also closes the
+        token pool; the two calls share one, and a second close of it is that same no-op.
+
+        The pool is then closed here anyway, explicitly. Leaving it to `Client.aclose` would make
+        this entry's central invariant — a retired pool is a closed pool — depend on an internal of
+        pylzt's Client that no test here can see.
+        """
+        await self.client.aclose()
+        await self.purchase_client.aclose()
+        await self.pool.aclose()
 
 
 class TokenPool:
@@ -92,7 +112,7 @@ class TokenPool:
         the reference count cannot see.
         """
         async with self._lease_entry(tenant_id) as entry:
-            yield MarketAdapter(client=entry.client)
+            yield MarketAdapter(client=entry.client, purchase_client=entry.purchase_client)
 
     @asynccontextmanager
     async def lease_client(self, tenant_id: TenantId) -> AsyncIterator[Client]:
@@ -111,7 +131,7 @@ class TokenPool:
                 entry.leases -= 1
                 closeable = entry.retired and entry.leases == 0
             if closeable:
-                await entry.pool.aclose()
+                await entry.aclose()
                 self._drop_lock_if_idle(tenant_id)
 
     async def invalidate(self, tenant_id: TenantId) -> None:
@@ -126,7 +146,7 @@ class TokenPool:
             entry.retired = True
             closeable = entry.leases == 0
         if closeable:
-            await entry.pool.aclose()
+            await entry.aclose()
             self._drop_lock_if_idle(tenant_id)
 
     def _drop_lock_if_idle(self, tenant_id: TenantId) -> None:
@@ -193,24 +213,34 @@ class TokenPool:
             if account.status is AccountStatus.EXCLUDED:
                 pool.quarantine(token_ids[account.id])
 
-        # No purchase timeout here. This Client used to be born with the 120s `fast-buy` needs,
-        # because a shared Client could not be widened for one call — which handed every pooled
-        # read the same 120s before it would give up. `MarketAdapter.fast_buy` now carries that
-        # timeout on the request itself, so the slow call gets it and nothing else does.
+        # Two Clients over ONE pool. The read Client keeps the stock timeout; the purchase Client
+        # gets the 120s `fast-buy` needs (see `PURCHASE_TIMEOUT_S` — a timeout shorter than the
+        # operation reports failure for money that already moved). pylzt dropped per-request
+        # options after 0.2.0, so the timeout can only live on a client's config, and widening the
+        # shared one would make every pooled read wait two minutes before giving up.
+        #
+        # Sharing `pool` is what keeps this one account rather than two: rate budget, quarantine
+        # and proxy stickiness all live on the token pool, not on the Client.
         #
         # Testnet override must reach the POOLED worker path too — otherwise a run scheduled with
         # LZT_FLOW_MARKET_BASE_URL set still hits real prod-api.lzt.market. Both market and forum
         # hosts are redirected so forum-scoped methods don't leak past the mock either.
-        config = (
-            ClientConfig(base_url=self._market_base_url, forum_base_url=self._market_base_url)
-            if self._market_base_url is not None
-            else None
+        stock = ClientConfig()
+        config = ClientConfig(
+            base_url=self._market_base_url or stock.base_url,
+            forum_base_url=self._market_base_url or stock.forum_base_url,
         )
         client = Client(token_pool=pool, config=config)
+        purchase_client = Client(
+            token_pool=pool,
+            config=config.model_copy(update={"request_timeout": PURCHASE_TIMEOUT_S}),
+        )
         log.info(
             "token_pool_built",
             tenant_id=str(tenant_id),
             active=sum(a.status is AccountStatus.ACTIVE for a in accounts),
             excluded=sum(a.status is AccountStatus.EXCLUDED for a in accounts),
         )
-        return _TenantPool(pool=pool, client=client, token_ids=token_ids)
+        return _TenantPool(
+            pool=pool, client=client, purchase_client=purchase_client, token_ids=token_ids
+        )

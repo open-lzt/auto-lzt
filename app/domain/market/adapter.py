@@ -26,7 +26,6 @@ import structlog
 from pydantic import ValidationError
 from pylzt import AuthFailed, Client, ClientConfig, Forbidden, RateLimited, TransportError
 from pylzt.errors import LztError
-from pylzt.transport.base import RequestOptions
 from pylzt.types import Currency, ItemOrigin, OrderBy
 
 from app.domain.account.model import AccountId
@@ -81,11 +80,11 @@ def _plausible_currency(raw: str, *, user_id: int) -> str:
 # was already ours and came back Forbidden, and the run reported failure for money that had moved.
 # A timeout shorter than the operation is worse than no timeout on a non-idempotent POST.
 PURCHASE_TIMEOUT_S = 120.0
-# Carried on the request, not on the client's config. The pooled path is handed a shared Client it
-# does not own, so it has no config of its own to widen — and widening the shared one would hand
-# every pooled read the same 120s ceiling, which is the wrong number for everything but a purchase.
-# pylzt 0.2.0 takes the timeout per call, so both paths get it without anyone owning a client.
-_PURCHASE_OPTIONS: Final = RequestOptions(timeout=PURCHASE_TIMEOUT_S)
+# Carried by a SECOND Client, not by the request and not by the shared one. pylzt dropped
+# per-request options after 0.2.0, so `ClientConfig.request_timeout` is the only place a timeout
+# can now live — and widening the shared pooled Client would hand every pooled read the same 120s
+# ceiling, which is the wrong number for everything but a purchase. So the slow call runs on its
+# own Client built over the SAME token pool: one rate budget, one quarantine set, two socket pools.
 
 
 async def _declining[T](item_id: int, call: Awaitable[T]) -> T:
@@ -108,7 +107,11 @@ async def _declining[T](item_id: int, call: Awaitable[T]) -> T:
         # 403 is the marketplace declining THIS lot, not rejecting us: already queued by another
         # buyer, already sold, or not purchasable by this account. On cheap lots that is the
         # normal case, not the exception.
-        raise LotUnavailable(item_id, exc.reason or "") from exc
+        # pylzt renamed the payload after 0.2.0: `Forbidden.reason` (free text) became
+        # `Forbidden.scope` (the OAuth scope the token lacks). They are not the same fact, so this
+        # says which one it is rather than passing a scope name off as an explanation.
+        detail = f" (нет доступа: {exc.scope})" if exc.scope else ""
+        raise LotUnavailable(item_id, f"маркет отказал в лоте{detail}") from exc
     except LztError as exc:
         raise LotUnavailable(item_id, f"маркет отказал: {exc.code.value}") from exc
 
@@ -122,11 +125,18 @@ class MarketAdapter:
         *,
         token: str | None = None,
         client: Client | None = None,
+        purchase_client: Client | None = None,
         account_id: AccountId | None = None,
         base_url: str | None = None,
     ) -> None:
         if token is None and client is None:
             raise ValueError("MarketAdapter needs either a token or a pooled client")
+        if client is not None and purchase_client is None:
+            raise ValueError(
+                "a pooled MarketAdapter needs a purchase_client too — without it fast_buy would "
+                f"run on the shared {ClientConfig().request_timeout}s client and give up on a "
+                "purchase the marketplace is still completing"
+            )
         if client is not None and base_url is not None:
             logger.warning(
                 "market_adapter_base_url_ignored",
@@ -134,6 +144,7 @@ class MarketAdapter:
             )
         self._token = token
         self._client = client
+        self._purchase_client = purchase_client
         self._account_id = account_id
         self._base_url = base_url
 
@@ -262,10 +273,9 @@ class MarketAdapter:
             response = await self._call(
                 lambda client: _declining(
                     item_id,
-                    client.market.purchasing_fast_buy(
-                        item_id=item_id, price=pinned_price, request_options=_PURCHASE_OPTIONS
-                    ),
+                    client.market.purchasing_fast_buy(item_id=item_id, price=pinned_price),
                 ),
+                slow=True,
             )
         except (httpx.TimeoutException, TimeoutError) as exc:
             # httpx errors are not part of pylzt's typed tree, so this one escaped every handler
@@ -397,19 +407,27 @@ class MarketAdapter:
             has_next_page=response.hasNextPage,
         )
 
-    async def _call[T](self, op: Callable[[Client], Awaitable[T]]) -> T:
+    async def _call[T](self, op: Callable[[Client], Awaitable[T]], *, slow: bool = False) -> T:
+        """Run ``op`` on this adapter's client. ``slow`` selects the one built for `fast-buy`.
+
+        Not a strategy object: there is exactly ONE slow operation in the whole adapter, so a
+        keyword and a field say it in two lines where a layer would take a file.
+        """
         if self._token is not None:
-            config = (
-                ClientConfig(base_url=self._base_url, forum_base_url=self._base_url)
-                if self._base_url is not None
-                else None
+            # The pinned path already builds a Client per call, so the wider timeout costs it
+            # nothing — no second object, just a different number in the config it was making.
+            stock = ClientConfig()
+            config = ClientConfig(
+                base_url=self._base_url or stock.base_url,
+                forum_base_url=self._base_url or stock.forum_base_url,
+                request_timeout=PURCHASE_TIMEOUT_S if slow else stock.request_timeout,
             )
             async with Client([self._token], config=config) as client:
                 return await self._call_with(client, op)
-        # No per-call override on the pooled path: the Client is shared and already built. TokenPool
-        # constructs it with PURCHASE_TIMEOUT_S for exactly this reason, so the number a caller asks
-        # for here is the number it already has.
         assert self._client is not None  # guaranteed by __init__
+        if slow:
+            assert self._purchase_client is not None  # guaranteed by __init__
+            return await self._call_with(self._purchase_client, op)
         return await self._call_with(self._client, op)
 
     async def _call_with[T](self, client: Client, op: Callable[[Client], Awaitable[T]]) -> T:
