@@ -60,7 +60,12 @@ class PurchaseRepository(BaseSessionmakerRepo[Purchase, PurchaseId]):
         except IntegrityError as exc:
             # Only the duplicate is normal. Any other constraint means the row was NOT written, and
             # reporting that as "already recorded" would lose a purchase that really happened.
-            if "uq_purchases_tenant_item" not in str(exc.orig):
+            #
+            # Matched on the KIND of violation, not on the constraint's name: Postgres names it
+            # ("...violates unique constraint \"uq_purchases_tenant_item\"") and SQLite does not
+            # ("UNIQUE constraint failed: purchases.tenant_id, purchases.item_id"), so a name test
+            # passes in production and turns every replayed step into a failure under tests.
+            if "unique" not in str(exc.orig).lower():
                 raise
             return False
         return True
@@ -83,9 +88,12 @@ class PurchaseRepository(BaseSessionmakerRepo[Purchase, PurchaseId]):
                 )
             )
             paid = rows.all()
-        currencies = {c for _, c in paid if c is not None}
+        # A row whose currency the marketplace never named counts as its own kind, not as "skip
+        # it": dropping it from the set while leaving its price in the sum is exactly the addition
+        # this method exists to refuse. All-unknown still sums — that is one currency, unnamed.
+        currencies = {c for _, c in paid}
         if len(currencies) > 1:
-            raise MixedCurrencySpend(run_id, tuple(sorted(currencies)))
+            raise MixedCurrencySpend(run_id, tuple(sorted(c or "?" for c in currencies)))
         return sum((price for price, _ in paid), Decimal(0))
 
     async def list(self, tenant_id: TenantId, *, limit: int = 100) -> list[Purchase]:

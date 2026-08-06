@@ -29,6 +29,7 @@ from app.domain.flow_engine.dtos import StepResultDTO
 from app.domain.flow_engine.events import RunEvent
 from app.domain.flow_engine.idempotency import DedupGuard
 from app.domain.flow_engine.ir_node import IRNode, LiteralValue, PortRef
+from app.domain.flow_engine.repo import _ir_node_from_json, _ir_node_to_json
 from app.domain.flow_engine.model import (
     FlowId,
     FlowIR,
@@ -346,8 +347,21 @@ class FakeEventTransport:
 
 
 class FakeFlowIrStore:
-    def __init__(self, ir: FlowIR) -> None:
-        self._ir = ir
+    """The compiled IR the worker reads back.
+
+    ``persisted=True`` puts every node through the real serialiser first, which is the only way a
+    test sees what the worker actually gets. Handing back the in-memory object hides an entire
+    class of defect: `stop_condition`, `timeout_s` and `children` were compiled, asserted by unit
+    tests, and dropped on the way to Postgres — every integration test here passed throughout,
+    because none of them ever crossed that boundary.
+    """
+
+    def __init__(self, ir: FlowIR, *, persisted: bool = False) -> None:
+        self._ir = (
+            replace(ir, nodes=tuple(_ir_node_from_json(_ir_node_to_json(n)) for n in ir.nodes))
+            if persisted
+            else ir
+        )
 
     async def get(self, flow_ir_id: FlowIrId) -> FlowIR | None:
         return self._ir if flow_ir_id == self._ir.id else None
