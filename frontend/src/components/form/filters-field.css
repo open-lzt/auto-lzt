@@ -1,0 +1,119 @@
+.filters {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.filters__note {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-faint);
+}
+
+.filters__error {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--danger);
+}
+
+/* Two columns of short controls rather than one long stack: 123 filters in a single column is a
+   scroll, not a form. Collapses to one column below the panel's comfortable width. */
+.filters__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 10px 16px;
+}
+
+.filters__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+}
+
+.filters__name {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+/* Air, not a border: the disclosure separates the curated head from the long tail by spacing and
+   weight rather than by drawing a box around either. */
+.filters__disclosure {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  align-self: flex-start;
+  margin-top: 4px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: color 120ms ease;
+}
+
+.filters__disclosure:hover {
+  color: var(--text);
+}
+
+.filters__disclosure:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: var(--radius-sm);
+}
+
+/* The count of filters set inside the collapsed section — without it, closing the disclosure hides
+   the fact that the search is still narrowed by them. */
+.filters__badge {
+  min-width: 18px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.filters__raw {
+  width: 100%;
+  min-height: 140px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--text);
+  font-family: var(--lzt-font-mono, ui-monospace, monospace);
+  font-size: 12px;
+  line-height: 1.6;
+  resize: vertical;
+}
+
+.filters__raw:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.filters__mode {
+  align-self: flex-start;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-faint);
+  font-size: 12px;
+  cursor: pointer;
+  transition: color 120ms ease;
+}
+
+.filters__mode:hover {
+  color: var(--text-muted);
+}
+
+.filters__mode:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: var(--radius-sm);
+}

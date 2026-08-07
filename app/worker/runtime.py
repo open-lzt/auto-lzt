@@ -56,6 +56,7 @@ import contextlib
 import json
 import time
 from collections.abc import Callable, Mapping
+from dataclasses import replace
 from datetime import UTC, datetime
 from typing import Protocol
 from uuid import UUID, uuid4
@@ -307,6 +308,29 @@ class _AbortRun(Exception):
 _DEFAULT_MAX_STEPS_PER_RUN = 10_000
 
 
+def _deps_for_target_market(ir: FlowIR, node_deps: NodeDeps, run_id: RunId) -> NodeDeps:
+    """Point this run's market calls at the mock when the graph was compiled ``testnet=True``.
+
+    Swapped once per run, here, rather than threaded as a flag through every market method: which
+    marketplace to talk to is a property of the run, and a per-call flag is a per-call chance to
+    forget one. The nodes stay unaware — they call ``ctx.deps.market`` either way.
+
+    Missing testnet configuration FAILS the run. The tempting fallback (use the live service) would
+    take a flow whose whole point is "do not touch the real market" and point it at the real market,
+    while the run log kept saying testnet.
+    """
+    if not ir.testnet:
+        return node_deps
+    if node_deps.market_testnet is None:
+        raise RunFailed(
+            run_id,
+            "load",
+            "flow is compiled for the testnet but no testnet market is configured "
+            "(set market_testnet_base_url)",
+        )
+    return replace(node_deps, market=node_deps.market_testnet)
+
+
 async def execute_run(
     run_id: RunId,
     *,
@@ -335,6 +359,7 @@ async def execute_run(
     if ir is None:
         raise RunFailed(run_id, "load", "flow_ir not found")
     nodes_by_id = {n.id: n for n in ir.nodes}
+    node_deps = _deps_for_target_market(ir, node_deps, run_id)
 
     results: dict[str, StepResultDTO] = {}
     entry = run.current_node_id or ir.entry_node_id

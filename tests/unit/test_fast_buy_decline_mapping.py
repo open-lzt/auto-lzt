@@ -57,7 +57,10 @@ class _StatusTransport(BaseTransport):
 
 
 def _adapter(transport: _StatusTransport) -> MarketAdapter:
-    return MarketAdapter(client=Client(transport=transport, token_pool=transport.pool))
+    # One Client in both roles on purpose: these assert the ORDER of check-then-buy on a single
+    # transport. Which client carries the purchase timeout is `test_purchase_timeout.py`'s subject.
+    client = Client(transport=transport, token_pool=transport.pool)
+    return MarketAdapter(client=client, purchase_client=client)
 
 
 @pytest.mark.parametrize("status", [400, 404])

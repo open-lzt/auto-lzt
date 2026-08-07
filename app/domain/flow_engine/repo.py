@@ -28,7 +28,16 @@ from app.db.models import (
 from app.domain.account.model import AccountId, TenantId
 from app.domain.flow_engine.dtos import StepResultDTO
 from app.domain.flow_engine.errors import DuplicatePresetFlow
-from app.domain.flow_engine.ir_node import EnvRef, IRNode, LiteralValue, PortRef
+from app.domain.flow_engine.ir_node import (
+    EnvRef,
+    FieldSegment,
+    IndexSegment,
+    IRNode,
+    LiteralValue,
+    PathSegment,
+    PortRef,
+    StopCondition,
+)
 from app.domain.flow_engine.model import (
     Flow,
     FlowId,
@@ -55,9 +64,26 @@ def _rowcount(result: Result[Any]) -> int:
     return cast("CursorResult[Any]", result).rowcount
 
 
+def _segment_to_json(segment: PathSegment) -> dict[str, Any]:
+    if isinstance(segment, FieldSegment):
+        return {"kind": "field", "name": segment.name}
+    return {"kind": "index", "index": segment.index}
+
+
+def _segment_from_json(data: dict[str, Any]) -> PathSegment:
+    if data["kind"] == "field":
+        return FieldSegment(name=data["name"])
+    return IndexSegment(index=data["index"])
+
+
 def _input_to_json(value: PortRef | LiteralValue | EnvRef) -> dict[str, Any]:
     if isinstance(value, PortRef):
-        return {"kind": "ref", "node_id": value.node_id, "port": value.port}
+        return {
+            "kind": "ref",
+            "node_id": value.node_id,
+            "port": value.port,
+            "path": [_segment_to_json(segment) for segment in value.path],
+        }
     if isinstance(value, EnvRef):
         # Name only — the secret value is never resolved at compile time, so it is never here to
         # persist; a leaked FlowIR export carries the name, never the credential.
@@ -67,13 +93,49 @@ def _input_to_json(value: PortRef | LiteralValue | EnvRef) -> dict[str, Any]:
 
 def _input_from_json(data: dict[str, Any]) -> PortRef | LiteralValue | EnvRef:
     if data["kind"] == "ref":
-        return PortRef(node_id=data["node_id"], port=data["port"])
+        # Rows written before F-13 carry no "path" key at all — an absent path is an empty one.
+        return PortRef(
+            node_id=data["node_id"],
+            port=data["port"],
+            path=tuple(_segment_from_json(segment) for segment in data.get("path", ())),
+        )
     if data["kind"] == "env":
         return EnvRef(name=data["name"])
     return LiteralValue(value=data["value"])
 
 
+def _stop_condition_to_json(sc: StopCondition | None) -> dict[str, Any] | None:
+    if sc is None:
+        return None
+    return {
+        "output_key": sc.output_key,
+        "equals": sc.equals,
+        "action": sc.action,
+        "goto_node_id": sc.goto_node_id,
+    }
+
+
+def _stop_condition_from_json(data: dict[str, Any] | None) -> StopCondition | None:
+    if data is None:
+        return None
+    return StopCondition(
+        output_key=data["output_key"],
+        equals=data["equals"],
+        action=data["action"],
+        goto_node_id=data.get("goto_node_id"),
+    )
+
+
 def _ir_node_to_json(node: IRNode) -> dict[str, Any]:
+    """EVERY field of IRNode, and a test asserts that by enumerating the dataclass.
+
+    Three of them were missing here — `timeout_s`, `stop_condition` and `children`. The compiler
+    built them, unit tests that never touched the database saw them, and they vanished on the way
+    to Postgres. So a node's timeout, its early-stop policy and a batch node's children were
+    silently absent at run time, and the only symptom was behaviour that did not happen: a live
+    autobuy walked all forty candidates because the abort it compiled was not in the row the
+    worker read back.
+    """
     return {
         "id": node.id,
         "type": node.type,
@@ -81,11 +143,19 @@ def _ir_node_to_json(node: IRNode) -> dict[str, Any]:
         "account_ref": str(node.account_ref) if node.account_ref else None,
         "edges": node.edges,
         "on_error": node.on_error,
+        "timeout_s": node.timeout_s,
+        "stop_condition": _stop_condition_to_json(node.stop_condition),
+        "children": (
+            [_ir_node_to_json(child) for child in node.children]
+            if node.children is not None
+            else None
+        ),
     }
 
 
 def _ir_node_from_json(data: dict[str, Any]) -> IRNode:
     ref = data["account_ref"]
+    children = data.get("children")
     return IRNode(
         id=data["id"],
         type=data["type"],
@@ -93,6 +163,11 @@ def _ir_node_from_json(data: dict[str, Any]) -> IRNode:
         account_ref=AccountId(UUID(ref)) if ref else None,
         edges=dict(data["edges"]),
         on_error=data["on_error"],
+        # `.get`, not `[...]`: rows written before this fix have none of these keys, and a row
+        # that cannot be read at all is worse than one that reads back as the old behaviour.
+        timeout_s=data.get("timeout_s"),
+        stop_condition=_stop_condition_from_json(data.get("stop_condition")),
+        children=tuple(_ir_node_from_json(c) for c in children) if children is not None else None,
     )
 
 
@@ -231,6 +306,7 @@ class FlowIrRepository(BaseSessionmakerRepo[FlowIR, FlowIrId]):
             version=ir.version,
             nodes=[_ir_node_to_json(n) for n in ir.nodes],
             entry_node_id=ir.entry_node_id,
+            testnet=ir.testnet,
             created_at=_now(),
         )
         async with session_scope(self._sm) as session:
@@ -262,6 +338,7 @@ def _flow_ir_from_orm(orm: FlowIrORM) -> FlowIR:
         version=orm.version,
         nodes=tuple(_ir_node_from_json(n) for n in orm.nodes),
         entry_node_id=orm.entry_node_id,
+        testnet=orm.testnet,
     )
 
 

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+
 from pylzt.types import Currency, ItemOrigin
 
 from app.domain.account.crypto import EnvelopeCipher
@@ -21,6 +23,7 @@ from app.domain.market.dtos import (
     ThreadRef,
 )
 from app.domain.market.errors import TokenInvalid
+from app.domain.market.filters import coerce_filters
 
 
 class MarketService:
@@ -122,22 +125,39 @@ class MarketService:
         )
 
     async def search_category(
-        self, account: Account, *, category: SearchableCategory, pmax: float
+        self,
+        account: Account,
+        *,
+        category: SearchableCategory,
+        pmax: float,
+        filters: Mapping[str, object] | None = None,
     ) -> SearchResult:
-        """Search one market category on behalf of one explicit account."""
+        """Search one market category on behalf of one explicit account.
+
+        ``filters`` is coerced HERE, not at the node, so both entry points (pinned and pooled) get
+        the same validation and neither can forward an unchecked mapping to the marketplace.
+        """
         token = self._cipher.decrypt(account.encrypted_token, account.tenant_id)
         adapter = MarketAdapter(token=token, account_id=account.id, base_url=self._market_base_url)
-        return await adapter.search_category(category=category, pmax=pmax)
+        return await adapter.search_category(
+            category=category, pmax=pmax, filters=coerce_filters(category, dict(filters or {}))
+        )
 
     async def search_category_via_pool(
-        self, tenant_id: TenantId, *, category: SearchableCategory, pmax: float
+        self,
+        tenant_id: TenantId,
+        *,
+        category: SearchableCategory,
+        pmax: float,
+        filters: Mapping[str, object] | None = None,
     ) -> SearchResult:
         """Search using the tenant's pooled Client — a read, so any token in the pool will do."""
         if self._pool is None:
             raise RuntimeError("MarketService.search_category_via_pool requires a TokenPool")
+        checked = coerce_filters(category, dict(filters or {}))
         try:
             async with self._pool.lease(tenant_id) as adapter:
-                return await adapter.search_category(category=category, pmax=pmax)
+                return await adapter.search_category(category=category, pmax=pmax, filters=checked)
         except TokenInvalid as exc:
             if self._excluder is not None:
                 await self._excluder.exclude_account(tenant_id, exc.account_id)

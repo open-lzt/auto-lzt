@@ -7,8 +7,7 @@ import json
 import pytest
 
 from app.domain.catalog.nodes.search import SearchNode, _as_category
-from app.domain.market.adapter import _CATEGORY_METHODS
-from app.domain.market.categories import SearchableCategory
+from app.domain.market.categories import CATEGORY_METHODS, SearchableCategory
 from app.domain.market.dtos import SearchHit
 from tests.fixtures.flow_fakes import FakeGuard, FakeMarket, build_ctx, build_node
 
@@ -88,9 +87,9 @@ def test_every_searchable_category_resolves_to_a_real_facade_method() -> None:
     """
     from pylzt.facades.market import GeneratedMarketFacade
 
-    assert set(_CATEGORY_METHODS) == set(SearchableCategory)
+    assert set(CATEGORY_METHODS) == set(SearchableCategory)
 
-    for category, accessor in _CATEGORY_METHODS.items():
+    for category, accessor in CATEGORY_METHODS.items():
         probe = _MethodNameProbe()
         accessor(probe)  # type: ignore[arg-type]  # duck-typed stand-in for a pylzt Client
         assert hasattr(GeneratedMarketFacade, probe.name), (

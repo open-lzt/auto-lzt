@@ -34,6 +34,22 @@ class ParamControl(StrEnum):
     TEXTAREA = "textarea"
 
 
+class FlowMaturity(StrEnum):
+    """How much this flow has been proven. Declared, not inferred — nothing measures it.
+
+    ``EXPERIMENTAL`` is a claim the flow's author makes about the flow, and the UI is expected to
+    show it next to the name. It is deliberately NOT a gate: an experimental flow still runs, still
+    accepts ``dry_run=false``, and is still the operator's to trust. The alternative — blocking real
+    purchases on a maturity label — would push people to relabel rather than to test.
+
+    The autobuy templates ship ``EXPERIMENTAL`` because their filter surface is reflected out of
+    pylzt and has not been exercised against the live marketplace filter-by-filter.
+    """
+
+    STABLE = "stable"
+    EXPERIMENTAL = "experimental"
+
+
 class ParamOption(BaseSchema):
     """One choice in a ``select``/``radio``/``multiselect`` parameter."""
 
@@ -138,6 +154,14 @@ class FlowSpec(BaseSchema):
     nodes: list[NodeSpec] = Field(min_length=1)
     entry_node_id: str = Field(min_length=1)
     params: list[ParamSpec] = Field(default_factory=list)
+    # Defaults to STABLE so every flow written before this field existed keeps its meaning: the
+    # spec is stored as a JSON blob, so an absent key must not change how an existing flow reads.
+    maturity: FlowMaturity = FlowMaturity.STABLE
+    # Point every marketplace call at the lzt-testnet mock instead of the live market. Not the same
+    # thing as a node's `dry_run`: dry_run stops the purchase, this also makes the SEARCH fake, so a
+    # template can be watched end-to-end on lots that exist rather than stalling on an empty result.
+    # False by default — a flow says "mock me", never the other way round.
+    testnet: bool = False
 
     @field_validator("params")
     @classmethod

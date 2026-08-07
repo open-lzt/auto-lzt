@@ -111,11 +111,24 @@ def build_dryrun_deps() -> NodeDeps:
     return NodeDeps(
         market=_DryRunMarket(),  # type: ignore[arg-type]
         guard=_AlwaysFreshGuard(),
+        purchases=_DryRunPurchases(),  # type: ignore[arg-type]
         load_account=load_account,
         list_accounts=list_accounts,
         get_client=get_client,  # type: ignore[arg-type]
         http=_DryRunHttp(),
     )
+
+
+class _DryRunPurchases:
+    """Unreachable by construction, and says so if that ever stops being true.
+
+    `fast_buy` appends to the ledger only when a purchase actually completed, and a dry run
+    short-circuits before the marketplace call — so nothing here can be called without a defect
+    upstream. A ledger row written by a rehearsal would read as real money spent.
+    """
+
+    async def record(self, purchase: object) -> bool:
+        raise DryRunFailed("fast_buy", "a dry run recorded a purchase — nothing was bought")
 
 
 class _AlwaysFreshGuard(DedupGuard):

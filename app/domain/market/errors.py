@@ -22,6 +22,36 @@ class MarketApiError(AppError):
         return "Upstream marketplace error"
 
 
+class MarketResponseUnparseable(AppError):
+    """The marketplace answered fine; OUR model of that answer is wrong.
+
+    Not a ``MarketApiError``, and deliberately not a 502. A 502 says "the upstream gave a bad
+    response" and sends whoever is on call to check whether lzt.market is down — and it is not:
+    it answered 200 with a valid body. The defect is on this side, in a generated model that
+    disagrees with the live API, so the status says 500 and the message names the fields.
+
+    Measured 2026-08-06: ``profile_get`` surfaced as a bare ``market api error: status=502`` with
+    no field named anywhere. The cause (``convertedBalance`` declared int, sent 1926.63; three
+    object fields sent as ``[]``) was only visible by reading a traceback. Four failures, three
+    digits, zero names.
+
+    ``mismatches`` carries field + error kind + the type that ARRIVED — never the value, which can
+    hold account data.
+    """
+
+    status_code = 500
+    code = ErrorCode.MARKET_API_ERROR
+
+    def __init__(self, operation: str, mismatches: tuple[str, ...]) -> None:
+        super().__init__(f"cannot parse the {operation} response: {'; '.join(mismatches)}")
+        self.operation = operation
+        self.mismatches = mismatches
+
+    @property
+    def client_message(self) -> str:
+        return "Marketplace answered in a shape this build cannot read"
+
+
 class PurchaseOutcomeUnknown(AppError):
     """A purchase timed out. It may have gone through — treat it as money possibly spent.
 

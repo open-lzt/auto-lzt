@@ -229,3 +229,71 @@ async def test_max_steps_per_run_backstops_a_self_loop() -> None:
             worker_id="w1",
             max_steps_per_run=50,
         )
+
+
+async def test_an_abort_still_fires_after_the_ir_has_been_stored() -> None:
+    """The gap the live defect fell through, and the reason it cost real money.
+
+    Every test above hands the runtime the IR the compiler built. The worker does not: it reads a
+    row back from Postgres. `stop_condition` was never written to that row, so the abort existed in
+    the compiler, in every unit test, in the flow spec — and nowhere the worker could see it. An
+    autobuy with a budget for three lots bought its three and then walked all forty candidates.
+
+    Same scenario as `test_stop_condition_abort_completes_run_early`, one boundary further: without
+    the abort the run walks into `unreachable` and fails, so a lost condition is a red test here.
+    """
+    node = IRNode(
+        id="bump1",
+        type="market.bump",
+        inputs={"item_id": LiteralValue(value=1)},
+        account_ref=None,
+        edges={"next": "unreachable"},
+        on_error=None,
+        stop_condition=StopCondition(output_key="item_id", equals=1, action="abort"),
+    )
+    ir = _single_node_ir(node)
+    run = build_run(ir)
+    runs, steps = FakeRunRepo(), FakeRunStepRepo()
+    flows = FakeFlowIrStore(ir, persisted=True)
+    await runs.create_if_absent(run)
+
+    status = await execute_run(
+        run.id,
+        runs=runs,
+        steps=steps,
+        flows=flows,
+        registry={"market.bump": BumpNode},
+        node_deps=build_node_deps(FakeMarket(), FakeGuard()),
+        worker_id="w1",
+    )
+
+    assert status is RunStatus.COMPLETED
+
+
+async def test_a_node_timeout_still_applies_after_the_ir_has_been_stored() -> None:
+    """The second field the serialiser dropped: a timeout nobody applied and nobody missed."""
+    node = IRNode(
+        id="sleepy",
+        type="test.sleep",
+        inputs={},
+        account_ref=None,
+        edges={},
+        on_error=None,
+        timeout_s=1,
+    )
+    ir = _single_node_ir(node)
+    run = build_run(ir)
+    runs, steps = FakeRunRepo(), FakeRunStepRepo()
+    flows = FakeFlowIrStore(ir, persisted=True)
+    await runs.create_if_absent(run)
+
+    with pytest.raises(RunFailed):
+        await execute_run(
+            run.id,
+            runs=runs,
+            steps=steps,
+            flows=flows,
+            registry={"test.sleep": _SleepyNode},
+            node_deps=build_node_deps(FakeMarket(), FakeGuard()),
+            worker_id="w1",
+        )

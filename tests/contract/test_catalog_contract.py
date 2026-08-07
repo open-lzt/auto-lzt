@@ -16,7 +16,7 @@ from contextlib import asynccontextmanager
 import pytest
 import respx
 from httpx import Response
-from pylzt.models.market import ListUserItem, ListUserResponse, StatusItemResponse
+from pylzt.models.market import ListUserItem, ListUserResponse, MarketStatusItemResponse
 from pylzt.types import Currency, ItemOrigin
 
 from app.domain.market.adapter import MarketAdapter
@@ -49,7 +49,7 @@ async def test_reprice_output_matches_status_message_response() -> None:
 
 async def test_relist_output_matches_status_item_response() -> None:
     item = minimal_instance(ListUserItem).model_copy(update={"item_id": 777})
-    body = StatusItemResponse[ListUserItem](status="ok", item=item).model_dump(mode="json")
+    body = MarketStatusItemResponse[ListUserItem](status="ok", item=item).model_dump(mode="json")
 
     async with _mock(("POST", "/item/add", body)):
         result = await MarketAdapter(token="tok").publish(

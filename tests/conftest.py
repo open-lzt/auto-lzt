@@ -10,9 +10,27 @@ from typing import Any
 import fakeredis.aioredis
 import pytest
 from arq.connections import ArqRedis
+from lzt_eventus.config import EngineConfig
+
+from app.bot.config import BotSettings
+from app.core.config import Settings
 
 # Every non-live test runs against the respx double, never a live token.
 pytest_plugins = ["tests.fixtures.mock_lzt_server", "tests.fixtures.pg"]
+
+# The suite never reads a developer's `.env`. Done at import time, not in a fixture: the settings
+# sources are built while OTHER fixtures set up, and a function-scoped autouse fixture is not
+# guaranteed to run first — patching there fixed some of the failures and not the rest.
+#
+# Why it matters: a `.env` written to run the local Docker stand turned 10 bot and event-router
+# tests red without a line of source changing. A suite whose verdict depends on an untracked local
+# file is untrustworthy in both directions — it can equally stay green over a real defect because
+# the local file happened to paper over it. CI never saw any of this; CI has no `.env`.
+#
+# EngineConfig is lzt-eventus's own surface, not ours, and it reads the SAME file under a different
+# prefix — so it has to be listed here too or the isolation is only two-thirds done.
+for _settings_cls in (Settings, BotSettings, EngineConfig):
+    _settings_cls.model_config["env_file"] = None
 
 
 @pytest.fixture(autouse=True)
@@ -48,7 +66,14 @@ def _fake_redis(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
 
 @pytest.fixture(autouse=True)
 def _test_env(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
-    """A deterministic master key so the crypto path works in tests."""
+    """A deterministic master key so the crypto path works in tests — and no `.env` at all.
+
+    Both settings classes declare ``env_file=".env"``, so on a machine that has one the suite reads
+    the developer's local stack config: a `.env` written to run the Docker stand turned 10 bot and
+    event-router tests red without a line of source changing. A suite whose result depends on an
+    untracked file cannot be trusted in either direction — it can also stay green on a defect
+    because the local file happened to paper over it. CI never noticed because CI has no `.env`.
+    """
     key = base64.urlsafe_b64encode(b"0" * 32).decode()
     monkeypatch.setenv("LZT_FLOW_MASTER_KEY", key)
     monkeypatch.setenv("LZT_FLOW_ALLOW_UNAUTHENTICATED", "1")

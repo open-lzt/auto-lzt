@@ -29,9 +29,9 @@ class TakeInput(BaseSchema):
         json_schema_extra={"x-ui": {"widget": "text"}},
     )
     count: int = Field(
-        ge=1,
+        ge=0,
         title="Сколько взять",
-        description="Сколько первых элементов оставить.",
+        description="Сколько первых элементов оставить. Ноль — не брать ничего.",
         json_schema_extra={"x-ui": {"widget": "number"}},
     )
 
@@ -49,6 +49,28 @@ class TakeOutput(BaseSchema):
     # True when the input was longer than the cap. The preset does not branch on it, but a flow that
     # wants to notify "N lots were skipped this fire" has no other way to know it happened.
     truncated: bool
+
+
+def _as_count(ctx: RunContext, raw: object) -> int:
+    """Zero and an integral float are both legal here, and both are load-bearing.
+
+    ``logic.math`` types every result as ``float``, so a count computed on the canvas — the autobuy
+    computes ``budget // max_price`` — arrives as ``3.0``. Refusing it made the whole graph
+    uncompilable in practice while a hand-typed ``3`` worked, which is the worst kind of failure:
+    only the derived path breaks.
+
+    Zero means "the budget does not cover one lot at this ceiling". That is a green run with
+    nothing taken, not an error — a scheduled autobuy that fails every fire until the price drops
+    is an alarm nobody can act on.
+    """
+    if isinstance(raw, bool) or not isinstance(raw, int | float):
+        raise RunFailed(ctx.run_id, ctx.node.id, f"count must be a number, got {raw!r}")
+    if isinstance(raw, float) and not raw.is_integer():
+        raise RunFailed(ctx.run_id, ctx.node.id, f"count must be a whole number, got {raw!r}")
+    count = int(raw)
+    if count < 0:
+        raise RunFailed(ctx.run_id, ctx.node.id, f"count must not be negative, got {raw!r}")
+    return count
 
 
 class TakeNode(BaseNode):
@@ -71,10 +93,7 @@ class TakeNode(BaseNode):
         if not isinstance(items, list):
             raise RunFailed(ctx.run_id, ctx.node.id, "items must decode to a JSON array")
 
-        count = ctx.resolve_input("count")
-        if not isinstance(count, int) or isinstance(count, bool) or count < 1:
-            raise RunFailed(ctx.run_id, ctx.node.id, f"count must be a positive int, got {count!r}")
-
+        count = _as_count(ctx, ctx.resolve_input("count"))
         kept = items[:count]
         return StepResultDTO(
             node_id=ctx.node.id,

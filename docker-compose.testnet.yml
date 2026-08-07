@@ -1,0 +1,37 @@
+# Adds the lzt-testnet mock to the stack, for flows compiled with `testnet: true`.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.testnet.yml up -d
+#
+# An OVERLAY rather than a service in the base file, for two reasons. It builds from `../lzt-testnet`,
+# which only exists in the open-lzt monorepo checkout — a base-file service would break `docker
+# compose up` for anyone who cloned auto-lzt alone. And a mock marketplace is not something to start
+# by default next to a stack that spends real money.
+#
+# This does NOT redirect the whole stack. `LZT_FLOW_MARKET_BASE_URL` stays untouched, so live flows
+# keep hitting the real marketplace; only flows whose spec says `testnet: true` are routed here.
+services:
+  testnet:
+    build: ../lzt-testnet
+    ports:
+      - "127.0.0.1:8765:8765"
+    restart: unless-stopped
+    healthcheck:
+      # curl is absent from python:slim — stdlib urllib, same as the api service.
+      test:
+        - "CMD-SHELL"
+        - "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8765/testnet/health',timeout=3).status==200 else 1)\""
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  worker:
+    environment:
+      LZT_FLOW_MARKET_TESTNET_BASE_URL: http://testnet:8765
+    depends_on:
+      testnet:
+        condition: service_healthy
+
+  api:
+    environment:
+      LZT_FLOW_MARKET_TESTNET_BASE_URL: http://testnet:8765

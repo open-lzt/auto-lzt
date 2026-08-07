@@ -15,10 +15,10 @@ No other module (besides TokenPool, which legitimately constructs the pool/Clien
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping
 from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
-from typing import Any, Final
+from typing import Final
 from uuid import UUID
 
 import httpx
@@ -26,11 +26,10 @@ import structlog
 from pydantic import ValidationError
 from pylzt import AuthFailed, Client, ClientConfig, Forbidden, RateLimited, TransportError
 from pylzt.errors import LztError
-from pylzt.transport.base import RequestOptions
 from pylzt.types import Currency, ItemOrigin, OrderBy
 
 from app.domain.account.model import AccountId
-from app.domain.market.categories import SearchableCategory
+from app.domain.market.categories import CATEGORY_METHODS, SearchableCategory
 from app.domain.market.dtos import (
     BumpResult,
     FastBuyResult,
@@ -46,9 +45,11 @@ from app.domain.market.dtos import (
 from app.domain.market.errors import (
     LotUnavailable,
     MarketApiError,
+    MarketResponseUnparseable,
     PurchaseOutcomeUnknown,
     TokenInvalid,
 )
+from app.domain.market.filters import RESERVED_FILTERS
 
 logger = structlog.get_logger()
 
@@ -80,39 +81,29 @@ def _plausible_currency(raw: str, *, user_id: int) -> str:
 # was already ours and came back Forbidden, and the run reported failure for money that had moved.
 # A timeout shorter than the operation is worse than no timeout on a non-idempotent POST.
 PURCHASE_TIMEOUT_S = 120.0
-# Carried on the request, not on the client's config. The pooled path is handed a shared Client it
-# does not own, so it has no config of its own to widen — and widening the shared one would hand
-# every pooled read the same 120s ceiling, which is the wrong number for everything but a purchase.
-# pylzt 0.2.0 takes the timeout per call, so both paths get it without anyone owning a client.
-_PURCHASE_OPTIONS: Final = RequestOptions(timeout=PURCHASE_TIMEOUT_S)
+# Carried by a SECOND Client, not by the request and not by the shared one. pylzt dropped
+# per-request options after 0.2.0, so `ClientConfig.request_timeout` is the only place a timeout
+# can now live — and widening the shared pooled Client would hand every pooled read the same 120s
+# ceiling, which is the wrong number for everything but a purchase. So the slow call runs on its
+# own Client built over the SAME token pool: one rate budget, one quarantine set, two socket pools.
+#
+# BOTH purchase-path calls ride it, not just the buy: `purchasing_check` measured 8.8-28.2s against
+# the same 30s ceiling, and its timeout is swallowed into "skip this lot", so on the stock client a
+# slow check costs the lot silently instead of failing loudly.
 
-# Slug -> the facade method that searches it. Spelled out because the slug is NOT the method name
-# (`epicgames` -> `category_epic_games`, `tiktok` -> `category_tik_tok`), so a built name would be
-# wrong for five of these; and because a getattr here would let any string reach the facade.
-# `test_search_category` pins this to SearchableCategory in both directions.
-_CATEGORY_METHODS: Final[dict[SearchableCategory, Callable[[Client], Any]]] = {
-    SearchableCategory.STEAM: lambda c: c.market.category_steam,
-    SearchableCategory.FORTNITE: lambda c: c.market.category_fortnite,
-    SearchableCategory.RIOT: lambda c: c.market.category_riot,
-    SearchableCategory.TELEGRAM: lambda c: c.market.category_telegram,
-    SearchableCategory.DISCORD: lambda c: c.market.category_discord,
-    SearchableCategory.ROBLOX: lambda c: c.market.category_roblox,
-    SearchableCategory.EPICGAMES: lambda c: c.market.category_epic_games,
-    SearchableCategory.BATTLENET: lambda c: c.market.category_battle_net,
-    SearchableCategory.EA: lambda c: c.market.category_ea,
-    SearchableCategory.ESCAPEFROMTARKOV: lambda c: c.market.category_escape_from_tarkov,
-    SearchableCategory.GIFTS: lambda c: c.market.category_gifts,
-    SearchableCategory.INSTAGRAM: lambda c: c.market.category_instagram,
-    SearchableCategory.MINECRAFT: lambda c: c.market.category_minecraft,
-    SearchableCategory.SOCIALCLUB: lambda c: c.market.category_social_club,
-    SearchableCategory.SUPERCELL: lambda c: c.market.category_supercell,
-    SearchableCategory.TIKTOK: lambda c: c.market.category_tik_tok,
-    SearchableCategory.UPLAY: lambda c: c.market.category_uplay,
-    SearchableCategory.VPN: lambda c: c.market.category_vpn,
-    SearchableCategory.WARFACE: lambda c: c.market.category_warface,
-    SearchableCategory.HYTALE: lambda c: c.market.category_hytale,
-    SearchableCategory.LLM: lambda c: c.market.category_llm,
-}
+
+def _mismatches(exc: ValidationError) -> tuple[str, ...]:
+    """`field: why (got type)` per failure — the names, never the values.
+
+    A value here can be an account's own data, and this string ends up in a log and in an error
+    message. The TYPE that arrived is what identifies the defect anyway: "declared int, got float"
+    is the whole diagnosis.
+    """
+    return tuple(
+        f"{'.'.join(str(part) for part in error['loc'])}: "
+        f"{error['type']} (got {type(error.get('input')).__name__})"
+        for error in exc.errors()
+    )
 
 
 async def _declining[T](item_id: int, call: Awaitable[T]) -> T:
@@ -135,7 +126,11 @@ async def _declining[T](item_id: int, call: Awaitable[T]) -> T:
         # 403 is the marketplace declining THIS lot, not rejecting us: already queued by another
         # buyer, already sold, or not purchasable by this account. On cheap lots that is the
         # normal case, not the exception.
-        raise LotUnavailable(item_id, exc.reason or "") from exc
+        # pylzt renamed the payload after 0.2.0: `Forbidden.reason` (free text) became
+        # `Forbidden.scope` (the OAuth scope the token lacks). They are not the same fact, so this
+        # says which one it is rather than passing a scope name off as an explanation.
+        detail = f" (нет доступа: {exc.scope})" if exc.scope else ""
+        raise LotUnavailable(item_id, f"маркет отказал в лоте{detail}") from exc
     except LztError as exc:
         raise LotUnavailable(item_id, f"маркет отказал: {exc.code.value}") from exc
 
@@ -149,11 +144,18 @@ class MarketAdapter:
         *,
         token: str | None = None,
         client: Client | None = None,
+        purchase_client: Client | None = None,
         account_id: AccountId | None = None,
         base_url: str | None = None,
     ) -> None:
         if token is None and client is None:
             raise ValueError("MarketAdapter needs either a token or a pooled client")
+        if client is not None and purchase_client is None:
+            raise ValueError(
+                "a pooled MarketAdapter needs a purchase_client too — without it fast_buy would "
+                f"run on the shared {ClientConfig().request_timeout}s client and give up on a "
+                "purchase the marketplace is still completing"
+            )
         if client is not None and base_url is not None:
             logger.warning(
                 "market_adapter_base_url_ignored",
@@ -161,6 +163,7 @@ class MarketAdapter:
             )
         self._token = token
         self._client = client
+        self._purchase_client = purchase_client
         self._account_id = account_id
         self._base_url = base_url
 
@@ -216,6 +219,7 @@ class MarketAdapter:
         pmax: float,
         page: int = 1,
         order_by: OrderBy = OrderBy.PRICE_ASC,
+        filters: Mapping[str, object] | None = None,
     ) -> SearchResult:
         """Wraps the per-category ``category_*`` search — the buyer-side counterpart of
         ``list_lots_page``.
@@ -224,14 +228,25 @@ class MarketAdapter:
         ceiling never reaches the buy node. That is where the ceiling is enforced — ``fast_buy``
         gets an id, not a price, once ``for-each-lot`` has fanned the list out.
 
-        Only ``pmax``/``page``/``order_by`` are passed, and always by keyword. Those three sit in
+        Everything is passed by keyword, without exception. ``pmax``/``page``/``order_by`` sit in
         the argument head every ``category_*`` method shares; the per-category tails diverge (steam
-        takes 126 arguments, ``vpn`` 25) and ``category_steam``/``category_fortnite`` even order the
+        takes 127 arguments, ``vpn`` 26) and ``category_steam``/``category_fortnite`` even order the
         ``email_*`` arguments differently from the rest — so nothing here may be positional.
+
+        ``filters`` carries the rest of that tail. It arrives already coerced and already checked
+        against this category's signature (``filters.coerce_filters``), which is also what keeps it
+        from colliding with the three explicit kwargs: ``RESERVED_FILTERS`` excludes them from the
+        schema, so a name that would raise ``TypeError: got multiple values`` cannot be in here.
+        The assertion below is the belt to that braces — this is the money path's search, and a
+        caller that skipped coercion must fail here rather than reach the marketplace.
         """
-        method = _CATEGORY_METHODS[category]
+        extra = dict(filters or {})
+        collisions = extra.keys() & RESERVED_FILTERS
+        if collisions:
+            raise ValueError(f"filters may not set reserved names: {sorted(collisions)}")
+        method = CATEGORY_METHODS[category]
         response = await self._call(
-            lambda client: method(client)(pmax=pmax, page=page, order_by=order_by)
+            lambda client: method(client)(pmax=pmax, page=page, order_by=order_by, **extra)
         )
         return SearchResult(
             hits=tuple(
@@ -277,10 +292,9 @@ class MarketAdapter:
             response = await self._call(
                 lambda client: _declining(
                     item_id,
-                    client.market.purchasing_fast_buy(
-                        item_id=item_id, price=pinned_price, request_options=_PURCHASE_OPTIONS
-                    ),
+                    client.market.purchasing_fast_buy(item_id=item_id, price=pinned_price),
                 ),
+                slow=True,
             )
         except (httpx.TimeoutException, TimeoutError) as exc:
             # httpx errors are not part of pylzt's typed tree, so this one escaped every handler
@@ -294,8 +308,19 @@ class MarketAdapter:
             # timeout escaped this handler, arq then cancelled the job, and the lot turned out to
             # have been BOUGHT — 2 ₽ left the balance while the trace recorded one 1 ₽ purchase.
             raise PurchaseOutcomeUnknown(item_id, PURCHASE_TIMEOUT_S) from exc
+        # pylzt's static types over-promise: any field of a response may be absent (see its
+        # models/base.py — `purchasing_check` alone omits eleven "required" ones). A None price
+        # reaching the ledger becomes Decimal(None) inside a best-effort writer that swallows it,
+        # so the run silently stops counting money. The pinned price is what we agreed to pay.
+        paid = response.item.price if response.item.price is not None else pinned_price
+        if paid is None:
+            raise MarketResponseUnparseable("purchasing_fast_buy", ("item.price: missing",))
         return FastBuyResult(
-            item_id=response.item.item_id, price=response.item.price, purchased=True
+            item_id=response.item.item_id,
+            price=paid,
+            purchased=True,
+            currency=response.item.price_currency,
+            category_id=response.item.category_id,
         )
 
     async def _checked_price(
@@ -316,7 +341,15 @@ class MarketAdapter:
         """
         try:
             response = await self._call(
-                lambda client: _declining(item_id, client.market.purchasing_check(item_id=item_id))
+                lambda client: _declining(item_id, client.market.purchasing_check(item_id=item_id)),
+                # The same long timeout the buy gets, and for the same measured reason: timed
+                # against prod on 2026-08-06 this call took 8.8s / 22.8s / 28.2s on three
+                # consecutive steam lots, against a 30s stock ceiling. Sitting on the edge is not
+                # a slow-path nuisance here — a timeout is caught below and turns into "skip this
+                # lot", so a check that runs long silently costs the sniper the lot instead of
+                # raising anything. Observed live: `ReadTimeout('')` on four categories in a row,
+                # every candidate skipped, and a run that looked like "nothing was for sale".
+                slow=True,
             )
         except (httpx.HTTPError, MarketApiError) as exc:
             # The transport half of the promise above. `_declining` maps the marketplace's own
@@ -326,6 +359,12 @@ class MarketAdapter:
             raise LotUnavailable(item_id, "цену лота проверить не удалось") from exc
         price = response.item.price
         listed_currency = response.item.price_currency
+        # `price` is typed int but arrives None whenever the marketplace omits it — comparing that
+        # against the ceiling raises TypeError, and this call sits outside `fast_buy`'s try, so one
+        # incomplete answer about one lot killed the whole run. No price means no ceiling check.
+        if price is None:
+            logger.info("fast_buy_ceiling_price_missing", item_id=item_id)
+            raise LotUnavailable(item_id, "маркет не назвал цену лота — сравнить с потолком нельзя")
         if listed_currency is None or max_price_currency is None:
             logger.info("fast_buy_ceiling_currency_unknown", item_id=item_id)
             raise LotUnavailable(item_id, "валюта лота или потолка неизвестна — сравнить нельзя")
@@ -356,10 +395,11 @@ class MarketAdapter:
         try:
             response = await self._call(lambda client: client.market.profile_get())
         except ValidationError as exc:
-            # The upstream answered with a shape pylzt could not parse. Mapped here rather than
-            # let out raw, because this adapter is the boundary whose whole job is that no
-            # pylzt-or-pydantic error reaches the domain wearing its own type.
-            raise MarketApiError(status=502) from exc
+            # Mapped here rather than let out raw, because this adapter is the boundary whose whole
+            # job is that no pylzt-or-pydantic error reaches the domain wearing its own type. What
+            # it maps to matters: this used to be MarketApiError(502), which reads as "the
+            # marketplace is broken" and sends the operator to check a service that answered 200.
+            raise MarketResponseUnparseable("profile", _mismatches(exc)) from exc
         try:
             balance = Decimal(str(response.balance))
         except InvalidOperation:
@@ -412,19 +452,27 @@ class MarketAdapter:
             has_next_page=response.hasNextPage,
         )
 
-    async def _call[T](self, op: Callable[[Client], Awaitable[T]]) -> T:
+    async def _call[T](self, op: Callable[[Client], Awaitable[T]], *, slow: bool = False) -> T:
+        """Run ``op`` on this adapter's client. ``slow`` selects the one built for `fast-buy`.
+
+        Not a strategy object: there is exactly ONE slow operation in the whole adapter, so a
+        keyword and a field say it in two lines where a layer would take a file.
+        """
         if self._token is not None:
-            config = (
-                ClientConfig(base_url=self._base_url, forum_base_url=self._base_url)
-                if self._base_url is not None
-                else None
+            # The pinned path already builds a Client per call, so the wider timeout costs it
+            # nothing — no second object, just a different number in the config it was making.
+            stock = ClientConfig()
+            config = ClientConfig(
+                base_url=self._base_url or stock.base_url,
+                forum_base_url=self._base_url or stock.forum_base_url,
+                request_timeout=PURCHASE_TIMEOUT_S if slow else stock.request_timeout,
             )
             async with Client([self._token], config=config) as client:
                 return await self._call_with(client, op)
-        # No per-call override on the pooled path: the Client is shared and already built. TokenPool
-        # constructs it with PURCHASE_TIMEOUT_S for exactly this reason, so the number a caller asks
-        # for here is the number it already has.
         assert self._client is not None  # guaranteed by __init__
+        if slow:
+            assert self._purchase_client is not None  # guaranteed by __init__
+            return await self._call_with(self._purchase_client, op)
         return await self._call_with(self._client, op)
 
     async def _call_with[T](self, client: Client, op: Callable[[Client], Awaitable[T]]) -> T:

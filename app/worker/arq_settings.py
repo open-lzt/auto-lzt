@@ -54,6 +54,7 @@ from app.domain.flow_engine.repo import (
 )
 from app.domain.flow_engine.retention import prune_run_traces
 from app.domain.market.service import MarketService
+from app.domain.purchases.repo import PurchaseRepository
 from app.domain.triggers.firing import close_abandoned_running_runs, sweep_stale_pending_runs
 from app.plugin_runtime import PluginManager, PluginProcess
 from app.worker.enqueue import build_arq_enqueue
@@ -130,6 +131,19 @@ def _build_node_deps(
     market = MarketService(
         cipher, pool=token_pool, excluder=excluder, market_base_url=settings.market_base_url
     )
+    # Its OWN pool, not the live one. A pool caches one Client per tenant bound to the base URL it
+    # was built with, so sharing it would let a testnet run borrow a live-marketplace client — the
+    # exact leak this seam exists to prevent.
+    market_testnet = (
+        MarketService(
+            cipher,
+            pool=TokenPool(sessionmaker, cipher, settings.market_testnet_base_url),
+            excluder=excluder,
+            market_base_url=settings.market_testnet_base_url,
+        )
+        if settings.market_testnet_base_url
+        else None
+    )
 
     async def load_account(tenant_id: TenantId, account_id: AccountId) -> Account:
         async with session_scope(sessionmaker) as session:
@@ -167,7 +181,9 @@ def _build_node_deps(
 
     return NodeDeps(
         market=market,
+        market_testnet=market_testnet,
         guard=IdempotencyGuard(redis),
+        purchases=PurchaseRepository(sessionmaker),
         load_account=load_account,
         list_accounts=list_accounts,
         get_client=get_client,

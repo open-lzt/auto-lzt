@@ -17,7 +17,8 @@ export type UiWidget =
   | "lot_ref"
   | "secret"
   | "account_ref"
-  | "category_picker";
+  | "category_picker"
+  | "filters";
 
 export interface JsonSchemaUi {
   widget?: UiWidget;
@@ -64,8 +65,14 @@ export interface CatalogListResponse {
   nodes: CatalogNode[];
 }
 
-/** Bump in lockstep with CATALOG_SCHEMA_VERSION in app/api/catalog_routes.py. */
-export const CATALOG_SCHEMA_VERSION = 1;
+/**
+ * Bump in lockstep with CATALOG_SCHEMA_VERSION in app/api/catalog_routes.py.
+ *
+ * 2 — `market.search` gained the `filters` port, so the node's form changed shape. This throws on a
+ * mismatch (see below), which is why backend and frontend must ship together: bumping one side
+ * alone leaves the canvas unopenable rather than merely degraded.
+ */
+export const CATALOG_SCHEMA_VERSION = 2;
 
 let catalogPromise: Promise<CatalogNode[]> | null = null;
 
@@ -91,4 +98,36 @@ export interface MarketCategoryDTO {
 
 export function fetchCategories(): Promise<MarketCategoryDTO[]> {
   return request<MarketCategoryDTO[]>("/catalog/categories");
+}
+
+export interface CategoryFiltersDTO {
+  category: string;
+  /** Every filter the category declares, including any the form chooses not to show. */
+  count: number;
+  /** JSON Schema of the filter object — rendered by the same AutoForm as any node's inputs. */
+  json_schema: JsonSchema;
+  /** Names worth showing above the collapsed rest. A subset of `json_schema.properties`. */
+  curated: string[];
+}
+
+const filtersCache = new Map<string, Promise<CategoryFiltersDTO>>();
+
+/**
+ * Filter schema for one market category, cached per category.
+ *
+ * Cached because the schema is derived from pylzt's signatures — it cannot change while the page is
+ * open, and switching categories back and forth is exactly what an operator does while building a
+ * sniper. A failed fetch is evicted so a network blip is not remembered as the answer.
+ */
+export function fetchCategoryFilters(category: string): Promise<CategoryFiltersDTO> {
+  const cached = filtersCache.get(category);
+  if (cached) return cached;
+  const pending = request<CategoryFiltersDTO>(
+    `/catalog/categories/${encodeURIComponent(category)}/filters`,
+  ).catch((err: unknown) => {
+    filtersCache.delete(category);
+    throw err;
+  });
+  filtersCache.set(category, pending);
+  return pending;
 }

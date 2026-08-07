@@ -13,7 +13,8 @@ from app.api.catalog_routes import list_market_categories
 from app.domain.account.model import TenantId
 from app.domain.flow_engine.compiler import compile_flow
 from app.domain.flow_engine.model import Flow, FlowId
-from app.domain.flow_engine.spec import FlowSpec
+from app.domain.flow_engine.spec import FlowMaturity, FlowSpec
+from app.domain.market.categories import SearchableCategory, label_for
 from seeds.load_templates import TEMPLATES_DIR, load_seed_templates, load_specs
 from tests.fixtures.flow_fakes import node_classes
 
@@ -26,9 +27,7 @@ def test_templates_present() -> None:
     assert len(_template_files()) >= 8
 
 
-@pytest.mark.parametrize("path", _template_files(), ids=lambda p: p.stem)
-def test_template_compiles(path: Path) -> None:
-    spec = FlowSpec.model_validate_json(path.read_text(encoding="utf-8"))
+def _compile(spec: FlowSpec) -> object:
     flow = Flow(
         id=FlowId(uuid4()),
         tenant_id=TenantId(uuid4()),
@@ -37,8 +36,46 @@ def test_template_compiles(path: Path) -> None:
         spec=spec,
         created_at=datetime.now(UTC),
     )
-    ir = compile_flow(flow, node_classes())
-    assert len(ir.nodes) == len(spec.nodes)
+    return compile_flow(flow, node_classes())
+
+
+@pytest.mark.parametrize("path", _template_files(), ids=lambda p: p.stem)
+def test_template_compiles(path: Path) -> None:
+    spec = FlowSpec.model_validate_json(path.read_text(encoding="utf-8"))
+    ir = _compile(spec)
+    assert len(ir.nodes) == len(spec.nodes)  # type: ignore[attr-defined]
+
+
+# Every spec the loader hands out, not just the ones on disk. The autobuy family is BUILT rather
+# than stored, so a file-glob parametrize walks straight past all 21 of them — the compile check
+# would have stayed green while none of them compiled.
+@pytest.mark.parametrize("spec", load_specs(), ids=lambda s: s.name)
+def test_every_loaded_spec_compiles(spec: FlowSpec) -> None:
+    ir = _compile(spec)
+    assert len(ir.nodes) == len(spec.nodes)  # type: ignore[attr-defined]
+
+
+def test_the_autobuy_family_covers_every_searchable_category() -> None:
+    """One sniper per category, and each pointed at its own — a template whose `category` default
+    did not match its name would silently search the wrong section of the market."""
+    autobuy = {s.name: s for s in load_specs() if s.testnet}
+    assert len(autobuy) == len(SearchableCategory)
+    for spec in autobuy.values():
+        category = next(p.default for p in spec.params if p.key == "category")
+        assert label_for(SearchableCategory(category)) in spec.name
+
+
+def test_no_shipped_autobuy_can_spend_money_on_its_first_run() -> None:
+    """Both guards together, on every generated template: aimed at the mock AND dry_run by default.
+
+    The filter surface is reflected from pylzt signatures, and a signature proves a filter's name
+    and type — never that the marketplace narrows anything by it.
+    """
+    for spec in load_specs():
+        if not spec.testnet:
+            continue
+        assert spec.maturity is FlowMaturity.EXPERIMENTAL, spec.name
+        assert next(p.default for p in spec.params if p.key == "dry_run") is True, spec.name
 
 
 class _FakeFlowRepo:

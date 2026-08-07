@@ -28,6 +28,10 @@ describe("FlowList", () => {
     vi.restoreAllMocks();
   });
 
+  function flow(id: string, name: string, extra: Partial<FlowSummary> = {}): FlowSummary {
+    return { id, name, maturity: "stable", testnet: false, ...extra };
+  }
+
   it("shows the empty state when there are no flows", async () => {
     vi.spyOn(flowClient, "fetchFlows").mockResolvedValue([]);
     render(<FlowList activeFlowId={null} onSelect={vi.fn()} onCreateNew={vi.fn()} />);
@@ -36,8 +40,8 @@ describe("FlowList", () => {
 
   it("renders each flow and highlights the active one", async () => {
     const flows: FlowSummary[] = [
-      { id: "f1", name: "Flow One" },
-      { id: "f2", name: "Flow Two" },
+      flow("f1", "Flow One"),
+      flow("f2", "Flow Two"),
     ];
     vi.spyOn(flowClient, "fetchFlows").mockResolvedValue(flows);
     render(<FlowList activeFlowId="f2" onSelect={vi.fn()} onCreateNew={vi.fn()} />);
@@ -47,8 +51,22 @@ describe("FlowList", () => {
     expect(screen.getByText("Flow One").closest("li")).not.toHaveClass("flow-list__item--active");
   });
 
+  it("marks an experimental testnet flow in the list, and leaves a stable one bare", async () => {
+    // In the LIST, not only after opening it: this is where an operator picks which flow to arm.
+    vi.spyOn(flowClient, "fetchFlows").mockResolvedValue([
+      flow("f1", "Sniper", { maturity: "experimental", testnet: true }),
+      flow("f2", "Bumper"),
+    ]);
+    render(<FlowList activeFlowId={null} onSelect={vi.fn()} onCreateNew={vi.fn()} />);
+
+    const sniper = (await screen.findByText("Sniper")).closest("button");
+    expect(sniper).toHaveTextContent("в тестах");
+    expect(sniper).toHaveTextContent("тестнет");
+    expect(screen.getByText("Bumper").closest("button")).not.toHaveTextContent("в тестах");
+  });
+
   it("calls onSelect with the flow id when a name is clicked", async () => {
-    vi.spyOn(flowClient, "fetchFlows").mockResolvedValue([{ id: "f1", name: "Flow One" }]);
+    vi.spyOn(flowClient, "fetchFlows").mockResolvedValue([flow("f1", "Flow One")]);
     const onSelect = vi.fn();
     render(<FlowList activeFlowId={null} onSelect={onSelect} onCreateNew={vi.fn()} />);
 
@@ -69,7 +87,7 @@ describe("FlowList", () => {
   it("deletes a flow and refetches the list", async () => {
     const fetchMock = vi
       .spyOn(flowClient, "fetchFlows")
-      .mockResolvedValueOnce([{ id: "f1", name: "Flow One" }])
+      .mockResolvedValueOnce([flow("f1", "Flow One")])
       .mockResolvedValueOnce([]);
     const deleteMock = vi.spyOn(flowClient, "deleteFlow").mockResolvedValue(undefined);
 
@@ -91,7 +109,7 @@ describe("FlowList", () => {
   });
 
   it("exports a flow as a downloaded JSON file", async () => {
-    vi.spyOn(flowClient, "fetchFlows").mockResolvedValue([{ id: "f1", name: "Flow One" }]);
+    vi.spyOn(flowClient, "fetchFlows").mockResolvedValue([flow("f1", "Flow One")]);
     const exportMock = vi.spyOn(flowClient, "exportFlow").mockResolvedValue(FLOW_SPEC);
     const createObjectURL = vi.fn().mockReturnValue("blob:mock");
     const revokeObjectURL = vi.fn();
@@ -107,7 +125,7 @@ describe("FlowList", () => {
   });
 
   it("surfaces an export failure as an error message", async () => {
-    vi.spyOn(flowClient, "fetchFlows").mockResolvedValue([{ id: "f1", name: "Flow One" }]);
+    vi.spyOn(flowClient, "fetchFlows").mockResolvedValue([flow("f1", "Flow One")]);
     vi.spyOn(flowClient, "exportFlow").mockRejectedValue(new Error("экспорт не удался"));
 
     render(<FlowList activeFlowId={null} onSelect={vi.fn()} onCreateNew={vi.fn()} />);
@@ -120,7 +138,7 @@ describe("FlowList", () => {
     const fetchMock = vi
       .spyOn(flowClient, "fetchFlows")
       .mockResolvedValueOnce([])
-      .mockResolvedValueOnce([{ id: "f1", name: "Flow One" }]);
+      .mockResolvedValueOnce([flow("f1", "Flow One")]);
     const importMock = vi
       .spyOn(flowClient, "importFlow")
       .mockResolvedValue({ ok: true, flowId: "f1" });
