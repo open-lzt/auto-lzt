@@ -59,9 +59,10 @@ services:
       # they do NOT persist across `up --build` — that's a separate persistence item, not fixed here.
       - plugins:/app/.system/plugins
     ports:
-      # Host-side loopback only — the API has no request auth (single-tenant self-host). The
-      # frontend nginx reaches it over the compose network; expose it publicly only behind an
-      # authenticating reverse proxy.
+      # Host-side loopback only. The API DOES authenticate — `X-API-Key` through `protect()`, and
+      # every mutating route is behind it. The note that used to stand here said the opposite, which
+      # is an invitation to publish this port. It stays on loopback anyway: nothing rate-limits key
+      # attempts, so a public port makes the key brute-forceable in silence.
       - "127.0.0.1:8000:8000"
     restart: unless-stopped
     depends_on:
@@ -92,7 +93,11 @@ services:
         # will not change it.
         VITE_BUILDER_ENABLED: ${VITE_BUILDER_ENABLED:-0}
     ports:
-      - "5173:80"
+      # Loopback, like the API behind it. Published on every interface, this port undid the api
+      # service's own loopback binding: nginx here proxies /api/* straight into api:8000, so the
+      # whole HTTP surface — including /api/docs and /api/openapi.json — was reachable from the
+      # internet. Put a TLS-terminating reverse proxy in front to expose the panel deliberately.
+      - "127.0.0.1:5173:80"
     restart: unless-stopped
     depends_on:
       api:
