@@ -35,6 +35,23 @@ from app.domain.market.adapter import PURCHASE_TIMEOUT_S, MarketAdapter
 log = structlog.get_logger()
 
 
+def client_config(market_base_url: str | None) -> ClientConfig:
+    """The ONE place that decides which marketplace a Client talks to.
+
+    Every path that builds a ``Client`` goes through here — the pooled path below and the pinned
+    path in the worker's ``get_client``. The pinned one used to call ``Client([token])`` with the
+    stock config, so a run compiled ``testnet=True`` still reached prod-api.lzt.market with a real
+    token on every node that takes a raw Client (``logic.batch``, ``pylzt.dynamic_call``).
+
+    Both market and forum hosts are redirected so forum-scoped methods don't leak past the mock.
+    """
+    stock = ClientConfig()
+    return ClientConfig(
+        base_url=market_base_url or stock.base_url,
+        forum_base_url=market_base_url or stock.forum_base_url,
+    )
+
+
 @dataclass(slots=True)
 class _TenantPool:
     pool: RoundRobinTokenPool
@@ -225,11 +242,7 @@ class TokenPool:
         # Testnet override must reach the POOLED worker path too — otherwise a run scheduled with
         # LZT_FLOW_MARKET_BASE_URL set still hits real prod-api.lzt.market. Both market and forum
         # hosts are redirected so forum-scoped methods don't leak past the mock either.
-        stock = ClientConfig()
-        config = ClientConfig(
-            base_url=self._market_base_url or stock.base_url,
-            forum_base_url=self._market_base_url or stock.forum_base_url,
-        )
+        config = client_config(self._market_base_url)
         client = Client(token_pool=pool, config=config)
         purchase_client = Client(
             token_pool=pool,

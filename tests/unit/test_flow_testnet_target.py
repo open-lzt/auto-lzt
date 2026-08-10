@@ -7,6 +7,7 @@ these tests pin — not the happy path.
 
 from __future__ import annotations
 
+from dataclasses import replace
 from unittest.mock import Mock
 from uuid import uuid4
 
@@ -39,9 +40,10 @@ def _deps(*, with_testnet: bool) -> NodeDeps:
         purchases=Mock(),
         load_account=Mock(),
         list_accounts=Mock(),
-        get_client=Mock(),
+        get_client=Mock(name="live_client"),
         http=Mock(),
         market_testnet=Mock(name="testnet") if with_testnet else None,
+        get_client_testnet=Mock(name="testnet_client") if with_testnet else None,
     )
 
 
@@ -54,7 +56,20 @@ def test_a_testnet_flow_is_swapped_onto_the_mock_service() -> None:
     deps = _deps(with_testnet=True)
     swapped = _deps_for_target_market(_ir(testnet=True), deps, RunId(uuid4()))
     assert swapped.market is deps.market_testnet
-    assert swapped.guard is deps.guard, "only the market may change"
+    # BOTH doors. `get_client` hands out a raw pylzt Client and four nodes take that route instead
+    # of `market` — `logic.batch` among them, carrying MARKET_MUTATE_MONEY. While only `market` was
+    # swapped, those nodes spent real money inside a run labelled testnet.
+    assert swapped.get_client is deps.get_client_testnet
+    assert swapped.guard is deps.guard, "only the market doors may change"
+
+
+def test_half_configured_testnet_fails_instead_of_leaking_through_get_client() -> None:
+    """A testnet market with a live `get_client` is the half-open state that cost real money: the
+    run was labelled testnet, `market` went to the mock, and every raw-Client node went to prod.
+    Half-configured is refused, exactly like not configured at all."""
+    half_open = replace(_deps(with_testnet=True), get_client_testnet=None)
+    with pytest.raises(RunFailed):
+        _deps_for_target_market(_ir(testnet=True), half_open, RunId(uuid4()))
 
 
 def test_a_testnet_flow_without_a_configured_testnet_fails_instead_of_going_live() -> None:

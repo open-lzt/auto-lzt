@@ -242,7 +242,14 @@ async def _capture_trace(
     handed are usually the whole explanation."""
     try:
         resolve = _make_resolver(node, results, run.vars)
-        inputs = {port: resolve(port) for port in node.inputs}
+        # An EnvRef port is recorded by NAME, never resolved. `EnvRef`'s own docstring promises that
+        # "a leaked FlowIR export or run trace carries only the name", and this write was the one
+        # place that broke it: the trace goes to Postgres, to `GET /runs/{id}/trace` and into every
+        # backup, so a bot token passed as {"env": "FLOW_BOT_TOKEN"} was readable in all three.
+        inputs = {
+            port: (f"env:{spec.name}" if isinstance(spec, EnvRef) else resolve(port))
+            for port, spec in node.inputs.items()
+        }
         await trace_sink.record(
             RunTrace(
                 id=uuid4(),
@@ -321,14 +328,21 @@ def _deps_for_target_market(ir: FlowIR, node_deps: NodeDeps, run_id: RunId) -> N
     """
     if not ir.testnet:
         return node_deps
-    if node_deps.market_testnet is None:
+    if node_deps.market_testnet is None or node_deps.get_client_testnet is None:
         raise RunFailed(
             run_id,
             "load",
             "flow is compiled for the testnet but no testnet market is configured "
             "(set market_testnet_base_url)",
         )
-    return replace(node_deps, market=node_deps.market_testnet)
+    # BOTH doors, not just `market`. `get_client` hands out a raw pylzt Client, and four nodes take
+    # that door instead — `logic.batch` among them, carrying MARKET_MUTATE_MONEY. Leaving it aimed
+    # at the live marketplace is what let a run labelled testnet spend real money.
+    return replace(
+        node_deps,
+        market=node_deps.market_testnet,
+        get_client=node_deps.get_client_testnet,
+    )
 
 
 async def execute_run(
@@ -355,17 +369,22 @@ async def execute_run(
         raise RunAlreadyClaimed(run_id, run.version)
     await _publish_task_event(event_transport, run, TaskEventReason.RUN_STARTED)
 
-    ir = await flows.get(run.flow_ir_id)
-    if ir is None:
-        raise RunFailed(run_id, "load", "flow_ir not found")
-    nodes_by_id = {n.id: n for n in ir.nodes}
-    node_deps = _deps_for_target_market(ir, node_deps, run_id)
-
-    results: dict[str, StepResultDTO] = {}
-    entry = run.current_node_id or ir.entry_node_id
     version_box = [my_version]
-    step_budget = [max_steps_per_run]
+    # Loading and target-market selection sit INSIDE the try, after `claim`. Raised above it, their
+    # RunFailed missed the handler below: the row stayed RUNNING until the abandoned-run sweep
+    # closed it minutes later with "may have completed; check the marketplace" — a message about
+    # money, on a run that had not executed a single step. Both failures are reachable from plain
+    # configuration (a testnet flow on a host without `market_testnet_base_url`).
     try:
+        ir = await flows.get(run.flow_ir_id)
+        if ir is None:
+            raise RunFailed(run_id, "load", "flow_ir not found")
+        nodes_by_id = {n.id: n for n in ir.nodes}
+        node_deps = _deps_for_target_market(ir, node_deps, run_id)
+
+        results: dict[str, StepResultDTO] = {}
+        entry = run.current_node_id or ir.entry_node_id
+        step_budget = [max_steps_per_run]
         with contextlib.suppress(_AbortRun):  # StopCondition(action="abort") — a deliberate
             # stop, not a failure; falls through to the same COMPLETED marking below.
             await _run_chain(
