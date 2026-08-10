@@ -231,6 +231,9 @@ def cmd_run(
     if _DRY_RUN_KEY in declared_keys:
         if no_dry_run:
             print("LIVE RUN: --no-dry-run given, dry_run is NOT forced. This can spend money.")
+            # Said EXPLICITLY, not by omission: the run service now starts any flow that declares
+            # this param dry unless the caller states otherwise, so an omitted key means "dry".
+            params[_DRY_RUN_KEY] = False
         else:
             if params.get(_DRY_RUN_KEY) not in (None, True):
                 print(f"ignoring --param {_DRY_RUN_KEY}={params[_DRY_RUN_KEY]!r}.")

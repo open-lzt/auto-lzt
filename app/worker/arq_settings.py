@@ -16,8 +16,8 @@ lock + two-phase RunStep commit make a second executor a no-op loser (RunAlready
 from __future__ import annotations
 
 import asyncio
-from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
+from collections.abc import AsyncIterator, Callable
+from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from datetime import timedelta
 from typing import Any, TypedDict, cast
 from uuid import UUID
@@ -35,7 +35,7 @@ from app.domain.account.crypto import EnvelopeCipher
 from app.domain.account.errors import NoAvailableAccount
 from app.domain.account.exclusion import AccountExcluder
 from app.domain.account.model import Account, AccountId, AccountStatus, TenantId
-from app.domain.account.pool import TokenPool
+from app.domain.account.pool import TokenPool, client_config
 from app.domain.account.repo import AccountRepository
 from app.domain.catalog.plugins import build_registry
 from app.domain.catalog.registry import NodeRegistry
@@ -134,14 +134,19 @@ def _build_node_deps(
     # Its OWN pool, not the live one. A pool caches one Client per tenant bound to the base URL it
     # was built with, so sharing it would let a testnet run borrow a live-marketplace client — the
     # exact leak this seam exists to prevent.
+    testnet_pool = (
+        TokenPool(sessionmaker, cipher, settings.market_testnet_base_url)
+        if settings.market_testnet_base_url
+        else None
+    )
     market_testnet = (
         MarketService(
             cipher,
-            pool=TokenPool(sessionmaker, cipher, settings.market_testnet_base_url),
+            pool=testnet_pool,
             excluder=excluder,
             market_base_url=settings.market_testnet_base_url,
         )
-        if settings.market_testnet_base_url
+        if testnet_pool is not None
         else None
     )
 
@@ -162,22 +167,34 @@ def _build_node_deps(
         async with session_scope(sessionmaker) as session:
             return await AccountRepository(session).list(tenant_id)
 
-    @asynccontextmanager
-    async def get_client(
-        tenant_id: TenantId, account_id: AccountId | None
-    ) -> AsyncIterator[Client]:
-        """Mirrors ``MarketAdapter._call``'s dual mode (the worker composition root legitimately
-        constructs a Client here, same precedent as ``TokenPool._build``): pinned opens+closes a
-        scoped single-token Client; pooled leases the tenant's shared cached Client, which the pool
-        keeps alive for the body of the block and closes itself once nobody holds it."""
-        if account_id is not None:
-            account = await load_account(tenant_id, account_id)
-            token = cipher.decrypt(account.encrypted_token, tenant_id)
-            async with Client([token]) as client:
-                yield client
-        else:
-            async with token_pool.lease_client(tenant_id) as client:
-                yield client
+    def make_get_client(
+        pool: TokenPool, market_base_url: str | None
+    ) -> Callable[[TenantId, AccountId | None], AbstractAsyncContextManager[Client]]:
+        """Both marketplaces get their own factory, each closed over ITS pool and base URL.
+
+        The pinned branch takes `market_base_url` through `client_config` for the same reason the
+        pooled one does: `Client([token])` with the stock config reaches the live marketplace, which
+        is how a testnet run kept spending real money on every raw-Client node.
+        """
+
+        @asynccontextmanager
+        async def get_client(
+            tenant_id: TenantId, account_id: AccountId | None
+        ) -> AsyncIterator[Client]:
+            """Mirrors ``MarketAdapter._call``'s dual mode (the worker composition root legitimately
+            constructs a Client here, same precedent as ``TokenPool._build``): pinned opens+closes a
+            scoped single-token Client; pooled leases the tenant's shared cached Client, which the
+            pool keeps alive for the body of the block and closes itself once nobody holds it."""
+            if account_id is not None:
+                account = await load_account(tenant_id, account_id)
+                token = cipher.decrypt(account.encrypted_token, tenant_id)
+                async with Client([token], config=client_config(market_base_url)) as client:
+                    yield client
+            else:
+                async with pool.lease_client(tenant_id) as client:
+                    yield client
+
+        return get_client
 
     return NodeDeps(
         market=market,
@@ -186,7 +203,12 @@ def _build_node_deps(
         purchases=PurchaseRepository(sessionmaker),
         load_account=load_account,
         list_accounts=list_accounts,
-        get_client=get_client,
+        get_client=make_get_client(token_pool, settings.market_base_url),
+        get_client_testnet=(
+            make_get_client(testnet_pool, settings.market_testnet_base_url)
+            if testnet_pool is not None
+            else None
+        ),
         # The transport cannot be built without a policy, which is what leaves a request node no
         # way to reach the network unpoliced.
         http=build_transport(EgressPolicy(settings.egress_allowed_hosts)),

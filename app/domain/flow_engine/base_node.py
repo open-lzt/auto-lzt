@@ -77,6 +77,16 @@ class NodeDeps:
     the live marketplace would report real purchases as rehearsals. Absent config is a stop, not a
     default.
     """
+    get_client_testnet: (
+        Callable[[TenantId, AccountId | None], AbstractAsyncContextManager[Client]] | None
+    ) = None
+    """``get_client`` aimed at the mock, swapped in by the runtime for a ``testnet=True`` run.
+
+    Its own field rather than a flag on ``get_client``, for the same reason ``market_testnet`` is:
+    which marketplace a run talks to is decided ONCE per run, not per call. Swapping only ``market``
+    (what this used to do) left every raw-Client node — ``logic.batch`` carries
+    ``MARKET_MUTATE_MONEY`` — spending real money inside a run labelled testnet.
+    """
 
 
 @dataclass(slots=True, frozen=True)

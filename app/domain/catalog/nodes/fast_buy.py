@@ -86,6 +86,14 @@ async def _affordable(ctx: RunContext, run_budget: int | None, max_price: int) -
     afterwards. `max_price` is the right number to test against: it is the most this purchase can
     cost, since `fast_buy` pins that ceiling onto the buy itself.
 
+    TODO(debt): two `fork` branches read this before either records, so a run with `run_budget`
+    10000 and two branches spends 20000 — the gate is check-then-act across concurrent branches
+    (`runtime.py` runs fork branches in one `TaskGroup`). Proper fix: hold a per-run budget lock
+    across gate → purchase → ledger write, which serialises budgeted branches by design, since a
+    shared budget IS a shared resource. Deferred: it re-shapes `execute`'s whole body in the file
+    that moves money, and it needs the fork integration test from `.review/TESTS.md` §4 first.
+    Until then a budget bounds a SEQUENTIAL run only.
+
     **Fail-closed.** If the spend cannot be established — the ledger is unreachable, or the run
     bought in several currencies and has no honest total — this answers "no". The ledger write is
     best-effort by design (it must never fail a purchase that already happened), so an unreadable

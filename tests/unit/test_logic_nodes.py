@@ -10,7 +10,12 @@ import pytest
 
 from app.domain.account.model import TenantId
 from app.domain.flow_engine.compiler import compile_flow
-from app.domain.flow_engine.errors import MathDomainError, NoMatchingCase, WaitTimeoutError
+from app.domain.flow_engine.errors import (
+    MathDomainError,
+    NoMatchingCase,
+    RunFailed,
+    WaitTimeoutError,
+)
 from app.domain.flow_engine.model import Flow, FlowId
 from app.domain.flow_engine.spec import FlowSpec, InputSpec, NodeSpec
 from tests.fixtures.flow_fakes import FakeGuard, FakeMarket, build_ctx, build_node, node_classes
@@ -83,6 +88,21 @@ async def test_compare_numeric_coercion() -> None:
     _, ctx = _ctx("logic.compare", {"op": "gt", "a": "5", "b": "3"})
     result = await CompareNode().execute(ctx)
     assert result.output["result"] is True
+
+
+@pytest.mark.asyncio
+async def test_compare_refuses_operands_it_cannot_order_numerically() -> None:
+    """The price gate that opened on a lot twice its ceiling.
+
+    "9 000" does not survive numeric coercion, so the old `except TypeError` compared as text — and
+    "12000" sorts before "9 000". An `lt` gate meant to keep purchases under nine thousand therefore
+    said yes to twelve thousand. Mixed operands now fail the run, as in `logic.condition`.
+    """
+    from app.domain.catalog.nodes.compare import CompareNode
+
+    _, ctx = _ctx("logic.compare", {"op": "lt", "a": 12000, "b": "9 000"})
+    with pytest.raises(RunFailed):
+        await CompareNode().execute(ctx)
 
 
 def test_math_compiles() -> None:

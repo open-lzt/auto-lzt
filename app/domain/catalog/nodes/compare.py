@@ -1,4 +1,4 @@
-"""CompareNode — comparison over two resolved inputs (numeric-coerced, string fallback).
+"""CompareNode — comparison over two resolved inputs, numeric-coerced.
 
 Shares its operator vocabulary and semantics with ``logic.condition`` via ``operators.py``; the
 difference between the two nodes is input handling, not the operators — compare numeric-coerces its
@@ -74,8 +74,13 @@ class CompareNode(BaseNode):
 
         try:
             result = evaluate(op, a, b)
-        except TypeError:
-            result = evaluate(op, str(a), str(b))
+        except TypeError as exc:
+            # NOT a string fallback. `str(a) < str(b)` orders "12000" before "9 000", so a price
+            # gate against a literal that failed numeric coercion ("9 000", "9,000", "9000 RUB")
+            # opened on a lot twice its ceiling. Mixed operands fail the run, as `logic.condition`.
+            raise RunFailed(
+                ctx.run_id, ctx.node.id, f"cannot compare {a_raw!r} {op.value} {b_raw!r}"
+            ) from exc
         except InvalidPattern as exc:
             # Only reachable when the pattern arrived through a ref; a literal is caught at compile.
             raise RunFailed(

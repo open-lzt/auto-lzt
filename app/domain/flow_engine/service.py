@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Sequence
 from datetime import UTC, datetime
 from uuid import uuid4
 
@@ -32,7 +32,7 @@ from app.domain.flow_engine.repo import (
     FlowTemplateRepository,
     RunRepository,
 )
-from app.domain.flow_engine.spec import FlowSpec
+from app.domain.flow_engine.spec import FlowSpec, ParamSpec
 from app.domain.triggers.repo import TriggerRepository
 
 
@@ -123,6 +123,25 @@ class FlowService:
         return ir
 
 
+_DRY_RUN_PARAM = "dry_run"
+
+
+def _default_to_dry_run(
+    declared: Sequence[ParamSpec], params: dict[str, JsonValue] | None
+) -> dict[str, JsonValue]:
+    """A flow that declares ``dry_run`` starts dry unless the CALLER says otherwise, in words.
+
+    Here rather than in each client, because "no params given" reached this service from three of
+    them and only the CLI forced the flag: the bot's run button sent ``{}``, so a flow whose node
+    carried ``dry_run=false`` bought for real on one tap, with nothing on screen saying so. An
+    explicit ``dry_run=false`` in the request is still honoured — that is the deliberate live run.
+    """
+    given = dict(params or {})
+    if any(p.key == _DRY_RUN_PARAM for p in declared) and _DRY_RUN_PARAM not in given:
+        given[_DRY_RUN_PARAM] = True
+    return given
+
+
 class RunService:
     def __init__(
         self,
@@ -151,7 +170,7 @@ class RunService:
         flow = await self._flows.get(tenant_id, flow_id)
         if flow is None:  # pragma: no cover — an IR exists ⇒ its flow exists
             raise EntityNotFound("flow", str(flow_id))
-        flow_vars = resolve_params(flow.spec.params, params or {})
+        flow_vars = resolve_params(flow.spec.params, _default_to_dry_run(flow.spec.params, params))
 
         key = run_key or f"manual:{uuid4()}"
         now = datetime.now(UTC)

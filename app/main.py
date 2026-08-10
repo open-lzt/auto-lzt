@@ -134,7 +134,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 def create_app() -> FastAPI:
     configure_logging()
-    app = FastAPI(title="lzt-flow", lifespan=lifespan)
+    # No interactive docs, and no schema endpoint. Both are unauthenticated by construction, and the
+    # panel's nginx proxies /api/* verbatim — so /api/docs and /api/openapi.json handed the whole
+    # route map, plugin routes included, to anyone who reached the panel port.
+    app = FastAPI(
+        title="lzt-flow", lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None
+    )
     app.add_middleware(BaseHTTPMiddleware, dispatch=request_id_middleware)
     register_error_handlers(app)
     app.include_router(health_routes.router)
