@@ -195,6 +195,20 @@ class BatchNode(BaseNode):
         children = ctx.node.children or ()
         account_ref = ctx.active_account_id or ctx.node.account_ref
         async with ctx.deps.get_client(ctx.tenant_id, account_ref) as client:
-            outcomes = await asyncio.gather(*(_run_child(client, child, ctx) for child in children))
+            # `return_exceptions=True` so a sibling is never cancelled MID-CALL. Without it, one
+            # child raising a programming error unwound the whole gather while another was inside
+            # `await method(...)`: its idempotency key was already burned at :149 and the client was
+            # closed under its request, so the retry answered "reconcile manually" about an item
+            # whose real outcome nobody knew. All settle first; the error is re-raised below.
+            settled = await asyncio.gather(
+                *(_run_child(client, child, ctx) for child in children), return_exceptions=True
+            )
+
+        outcomes = []
+        for outcome in settled:
+            if isinstance(outcome, BaseException):
+                # Only OUR bugs reach here — `_run_child` turns every marketplace failure into data.
+                raise outcome
+            outcomes.append(outcome)
 
         return StepResultDTO(node_id=ctx.node.id, output={"results": json.dumps(dict(outcomes))})
