@@ -78,10 +78,15 @@ class _BoomEP:
 
 
 def _mgr(
-    monkeypatch: pytest.MonkeyPatch, eps: list[object], process: PluginProcess
+    monkeypatch: pytest.MonkeyPatch,
+    eps: list[object],
+    process: PluginProcess,
+    *,
+    plugins_enabled: bool = True,
 ) -> PluginManager:
     monkeypatch.setattr("app.plugin_runtime.manager.entry_points", lambda group: eps)
-    return PluginManager(process, get_settings())
+    settings = get_settings().model_copy(update={"plugins_enabled": plugins_enabled})
+    return PluginManager(process, settings)
 
 
 def test_discover_reads_hooks(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -101,6 +106,38 @@ def test_discover_fails_closed_on_import_error(monkeypatch: pytest.MonkeyPatch) 
     with pytest.raises(PluginLoadError) as exc:
         mgr.discover()
     assert exc.value.plugin_name == "boom"
+
+
+def test_disabled_imports_nothing(monkeypatch: pytest.MonkeyPatch) -> None:
+    """``plugins_enabled=False`` must not IMPORT, not merely not register.
+
+    Driven by ``_BoomEP``, whose ``load()`` raises, precisely so the assertion cannot pass for the
+    wrong reason: the test above proves that same entry point takes the process down when plugins
+    are on. Silence here therefore means ``load()`` was never called — a manager that imported and
+    then discarded the result would still blow up.
+    """
+    mgr = _mgr(monkeypatch, [_BoomEP()], PluginProcess.WORKER, plugins_enabled=False)
+    mgr.discover()
+    assert mgr.pre_init().nodes == ()
+
+
+def test_disabled_yields_no_contributions_on_any_surface(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A loadable plugin contributing to every surface still yields nothing in the API process —
+    the switch cuts at discovery, so no surface can carry anything through it."""
+
+    def _pre(ctx: PluginLoadContext) -> PluginLoadedContext:
+        loaded = PluginLoadedContext()
+        loaded.nodes.append(_reg("test.plugin_node"))
+        return loaded
+
+    module = SimpleNamespace(PRE_INIT=[_pre], POST_INIT=[], SHUTDOWN=[])
+    mgr = _mgr(monkeypatch, [_FakeEP("p", module)], PluginProcess.API, plugins_enabled=False)
+    mgr.discover()
+    contributions = mgr.pre_init()
+    assert contributions.nodes == ()
+    assert contributions.api_routers == ()
+    assert contributions.bot_routers == ()
+    assert contributions.panel_tabs == ()
 
 
 def test_discover_fails_closed_on_non_callable_hook(monkeypatch: pytest.MonkeyPatch) -> None:

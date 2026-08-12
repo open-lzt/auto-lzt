@@ -106,12 +106,19 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     # Plugin install surface: ONE install service per app so its pip-serialization lock is shared
     # across requests (a per-request instance would give each its own lock and no serialization).
-    plugin_index_client = PluginIndexClient(settings.plugin_index_url, settings.plugin_index_token)
-    app.state.plugin_index_client = plugin_index_client
-    app.state.plugin_install_service = PluginInstallService(
-        settings.plugin_dir, plugin_index_client
-    )
-    app.state.plugin_state = PluginState(settings.plugin_dir)
+    # Built only when plugins are on, under the SAME condition that mounts plugin_routes below —
+    # these three are exactly what that router reads off app.state, so a split condition would
+    # leave it answering requests with its dependencies missing (AttributeError, not a 404).
+    plugin_index_client: PluginIndexClient | None = None
+    if settings.plugins_enabled:
+        plugin_index_client = PluginIndexClient(
+            settings.plugin_index_url, settings.plugin_index_token
+        )
+        app.state.plugin_index_client = plugin_index_client
+        app.state.plugin_install_service = PluginInstallService(
+            settings.plugin_dir, plugin_index_client
+        )
+        app.state.plugin_state = PluginState(settings.plugin_dir)
 
     cipher = EnvelopeCipher(master_key=settings.master_key)
     token_pool = TokenPool(sessionmaker, cipher, settings.market_base_url)
@@ -125,7 +132,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         yield
     finally:
         await plugins.shutdown()
-        await plugin_index_client.aclose()
+        if plugin_index_client is not None:
+            await plugin_index_client.aclose()
         await app.state.registry_client.aclose()
         await app.state.arq_pool.aclose()
         await redis.aclose()
@@ -152,7 +160,11 @@ def create_app() -> FastAPI:
     app.include_router(module_routes.router)
     app.include_router(panel_routes.router)
     app.include_router(panel_preset_routes.router)
-    app.include_router(plugin_routes.router)
+    # Not mounted when plugins are off: with no install service on app.state these routes could
+    # only fail, and an unreachable path is a better answer than a 500. Same condition as the
+    # lifespan block that builds those dependencies — the two move together or not at all.
+    if get_settings().plugins_enabled:
+        app.include_router(plugin_routes.router)
     app.include_router(run_routes.router)
     app.include_router(task_routes.router)
     app.include_router(trigger_routes.router)

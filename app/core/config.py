@@ -191,6 +191,12 @@ class Settings(BaseSettings):
             raise ValueError("flow_env_prefix must be non-empty (empty = arbitrary host-env read)")
         return value
 
+    # The one switch that decides whether this installation executes code it did not ship. OFF
+    # means no .py plugin is imported from either source, and the whole install/update surface is
+    # gone with it — flows and the built-in nodes are untouched, since those never travel through
+    # the plugin runtime. Exists because a plugin runs in-process with the tokens and the money:
+    # that is the owner's own risk on a self-host, and somebody else's on a hosted deployment.
+    plugins_enabled: bool = Field(default=True)
     # Owner-only plugin runtime (folder source). plugin_dir holds bot-installed plugins as
     # <name>/{manifest.json, plugin.py}; the runtime scans it at start (shared across the 3
     # processes on a single-host deploy — D-8). plugin_index_url is the trusted git-hosted catalog

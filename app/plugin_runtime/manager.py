@@ -26,6 +26,7 @@ from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FutureTimeoutError
 from dataclasses import replace
 from importlib.metadata import entry_points
+from pathlib import Path
 from typing import Any, Final
 
 import structlog
@@ -54,7 +55,7 @@ from app.plugin_runtime.contracts import (
     SpawnFn,
 )
 from app.plugin_runtime.errors import PluginHookError, PluginLoadError
-from app.plugin_runtime.folder_source import load_folder_plugins
+from app.plugin_runtime.folder_source import iter_installed, load_folder_plugins
 
 log = structlog.get_logger()
 
@@ -84,6 +85,13 @@ def _read_hooks(module: object, attr: str, plugin_name: str) -> tuple[object, ..
 
 def _keep[T](items: list[T], when: bool) -> tuple[T, ...]:
     return tuple(items) if when else ()
+
+
+def _installed_folder_count(plugin_dir: Path) -> int:
+    """How many folder plugins are sitting there unloaded — for the disabled-path log line only.
+    Uses the parse-only source, which is the whole point: counting must not import what the switch
+    just refused to import."""
+    return sum(1 for _ in iter_installed(plugin_dir))
 
 
 def _discovered(name: str, source: PluginSource, module: object) -> DiscoveredPlugin:
@@ -119,8 +127,24 @@ class PluginManager:
     def discover(self) -> None:
         """Read entry points AND scan `settings.plugin_dir`; import each, read the three hook lists.
         Entry-point import failure → `PluginLoadError` (fail-closed). Folder plugins that fail to
-        load are quarantined inside `load_folder_plugins` (logged + skipped). Idempotent."""
+        load are quarantined inside `load_folder_plugins` (logged + skipped). Idempotent.
+
+        With `plugins_enabled` off this returns having imported nothing, so `pre_init` yields empty
+        contributions and the process runs on its built-ins alone. The guard sits HERE rather than
+        at the three call sites because this is the only place either source is read — a caller-side
+        check would have to be repeated three times and would still leave this method loaded.
+        """
         if self._discovered:
+            return
+        if not self.settings.plugins_enabled:
+            # Counted, not silent: an operator who disabled plugins while a folder still holds them
+            # is one restart away from wondering where his nodes went, and a zero here answers it.
+            log.info(
+                "plugin.disabled",
+                process=self.process.value,
+                folders=_installed_folder_count(self.settings.plugin_dir),
+            )
+            self._discovered = True
             return
         for ep in entry_points(group=ENTRY_POINT_GROUP):
             try:

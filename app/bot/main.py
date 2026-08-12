@@ -59,6 +59,8 @@ def build_dispatcher(
     settings: BotSettings,
     api: FlowApiClient,
     plugin_routers: tuple[Router, ...] = (),
+    *,
+    plugins_enabled: bool = True,
 ) -> Dispatcher:
     dispatcher = Dispatcher()
     # Every event observer, not just the two we happen to use today. `message` and `callback_query`
@@ -83,7 +85,12 @@ def build_dispatcher(
     dispatcher.include_router(common.router)
     dispatcher.include_router(catalog.router)
     dispatcher.include_router(flows.router)
-    dispatcher.include_router(plugin_handlers.router)
+    # The plugin menu is the bot half of the install surface — it goes when plugins do. Taken as a
+    # parameter rather than read from `get_settings()` here because this function is handed
+    # everything else it needs too, and a test that builds a dispatcher should not have to arrange
+    # process-wide config to decide which routers it gets.
+    if plugins_enabled:
+        dispatcher.include_router(plugin_handlers.router)
     # Plugin routers mount after the built-ins — still under the same per-observer guard+throttle
     # (middleware is on the observers, not the routers), so a plugin handler is guarded by
     # construction like every other.
@@ -140,22 +147,29 @@ async def run() -> None:
         settings.token.get_secret_value(),
         default=DefaultBotProperties(parse_mode=ParseMode.HTML),
     )
-    dispatcher = build_dispatcher(settings, api, contributions.bot_routers)
-    await plugins.post_init(node_registry=build_registry(), redis=None, sessionmaker=None)
-    # Update check lives here (F9): only the bot holds the Bot and the admin ids.
-    update_checker = PluginUpdateChecker(
-        api=api,
-        notifier=_BotNotifier(bot),
-        admin_ids=settings.admin_ids,
-        texts=load_plugin_texts(app_settings.plugin_texts_path),
-        interval_s=app_settings.plugin_update_interval_s,
+    dispatcher = build_dispatcher(
+        settings, api, contributions.bot_routers, plugins_enabled=app_settings.plugins_enabled
     )
-    update_checker.start()
+    await plugins.post_init(node_registry=build_registry(), redis=None, sessionmaker=None)
+    # Update check lives here (F9): only the bot holds the Bot and the admin ids. Not started when
+    # plugins are off — it would otherwise poll the catalog hourly for updates to plugins that this
+    # installation has refused to load, and notify admins about them.
+    update_checker: PluginUpdateChecker | None = None
+    if app_settings.plugins_enabled:
+        update_checker = PluginUpdateChecker(
+            api=api,
+            notifier=_BotNotifier(bot),
+            admin_ids=settings.admin_ids,
+            texts=load_plugin_texts(app_settings.plugin_texts_path),
+            interval_s=app_settings.plugin_update_interval_s,
+        )
+        update_checker.start()
     log.info("bot_start", admins=len(settings.admin_ids))
     try:
         await dispatcher.start_polling(bot)
     finally:
-        await update_checker.stop()
+        if update_checker is not None:
+            await update_checker.stop()
         await plugins.shutdown()
         await api.aclose()
         await bot.session.close()
