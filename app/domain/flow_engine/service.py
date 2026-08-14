@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 from uuid import uuid4
 
 from app.domain.account.model import TenantId
+from app.domain.api_key.errors import TooManyConcurrentRuns
 from app.domain.catalog.registry import NodeRegistry
 from app.domain.flow_engine.compiler import compile_flow
 from app.domain.flow_engine.errors import (
@@ -202,7 +203,25 @@ class RunService:
         flow_id: FlowId,
         run_key: str | None,
         params: dict[str, JsonValue] | None = None,
+        *,
+        max_in_flight: int | None = None,
     ) -> Run:
+        """Fire a run. ``max_in_flight`` is the caller's concurrency cap; None means unmetered.
+
+        The check is check-then-insert and therefore racy: N concurrent creates can all read a
+        count below the cap and all proceed, so the true ceiling is cap + (concurrent creates - 1).
+        Named rather than hidden because the bound is small and the alternative is a lock held
+        across an insert on the hot path. This guards a runtime against a runaway client; it is not
+        a billing meter, and it must not become one without being made exact first.
+
+        TODO(debt): check-then-insert race on the concurrency cap — proper fix: reserve the slot in
+        Redis with the same INCR/DECR discipline the rate limiter uses, releasing on terminal
+        status — deferred: needs the worker to release on every exit path, including a crash.
+        """
+        if max_in_flight is not None:
+            in_flight = await self._runs.count_in_flight(tenant_id)
+            if in_flight >= max_in_flight:
+                raise TooManyConcurrentRuns(max_in_flight)
         stored = await self.prepare_run(tenant_id, flow_id, run_key, params)
         await self._enqueue(stored.id)
         return stored
