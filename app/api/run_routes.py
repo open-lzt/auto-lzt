@@ -136,18 +136,8 @@ async def create_run(
     body: CreateRunRequest,
     tenant_id: TenantId = Depends(tenant_id_dep),
     svc: RunService = Depends(_run_service),
-    settings: Settings = Depends(get_settings),
 ) -> RunResponse:
-    """The cap travels INTO the service rather than being read there — the service owns flow-engine
-    rules, not how many runs this installation lets one tenant hold. 0 means no ceiling, and is
-    passed as None so the service has one "unmetered" spelling rather than two."""
-    run = await svc.create_run(
-        tenant_id,
-        FlowId(body.flow_id),
-        body.run_key,
-        body.params,
-        max_in_flight=settings.max_concurrent_runs_per_tenant or None,
-    )
+    run = await svc.create_run(tenant_id, FlowId(body.flow_id), body.run_key, body.params)
     return RunResponse(run_id=str(run.id), status=run.status)
 
 

@@ -34,10 +34,6 @@ class ErrorCode(StrEnum):
     PLUGIN_INSTALL_ERROR = "ERR-1017"
     PLUGIN_INDEX_UNAVAILABLE = "ERR-1018"
     TOO_MANY_STREAMS = "ERR-1019"
-    # ERR-1020 is deliberately unused here: it belonged to a per-tenant request budget, and usage
-    # policy is not this project's concern. Reserved rather than reassigned so a deployment that
-    # does meter can use it without colliding with a future code minted here.
-    TOO_MANY_CONCURRENT_RUNS = "ERR-1021"
     # ERR-1003 was retired when outbound HTTP moved inside pylzt; request nodes brought
     # first-party egress back, so it means what it always meant.
     EGRESS_BLOCKED = "ERR-1003"

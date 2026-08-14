@@ -386,24 +386,6 @@ class RunRepository(BaseSessionmakerRepo[Run, RunId]):
             rows = (await session.execute(stmt)).scalars().all()
         return [_run_from_orm(r) for r in rows]
 
-    async def count_in_flight(self, tenant_id: TenantId) -> int:
-        """Runs this tenant currently has queued or executing — the concurrency cap's input.
-
-        PENDING counts: a run whose job is still waiting is holding a slot the tenant asked for,
-        and excluding it would let a caller queue an unbounded backlog as long as the worker was
-        slow enough to keep any of them from starting.
-        """
-        stmt = (
-            select(func.count())
-            .select_from(RunORM)
-            .where(
-                RunORM.tenant_id == tenant_id,
-                RunORM.status.in_((RunStatus.PENDING.value, RunStatus.RUNNING.value)),
-            )
-        )
-        async with session_scope(self._sm) as session:
-            return (await session.scalar(stmt)) or 0
-
     async def list_by_flow(self, tenant_id: TenantId, flow_id: FlowId) -> list[Run]:
         """All runs for a flow, newest first — the LiveBadge's status source (GET
         /flows/{id}/status): ``running`` looks at membership, ``last_run_at`` at the head row."""

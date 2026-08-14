@@ -128,11 +128,6 @@ class Settings(BaseSettings):
     # Wave-06 safety backstops: a per-run step-execution budget (guards against an unbounded
     # stop_condition:goto loop or runaway self-loop, D2-2) and a conservative cap on batch-node
     # children until pylzt's real execute_batch limit is confirmed (wave-06 Risks).
-    # Ceiling on runs one tenant may have queued or executing at once; 0 disables it. Same shape as
-    # max_concurrent_streams above and for the same job: stop one caller from taking the whole
-    # worker. A flat number per installation on purpose — a per-tenant SCHEDULE of caps is usage
-    # policy, which belongs to whoever operates a deployment, not to the engine.
-    max_concurrent_runs_per_tenant: int = Field(default=0)
     max_steps_per_run: int = Field(default=10_000)
     batch_max_children: int = Field(default=50)
 
