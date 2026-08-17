@@ -26,12 +26,13 @@ from app.core.exceptions import AppError, ErrorCode
 from app.core.schema import BaseSchema
 from app.core.tenant import tenant_id_dep
 from app.domain.account.model import TenantId
-from app.domain.flow_engine.repo import FlowIrRepository, FlowRepository
-from app.domain.flow_engine.service import FlowService
+from app.domain.flow_engine.repo import FlowIrRepository, FlowRepository, RunRepository
+from app.domain.flow_engine.service import FlowService, RunService
 from app.domain.panel.preset_plugins import PresetRegistry
-from app.domain.panel.preset_registry import PresetParams
+from app.domain.panel.preset_registry import PresetParams, ScheduledPresetParams
 from app.domain.triggers.repo import TriggerRepository
 from app.domain.triggers.service import TriggerService
+from app.worker.enqueue import build_arq_enqueue
 
 router = APIRouter(prefix="/panel/presets", tags=["panel"])
 
@@ -74,7 +75,11 @@ class DeployPresetRequest(BaseSchema):
 
 class DeployPresetResponse(BaseSchema):
     flow_id: str
-    trigger_id: str
+    # Exactly one of these is set. A repeating preset gets a schedule and no run; a one-shot preset
+    # is started immediately and never acquires a trigger, because a giveaway that repeated would
+    # post a second commitment into somebody's thread on the next tick.
+    trigger_id: str | None = None
+    run_id: str | None = None
 
 
 def _flow_service(request: Request) -> FlowService:
@@ -87,6 +92,18 @@ def _flow_service(request: Request) -> FlowService:
 def _trigger_service(request: Request) -> TriggerService:
     sm = request.app.state.sessionmaker
     return TriggerService(FlowRepository(sm), TriggerRepository(sm))
+
+
+def _run_service(request: Request) -> RunService:
+    """The same service the scheduler and «Поднять сейчас» use — a one-shot preset starts its flow
+    through the ordinary run path rather than a second way of beginning work."""
+    sm = request.app.state.sessionmaker
+    return RunService(
+        FlowIrRepository(sm),
+        RunRepository(sm),
+        build_arq_enqueue(request.app.state.arq_pool),
+        FlowRepository(sm),
+    )
 
 
 @router.get("/list", dependencies=protect())
@@ -114,6 +131,7 @@ async def deploy_preset(
     flows: FlowService = Depends(_flow_service),
     triggers: TriggerService = Depends(_trigger_service),
     presets: PresetRegistry = Depends(preset_registry_dep),
+    runs: RunService = Depends(_run_service),
 ) -> DeployPresetResponse:
     """Validate the parameters against the preset, build the graph, save, compile, schedule.
 
@@ -128,13 +146,18 @@ async def deploy_preset(
         raise PresetParamsInvalid(key, str(exc)) from exc
 
     spec = preset.build(body.name or preset.default_name, params)
-    # Typed, not looked up by name: `schedule_cron` lives on PresetParams precisely so the deploy
-    # path can read it off any preset without knowing which one it is holding.
-    schedule_cron = params.schedule_cron.value
 
     # Overwrites this preset's existing automation instead of standing a second one beside it —
     # see FlowService.deploy_from_preset for the money this costs when it does not.
     flow = await flows.deploy_from_preset(tenant_id, key, spec)
     await flows.compile(tenant_id, flow.id)
-    trigger = await triggers.replace_schedule(tenant_id, flow.id, schedule_cron)
+
+    # By TYPE, not by a flag on the spec: a preset that repeats says so by carrying a schedule
+    # field, and one that does not cannot accidentally claim otherwise. Typed, not looked up by
+    # name, for the same reason it always was — the route never learns which preset it holds.
+    if not isinstance(params, ScheduledPresetParams):
+        run = await runs.create_run(tenant_id, flow.id, f"preset:{key}:{flow.id}")
+        return DeployPresetResponse(flow_id=str(flow.id), run_id=str(run.id))
+
+    trigger = await triggers.replace_schedule(tenant_id, flow.id, params.schedule_cron.value)
     return DeployPresetResponse(flow_id=str(flow.id), trigger_id=str(trigger.id))

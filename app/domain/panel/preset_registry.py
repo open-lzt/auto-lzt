@@ -106,12 +106,20 @@ _THREAD_URL_ID: Final = re.compile(r"/threads/(?:[^/]*?\.)?(\d+)")
 
 
 class PresetParams(BaseSchema):
-    """What every preset asks for, at minimum.
+    """What a preset asks for. Empty on purpose — the base states no field every preset has.
 
-    ``schedule_cron`` lives on the base because the DEPLOY path needs it: the trigger is attached
-    by the route, not by the graph builder, so the route has to be able to read the schedule off
-    any preset's parameters without knowing which preset it is holding. Subclasses override the
-    default, never the name.
+    It used to carry ``schedule_cron``, which made "runs on a schedule" a property of being a
+    preset at all. It is not: a giveaway runs ONCE, and a repeating one would post a second
+    commitment into somebody's thread every half hour. Repetition is now stated by the subclass
+    below, so the deploy path decides by TYPE rather than by reading a field that may be a lie.
+    """
+
+
+class ScheduledPresetParams(PresetParams):
+    """A preset that repeats. The deploy route reads the schedule off this type, so a preset that
+    does not inherit it gets no trigger — and gets run once instead.
+
+    Subclasses override the default, never the name.
     """
 
     schedule_cron: SchedulePreset = Field(
@@ -119,7 +127,7 @@ class PresetParams(BaseSchema):
     )
 
 
-class AutobumpParams(PresetParams):
+class AutobumpParams(ScheduledPresetParams):
     # Ordering note (applies to every preset below): Pydantic emits base-class fields FIRST, so
     # `schedule_cron` — declared on PresetParams so the deploy route can read it typed — would
     # open every form with «Как часто». That asks WHEN before WHO or WHAT, which is the wrong
@@ -153,7 +161,7 @@ class AutobumpParams(PresetParams):
     # that has one. The preset offers the feature again when the graph can carry per-lot prices.
 
 
-class ThreadBumpParams(PresetParams):
+class ThreadBumpParams(ScheduledPresetParams):
     schedule_cron: SchedulePreset = Field(
         default=SchedulePreset.EVERY_4_HOURS, title="Как часто", json_schema_extra=_SCHEDULE_UI
     )
@@ -201,7 +209,7 @@ class ThreadBumpParams(PresetParams):
         return ids
 
 
-class AutobuyParams(PresetParams):
+class AutobuyParams(ScheduledPresetParams):
     schedule_cron: SchedulePreset = Field(
         default=SchedulePreset.HOURLY, title="Как часто", json_schema_extra=_SCHEDULE_UI
     )
