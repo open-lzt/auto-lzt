@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from pydantic import Field
 
-from app.core.schema import BaseSchema
+from app.core.schema import BaseSchema, NumericPort
 from app.domain.account.errors import NoAvailableAccount
 from app.domain.catalog.capabilities import MARKET_MUTATE, NodeCategory
 from app.domain.flow_engine.base_node import BaseNode, RunContext
@@ -17,7 +17,7 @@ from app.domain.flow_engine.dtos import StepResultDTO
 
 
 class BumpThreadInput(BaseSchema):
-    thread_id: int = Field(
+    thread_id: NumericPort = Field(
         title="Тема",
         description="ID темы на форуме.",
         json_schema_extra={"x-ui": {"widget": "number"}},
@@ -30,12 +30,6 @@ class BumpThreadOutput(BaseSchema):
     bumped_at: str  # ISO-8601, UTC
 
 
-def _as_int(value: str | int | float | bool | None) -> int:
-    if isinstance(value, bool) or not isinstance(value, int | float | str):
-        raise ValueError(f"thread_id must be an int, got {value!r}")
-    return int(value)
-
-
 class BumpThreadNode(BaseNode):
     node_type = "forum.bump_thread"
     category = NodeCategory.ACTION
@@ -46,8 +40,9 @@ class BumpThreadNode(BaseNode):
     output_schema = BumpThreadOutput
     required_inputs = ("thread_id",)
 
-    async def execute(self, ctx: RunContext) -> StepResultDTO:
-        thread_id = _as_int(ctx.resolve_input("thread_id"))
+    async def execute(self, ctx: RunContext[BumpThreadInput]) -> StepResultDTO:
+        # Порядок не меняется: вход, затем замок. Вход теперь разобран схемой ещё раньше.
+        thread_id = ctx.inputs.thread_id
         first = await ctx.deps.guard.check_and_set(ctx.idempotency_key)
         if not first:
             return StepResultDTO(

@@ -12,9 +12,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Any
+from typing import Annotated, Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, BeforeValidator
 
 
 class Widget(StrEnum):
@@ -46,6 +46,26 @@ class XUI:
     def extra(self) -> dict[str, Any]:
         """Форма, которую ждёт pydantic. Ключ `x-` — соглашение JSON Schema о своих полях."""
         return {"x-ui": {"widget": self.widget.value}}
+
+
+def _reject_bool(value: object) -> object:
+    """`True`/`False` — это `int` в Python, и pydantic принимает их как `1`/`0`.
+
+    Для числового порта узла это всегда дефект, и дефект молчаливый: `item_id=True` уедет как
+    **лот номер 1**, `count=True` обрежет список до одного элемента. Проверка стояла рукописной в
+    трёх узлах (`take`, `bump`, `bump_thread`) и снята оттуда в пользу этого типа.
+    """
+    if isinstance(value, bool):
+        raise ValueError("must be a number, not a boolean")
+    return value
+
+
+NumericPort = Annotated[int, BeforeValidator(_reject_bool)]
+"""`int` для порта узла: принимает `3` и `3.0`, отвергает `True`.
+
+`3.0` обязан проходить — `logic.math` типизирует любой результат как `float`, поэтому счёт,
+вычисленный на холсте, приезжает дробным по типу и целым по значению.
+"""
 
 
 class BaseSchema(BaseModel):

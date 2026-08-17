@@ -8,25 +8,23 @@ from __future__ import annotations
 
 from pydantic import Field
 
-from app.core.schema import BaseSchema
+from app.core.schema import BaseSchema, NumericPort
 from app.domain.catalog.capabilities import MARKET_MUTATE_MONEY, NodeCategory
 from app.domain.flow_engine.base_node import BaseNode, RunContext
 from app.domain.flow_engine.dtos import StepResultDTO
 
 
 class BumpInput(BaseSchema):
-    item_id: int = Field(title="Лот", json_schema_extra={"x-ui": {"widget": "lot_ref"}}, gt=0)
+    # `NumericPort` отвергает `True`, который иначе уехал бы как лот номер 1 — на денежном узле
+    # это покупка не того лота, а не опечатка.
+    item_id: NumericPort = Field(
+        title="Лот", json_schema_extra={"x-ui": {"widget": "lot_ref"}}, gt=0
+    )
 
 
 class BumpOutput(BaseSchema):
     item_id: int
     bumped_at: str  # ISO-8601, UTC
-
-
-def _as_int(value: str | int | float | bool | None) -> int:
-    if isinstance(value, bool) or not isinstance(value, int | float | str):
-        raise ValueError(f"item_id must be an int, got {value!r}")
-    return int(value)
 
 
 class BumpNode(BaseNode):
@@ -40,8 +38,11 @@ class BumpNode(BaseNode):
     required_inputs = ("item_id",)
     batchable = True
 
-    async def execute(self, ctx: RunContext) -> StepResultDTO:
-        item_id = _as_int(ctx.resolve_input("item_id"))
+    async def execute(self, ctx: RunContext[BumpInput]) -> StepResultDTO:
+        # Порядок здесь несущий и не меняется: сначала читаем вход, только потом берём замок.
+        # Теперь вход разбирается ещё раньше — схемой, при сборке контекста, — поэтому заведомо
+        # неверный `item_id` больше не тратит ключ идемпотентности впустую.
+        item_id = ctx.inputs.item_id
         first = await ctx.deps.guard.check_and_set(ctx.idempotency_key)
         if not first:
             return StepResultDTO(

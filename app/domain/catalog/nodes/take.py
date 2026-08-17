@@ -15,7 +15,7 @@ import json
 
 from pydantic import Field, field_validator
 
-from app.core.schema import BaseSchema
+from app.core.schema import BaseSchema, NumericPort
 from app.domain.catalog.capabilities import PURE, NodeCategory
 from app.domain.flow_engine.base_node import BaseNode, RunContext
 from app.domain.flow_engine.dtos import StepResultDTO
@@ -27,13 +27,10 @@ class TakeInput(BaseSchema):
         description="JSON-массив — обычно выход get_my_lots.",
         json_schema_extra={"x-ui": {"widget": "text"}},
     )
-    # `int` в мягком режиме принимает и `3.0`, и это НЕСУЩЕЕ свойство, а не мелочь: `logic.math`
-    # типизирует любой результат как `float`, поэтому вычисленный на холсте счёт (автозакупка
-    # считает `budget // max_price`) приезжает как `3.0`. Отказ от него ломал бы граф ровно там,
-    # где счёт выведен, а не вписан руками — то есть незаметно. `3.5` при этом отвергается,
-    # и это тоже намеренно: дробный счёт означает ошибку в формуле.
-    # НЕ ставить сюда `strict=True`.
-    count: int = Field(
+    # `NumericPort`, а не голый `int`: он принимает `3` и `3.0` (счёт, вычисленный `logic.math`,
+    # приезжает дробным по типу), но отвергает `True` — иначе `items[:True]` молча вернул бы один
+    # элемент. `3.5` отвергается тоже: дробный счёт означает ошибку в формуле бюджета.
+    count: NumericPort = Field(
         ge=0,
         title="Сколько взять",
         # Ноль — законное значение, а не ошибка: он означает «бюджета не хватает и на один лот по
@@ -42,19 +39,6 @@ class TakeInput(BaseSchema):
         description="Сколько первых элементов оставить. Ноль — не брать ничего.",
         json_schema_extra={"x-ui": {"widget": "number"}},
     )
-
-    @field_validator("count", mode="before")
-    @classmethod
-    def _reject_bool(cls, value: object) -> object:
-        """`True` — это `int` в Python, и pydantic его принимает как `1`.
-
-        Здесь это недопустимо: `items[:True]` молча вернул бы ОДИН элемент вместо отказа на явно
-        неверном входе. Проверка стояла в снятом `_as_count` и восстановлена здесь — схема мягче
-        рукописной проверки ровно в этом месте.
-        """
-        if isinstance(value, bool):
-            raise ValueError("count must be a number, not a boolean")
-        return value
 
     @field_validator("items")
     @classmethod

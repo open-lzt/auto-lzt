@@ -1,5 +1,12 @@
 """RepriceNode — thin wrapper over ``MarketAdapter.edit`` / ``pylzt``'s ``managing_edit``.
 
+**ON HOLD — do not put this node into presets, docs or onboarding flows. Owner's call,
+2026-08-18.** The node stays in the catalog because existing flows reference it and removing it
+would break them; what is frozen is its SPREAD, not its existence. Only the owner lifts this.
+
+Concretely, until then: no new preset wires it, no guide teaches it, no example uses it. A flow
+that already has it keeps working.
+
 Two pricing strategies (wave-04 spec): an absolute ``price``, or a percentage ``decay_pct`` applied
 to an upstream-supplied ``current_price`` (e.g. from ``get-my-lots``). Exactly one must resolve.
 """
@@ -11,7 +18,7 @@ from decimal import ROUND_HALF_UP, Decimal
 from pydantic import Field
 from pylzt.types import Currency
 
-from app.core.schema import BaseSchema
+from app.core.schema import BaseSchema, NumericPort
 from app.domain.catalog.capabilities import MARKET_MUTATE, NodeCategory
 from app.domain.catalog.nodes.relist import as_price
 from app.domain.flow_engine.base_node import BaseNode, RunContext
@@ -20,8 +27,14 @@ from app.domain.flow_engine.errors import RunFailed
 
 
 class RepriceInput(BaseSchema):
-    item_id: int = Field(title="Лот", json_schema_extra={"x-ui": {"widget": "lot_ref"}}, gt=0)
-    currency: str = Field(title="Валюта", json_schema_extra={"x-ui": {"widget": "select"}})
+    item_id: NumericPort = Field(
+        title="Лот", json_schema_extra={"x-ui": {"widget": "lot_ref"}}, gt=0
+    )
+    # `Currency`, а не `str`: тело узла всё равно звало `Currency(...)`, поэтому неизвестная
+    # валюта проходила схему и падала ГОЛЫМ `ValueError` — рантайм заворачивал его вторым
+    # `RunFailed`, и оператор читал причину из вложенного repr. Теперь отказ приходит от схемы и
+    # называет допустимые значения.
+    currency: Currency = Field(title="Валюта", json_schema_extra={"x-ui": {"widget": "select"}})
     price: int | None = Field(
         title="Новая цена",
         description="Задайте либо цену, либо процент скидки.",
@@ -89,19 +102,12 @@ class RepriceNode(BaseNode):
     required_inputs = ("item_id", "currency")
     batchable = True
 
-    async def execute(self, ctx: RunContext) -> StepResultDTO:
-        item_id_raw = ctx.resolve_input("item_id")
-        if isinstance(item_id_raw, bool) or not isinstance(item_id_raw, int | float | str):
-            raise RunFailed(ctx.run_id, ctx.node.id, f"item_id must be an int, got {item_id_raw!r}")
-        item_id = int(item_id_raw)
+    async def execute(self, ctx: RunContext[RepriceInput]) -> StepResultDTO:
+        item_id = ctx.inputs.item_id
+        currency = ctx.inputs.currency
 
-        currency_raw = ctx.resolve_input("currency")
-        if not isinstance(currency_raw, str):
-            raise RunFailed(
-                ctx.run_id, ctx.node.id, f"currency must be a str, got {currency_raw!r}"
-            )
-        currency = Currency(currency_raw)
-
+        # `_target_price` остаётся на сырых портах намеренно: цена задаётся ЛИБО прямо, ЛИБО
+        # выводится из `decay_pct` + `current_price`, и «одно из двух» схема поля не выражает.
         price = _target_price(ctx)
 
         first = await ctx.deps.guard.check_and_set(ctx.idempotency_key)
