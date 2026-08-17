@@ -13,6 +13,7 @@ from uuid import uuid4
 import pytest
 
 from app.domain.catalog.plugins import build_registry
+from app.domain.panel.preset_plugins import build_presets
 from app.domain.panel.preset_registry import (
     BUILTIN_PRESETS,
     AutobumpParams,
@@ -22,7 +23,6 @@ from app.domain.panel.preset_registry import (
     ThreadBumpParams,
     UnknownPreset,
 )
-from app.domain.panel.preset_plugins import build_presets
 
 _PARAMS: dict[str, dict[str, object]] = {
     "autobump": {"accounts": [uuid4()]},
