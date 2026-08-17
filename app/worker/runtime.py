@@ -944,7 +944,7 @@ async def _run_node(
         return resolver(port) if port in node.inputs else None
 
     try:
-        node_inputs = build_inputs(instance.input_schema, _resolve_optional)
+        node_inputs = build_inputs(instance.input_schema, _resolve_optional, node.inputs)
     except ValueError as exc:
         # Вход не сходится со схемой узла — это отказ ЭТОГО шага, а не падение прогона:
         # RunFailed несёт run_id и node_id, поэтому в журнале видно, какой узел и какое поле.

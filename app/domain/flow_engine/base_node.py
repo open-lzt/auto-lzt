@@ -15,7 +15,7 @@ written here, not derived magic.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from collections.abc import Awaitable, Callable, Mapping
+from collections.abc import Awaitable, Callable, Container, Mapping
 from contextlib import AbstractAsyncContextManager
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar, Generic, TypeVar
@@ -93,7 +93,9 @@ TIn = TypeVar("TIn", bound=BaseModel)
 
 
 def build_inputs(
-    schema: type[BaseModel], resolve_optional: Callable[[str], str | int | float | bool | None]
+    schema: type[BaseModel],
+    resolve_optional: Callable[[str], str | int | float | bool | None],
+    wired: Container[str] = (),
 ) -> BaseModel:
     """The node's declared ``input_schema``, filled from its wired ports.
 
@@ -103,8 +105,13 @@ def build_inputs(
     code from every node, and makes a mistyped port name an attribute error instead of a valid
     ``None`` travelling on as a value.
 
-    An unwired optional port is DROPPED rather than passed as ``None``: passing it would override
+    An UNWIRED optional port is DROPPED rather than passed as ``None``: passing it would override
     the schema's own default, turning ``count: int = 1`` into a type error the flow never caused.
+
+    A WIRED port that resolved to ``None`` is passed through as ``None``, and ``wired`` is what
+    tells the two apart. They are not the same fact, and one node in the catalog turns on the
+    difference: ``logic.condition``'s ``is_null`` exists to ask "did this arrive empty?", so
+    dropping a wired ``None`` would make the operator unable to ever see the thing it tests for.
 
     Raises ``ValueError`` — the interpreter turns it into ``RunFailed``, which is where the run id
     lives. The message names the field and the problem but never the value: a node's input can be
@@ -113,7 +120,7 @@ def build_inputs(
     raw: dict[str, object] = {}
     for name in schema.model_fields:
         value = resolve_optional(name)
-        if value is not None:
+        if value is not None or name in wired:
             raw[name] = value
     try:
         return schema.model_validate(raw)

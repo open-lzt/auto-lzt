@@ -25,7 +25,10 @@ from app.domain.flow_engine.ir_node import IRInput, LiteralValue
 
 
 class ConditionInput(BaseSchema):
-    left: str | int | float | bool = Field(
+    # `| None` обязателен, и это не послабление: оператор `is_null` существует ровно для того,
+    # чтобы спросить «пришло ли пусто», поэтому тип, не допускающий пустоты, отменял бы его. До
+    # валидации входов схемой это не проявлялось — схема не проверялась в рантайме.
+    left: str | int | float | bool | None = Field(
         title="Что сравниваем", json_schema_extra={"x-ui": {"widget": "text"}}
     )
     op: ComparisonOp = Field(title="Операция", json_schema_extra={"x-ui": {"widget": "select"}})
@@ -92,13 +95,11 @@ class ConditionNode(BaseNode):
     def validate_compile(cls, node_id: str, inputs: Mapping[str, IRInput]) -> None:
         validate_operands(node_id, inputs, op_port="op", pattern_port="right")
 
-    async def execute(self, ctx: RunContext) -> StepResultDTO:
-        left = ctx.resolve_input("left")
-        right = ctx.resolve_optional("right")
-        op_raw = ctx.resolve_input("op")
-        if not isinstance(op_raw, str) or op_raw not in ComparisonOp:
-            raise RunFailed(ctx.run_id, ctx.node.id, f"unknown comparison op {op_raw!r}")
-        op = ComparisonOp(op_raw)
+    async def execute(self, ctx: RunContext[ConditionInput]) -> StepResultDTO:
+        # Типы операндов схема СОХРАНЯЕТ, а не приводит: `'5'` остаётся строкой, `5` числом,
+        # `True` булевым (проверено на union'е `str | int | float | bool | None`). Иначе
+        # сравнение молча меняло бы результат.
+        left, right, op = ctx.inputs.left, ctx.inputs.right, ctx.inputs.op
 
         try:
             result = evaluate(op, left, right)

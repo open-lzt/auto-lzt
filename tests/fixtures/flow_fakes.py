@@ -573,7 +573,7 @@ def build_ctx(
     schema = node_cls.input_schema if node_cls is not None else EmptyInput
 
     try:
-        node_inputs = build_inputs(schema, resolve_optional)
+        node_inputs = build_inputs(schema, resolve_optional, node.inputs)
     except ValueError as exc:
         # Зеркалит рантайм (`app/worker/runtime.py`): плохой вход — это отказ ШАГА, `RunFailed`
         # с run_id и node_id. Пустить отсюда голый ValueError значило бы, что фикстура

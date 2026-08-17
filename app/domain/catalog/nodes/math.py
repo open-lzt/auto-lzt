@@ -10,7 +10,7 @@ from app.core.schema import BaseSchema
 from app.domain.catalog.capabilities import PURE, NodeCategory
 from app.domain.flow_engine.base_node import BaseNode, RunContext
 from app.domain.flow_engine.dtos import StepResultDTO
-from app.domain.flow_engine.errors import MathDomainError, RunFailed
+from app.domain.flow_engine.errors import MathDomainError
 
 
 class MathOp(StrEnum):
@@ -52,15 +52,9 @@ class MathNode(BaseNode):
     output_schema = MathOutput
     required_inputs = ("op", "a", "b")
 
-    async def execute(self, ctx: RunContext) -> StepResultDTO:
-        op_raw = ctx.resolve_input("op")
-        if not isinstance(op_raw, str) or op_raw not in MathOp:
-            raise RunFailed(ctx.run_id, ctx.node.id, f"unknown math op {op_raw!r}")
-        op = MathOp(op_raw)
-        a_raw, b_raw = ctx.resolve_input("a"), ctx.resolve_input("b")
-        if a_raw is None or b_raw is None:
-            raise RunFailed(ctx.run_id, ctx.node.id, "math inputs must not be null")
-        a, b = float(a_raw), float(b_raw)
+    async def execute(self, ctx: RunContext[MathInput]) -> StepResultDTO:
+        # Операция, операнды и их обязательность — уже проверены схемой при сборке контекста.
+        op, a, b = ctx.inputs.op, ctx.inputs.a, ctx.inputs.b
         if op in (MathOp.DIV, MathOp.MOD, MathOp.IDIV) and b == 0:
             raise MathDomainError(op=op.value, a=a, b=b, reason="division by zero")
         match op:
