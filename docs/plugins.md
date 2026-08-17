@@ -54,9 +54,10 @@ class ShoutNode(BaseNode):
     node_type = "demo.shout"          # ключ, по которому флоу ссылается на узел
     required_inputs = ("text",)       # компилятор проверит, что порт подключён
 
-    async def execute(self, ctx: RunContext) -> StepResultDTO:
-        text = str(ctx.resolve_input("text"))
-        return StepResultDTO(node_id=ctx.node.id, output={"shouted": text.upper()})
+    async def execute(self, ctx: RunContext[ShoutInput]) -> StepResultDTO:
+        # Входы уже разобраны схемой: `ctx.inputs.text` — строка, а не «что-то со провода».
+        # Неверный вход не доходит до тела узла — прогон падает раньше, называя поле.
+        return StepResultDTO(node_id=ctx.node.id, output={"shouted": ctx.inputs.text.upper()})
 
 
 REGISTRATIONS = [
@@ -293,8 +294,8 @@ class SendMessageNode(BaseRequestNode):
     node_type = "tg.send_message"
     required_inputs = ("bot_token", "chat_id", "text")
 
-    def build_request(self, ctx: RunContext) -> RequestSpec:
-        token = str(ctx.resolve_input("bot_token"))
+    def build_request(self, ctx: RunContext[SendMessageInput]) -> RequestSpec:
+        token = ctx.inputs.bot_token
         return RequestSpec(
             url=f"https://api.telegram.org/bot{token}/sendMessage",
             method=HttpMethod.POST,

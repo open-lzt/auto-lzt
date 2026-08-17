@@ -34,7 +34,11 @@ def _coerce_numeric(value: _Scalar) -> _Scalar:
 
 class CompareInput(BaseSchema):
     op: ComparisonOp = Field(title="Операция", json_schema_extra={"x-ui": {"widget": "select"}})
-    a: _Scalar = Field(title="Первый операнд", json_schema_extra={"x-ui": {"widget": "text"}})
+    # `| None` намеренно: пустой операнд не роняет прогон, а даёт False для всех операторов кроме
+    # `is_null` — иначе единственный способ спросить «пришло ли пусто» перестал бы работать.
+    a: _Scalar | None = Field(
+        title="Первый операнд", json_schema_extra={"x-ui": {"widget": "text"}}
+    )
     b: _Scalar | None = Field(
         None,
         title="Второй операнд",
@@ -60,13 +64,9 @@ class CompareNode(BaseNode):
     def validate_compile(cls, node_id: str, inputs: Mapping[str, IRInput]) -> None:
         validate_operands(node_id, inputs, op_port="op", pattern_port="b")
 
-    async def execute(self, ctx: RunContext) -> StepResultDTO:
-        op_raw = ctx.resolve_input("op")
-        if not isinstance(op_raw, str) or op_raw not in ComparisonOp:
-            raise RunFailed(ctx.run_id, ctx.node.id, f"unknown comparison op {op_raw!r}")
-        op = ComparisonOp(op_raw)
-
-        a_raw, b_raw = ctx.resolve_input("a"), ctx.resolve_optional("b")
+    async def execute(self, ctx: RunContext[CompareInput]) -> StepResultDTO:
+        op = ctx.inputs.op
+        a_raw, b_raw = ctx.inputs.a, ctx.inputs.b
         # A null operand no longer fails the run: it evaluates to False for every operator except
         # is_null, which is the only way to test for one (see operators.py's null semantics).
         a = _coerce_numeric(a_raw) if a_raw is not None else None

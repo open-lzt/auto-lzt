@@ -13,7 +13,7 @@ from __future__ import annotations
 import inspect
 import json
 from collections.abc import Awaitable, Callable
-from typing import cast
+from typing import Any, cast
 
 from pydantic import BaseModel, Field
 
@@ -51,12 +51,6 @@ class DynamicMethodOutput(BaseSchema):
     result: str | int | float | bool | None = None
 
 
-def _as_str(value: str | int | float | bool | None, port: str) -> str:
-    if not isinstance(value, str):
-        raise ValueError(f"'{port}' must be a string, got {value!r}")
-    return value
-
-
 def _flatten(response: object) -> str | int | float | bool | None:
     """Same JSON-encode-into-string convention as ``GetMyLotsNode`` — ``StepResultDTO.output`` is
     flat-primitive-only, so a structured response is JSON-encoded into the one ``"result"`` key."""
@@ -78,9 +72,11 @@ class DynamicMethodNode(BaseNode):
     output_schema = DynamicMethodOutput
     required_inputs = (_FACADE_PORT, _METHOD_PORT)
 
-    async def execute(self, ctx: RunContext) -> StepResultDTO:
-        facade_name = _as_str(ctx.resolve_input(_FACADE_PORT), _FACADE_PORT)
-        method_name = _as_str(ctx.resolve_input(_METHOD_PORT), _METHOD_PORT)
+    async def execute(self, ctx: RunContext[DynamicMethodInput]) -> StepResultDTO:
+        # Типизированы только два служебных порта. Динамические аргументы метода схемой не
+        # описываются по построению — их проверяет живая сигнатура в `_resolve_kwargs`.
+        facade_name = ctx.inputs.facade
+        method_name = ctx.inputs.method
         account_ref = ctx.active_account_id or ctx.node.account_ref
 
         # node_type is registered idempotent=False (registry.py) — this node calls an arbitrary,
@@ -119,7 +115,7 @@ class DynamicMethodNode(BaseNode):
 
     @staticmethod
     def _resolve_kwargs(
-        ctx: RunContext, bound: BoundMethod, facade_name: str, method_name: str
+        ctx: RunContext[Any], bound: BoundMethod, facade_name: str, method_name: str
     ) -> dict[str, object]:
         signature = inspect.signature(bound)
         valid_params = {name for name in signature.parameters if name != "self"}

@@ -12,7 +12,7 @@ import json
 
 import structlog
 
-from app.core.schema import BaseSchema
+from app.core.schema import BaseSchema, EmptyInput
 from app.domain.account.errors import NoAvailableAccount
 from app.domain.catalog.capabilities import MARKET_READ, NodeCategory
 from app.domain.flow_engine.base_node import BaseNode, RunContext
@@ -40,7 +40,7 @@ class GetMyLotsNode(BaseNode):
     # (account_ref/active_account_id), never an explicit parameter.
     output_schema = GetMyLotsOutput
 
-    async def execute(self, ctx: RunContext) -> StepResultDTO:
+    async def execute(self, ctx: RunContext[EmptyInput]) -> StepResultDTO:
         account_ref = ctx.active_account_id or ctx.node.account_ref
         if account_ref is None:
             raise NoAvailableAccount(ctx.tenant_id)

@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import json
 
-from app.core.schema import BaseSchema
+from app.core.schema import BaseSchema, EmptyInput
 from app.domain.catalog.capabilities import MARKET_READ, NodeCategory
 from app.domain.flow_engine.base_node import BaseNode, RunContext
 from app.domain.flow_engine.dtos import StepResultDTO
@@ -24,7 +24,7 @@ class BatchListPendingNode(BaseNode):
     capabilities = MARKET_READ
     output_schema = BatchListPendingOutput
 
-    async def execute(self, ctx: RunContext) -> StepResultDTO:
+    async def execute(self, ctx: RunContext[EmptyInput]) -> StepResultDTO:
         account_ref = ctx.active_account_id or ctx.node.account_ref
         async with ctx.deps.get_client(ctx.tenant_id, account_ref) as client:
             record_ids = [

@@ -4,7 +4,7 @@ key telling the interpreter to walk every edge concurrently instead of picking o
 
 from __future__ import annotations
 
-from app.core.schema import BaseSchema
+from app.core.schema import BaseSchema, EmptyInput
 from app.domain.catalog.capabilities import PURE, NodeCategory
 from app.domain.flow_engine.base_node import BaseNode, RunContext
 from app.domain.flow_engine.dtos import StepResultDTO
@@ -21,5 +21,5 @@ class ForkNode(BaseNode):
     capabilities = PURE
     output_schema = ForkOutput
 
-    async def execute(self, ctx: RunContext) -> StepResultDTO:
+    async def execute(self, ctx: RunContext[EmptyInput]) -> StepResultDTO:
         return StepResultDTO(node_id=ctx.node.id, output={"__fork__": True})

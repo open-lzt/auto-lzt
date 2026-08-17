@@ -27,12 +27,13 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from decimal import Decimal
+from typing import Annotated, Any
 from uuid import uuid4
 
 import structlog
-from pydantic import Field
+from pydantic import BeforeValidator, Field, model_validator
 
-from app.core.schema import BaseSchema
+from app.core.schema import BaseSchema, NumericPort
 from app.domain.catalog.capabilities import MARKET_MUTATE_MONEY, NodeCategory
 from app.domain.flow_engine.base_node import BaseNode, RunContext
 from app.domain.flow_engine.dtos import StepResultDTO
@@ -45,8 +46,10 @@ logger = structlog.get_logger()
 
 
 class FastBuyInput(BaseSchema):
-    item_id: int = Field(gt=0, title="Лот", json_schema_extra={"x-ui": {"widget": "lot_ref"}})
-    max_price: int | None = Field(
+    item_id: NumericPort = Field(
+        gt=0, title="Лот", json_schema_extra={"x-ui": {"widget": "lot_ref"}}
+    )
+    max_price: NumericPort | None = Field(
         default=None,
         gt=0,
         title="Платить не дороже",
@@ -61,7 +64,7 @@ class FastBuyInput(BaseSchema):
         "в другой валюте — не потолок. Лот в другой валюте пропускается, а не пересчитывается.",
         json_schema_extra={"x-ui": {"widget": "select"}},
     )
-    run_budget: int | None = Field(
+    run_budget: NumericPort | None = Field(
         default=None,
         gt=0,
         title="Бюджет прогона",
@@ -71,15 +74,30 @@ class FastBuyInput(BaseSchema):
         "стоит и бюджет не расходует.",
         json_schema_extra={"x-ui": {"widget": "number"}},
     )
-    dry_run: bool = Field(
+    # Не голый `bool`: pydantic не знает «да»/«нет», а этот порт решает, уйдут ли деньги.
+    # `_as_bool` ниже разбирает обе формы и отвергает всё, чего не узнал.
+    dry_run: Annotated[bool, BeforeValidator(lambda v: _as_bool(v, "dry_run"))] = Field(
         default=True,
         title="Холостой прогон",
         description="Включено — покупка не выполняется, узел только сообщает что купил бы.",
         json_schema_extra={"x-ui": {"widget": "switch"}},
     )
 
+    @model_validator(mode="after")
+    def _ceiling_and_budget_agree(self) -> FastBuyInput:
+        # Цена лота приходит в своей валюте, поэтому потолок без валюты сравнивать не с чем;
+        # а бюджет прогона считается «ещё один лот по его потолку», и без потолка у покупки нет
+        # известной максимальной цены — гейт стал бы украшением.
+        if self.max_price is not None and not (self.max_price_currency or "").strip():
+            raise ValueError("max_price_currency is required when max_price is set")
+        if self.run_budget is not None and self.max_price is None:
+            raise ValueError(
+                "run_budget requires max_price — without it a lot has no known max cost"
+            )
+        return self
 
-async def _affordable(ctx: RunContext, run_budget: int | None, max_price: int) -> bool:
+
+async def _affordable(ctx: RunContext[Any], run_budget: int | None, max_price: int) -> bool:
     """Would buying one more lot at `max_price` stay inside the run's budget?
 
     Checked BEFORE the money moves, so the budget is never exceeded rather than found exceeded
@@ -110,7 +128,7 @@ async def _affordable(ctx: RunContext, run_budget: int | None, max_price: int) -
     return spent + Decimal(max_price) <= Decimal(run_budget)
 
 
-async def _record(ctx: RunContext, result: FastBuyResult) -> bool:
+async def _record(ctx: RunContext[Any], result: FastBuyResult) -> bool:
     """Append the purchase to the ledger. NEVER lets a ledger failure fail the purchase.
 
     Returns whether the ledger now holds this purchase. ``False`` means the spend became invisible:
@@ -176,60 +194,6 @@ def as_int(value: str | int | float | bool | None, port: str) -> int:
     return int(value)
 
 
-def _as_ceiling(value: str | int | float | bool | None) -> int | None:
-    """An unwired ``max_price`` means "no ceiling" — the behaviour every existing flow already has.
-
-    A wired one must be a usable number: refusing here is free, whereas a ceiling that silently
-    read as 0 or None would let the purchase through at any price, which is the failure this port
-    exists to prevent.
-    """
-    if value is None:
-        return None
-    try:
-        ceiling = as_int(value, "max_price")
-    except ValueError as exc:
-        # int("нет") raises naming neither the port nor the node — on a money guard the operator
-        # must be told WHICH input they got wrong, not that some literal failed to parse.
-        raise ValueError(f"max_price must be an int, got {value!r}") from exc
-    if ceiling <= 0:
-        raise ValueError(f"max_price must be positive, got {value!r}")
-    return ceiling
-
-
-def _as_currency(value: str | int | float | bool | None, max_price: int | None) -> str | None:
-    """The unit the ceiling is stated in — required exactly when a ceiling is.
-
-    A number without a unit cannot be compared to the lot's price, which arrives denominated in
-    the lot's own currency. Leaving this optional would put the adapter back where it started:
-    comparing 5000 against 50 and calling the result a ceiling.
-    """
-    if max_price is None:
-        return None
-    if not isinstance(value, str) or not value.strip():
-        raise ValueError(f"max_price_currency is required when max_price is set, got {value!r}")
-    return value.strip()
-
-
-def _as_run_budget(value: str | int | float | bool | None, max_price: int | None) -> int | None:
-    """The run's total spend ceiling — unwired means no gate, exactly as every flow behaves today.
-
-    Requires `max_price`, because the gate tests "one more lot at its ceiling" against the budget.
-    Without a per-lot ceiling the next purchase has no known maximum cost, so a budget could be
-    blown by a single lot and the gate would be decoration.
-    """
-    if value is None:
-        return None
-    try:
-        budget = as_int(value, "run_budget")
-    except ValueError as exc:
-        raise ValueError(f"run_budget must be an int, got {value!r}") from exc
-    if budget <= 0:
-        raise ValueError(f"run_budget must be positive, got {value!r}")
-    if max_price is None:
-        raise ValueError("run_budget requires max_price — without it a lot has no known max cost")
-    return budget
-
-
 _TRUE_WORDS = frozenset({"1", "true", "yes", "on", "да"})
 _FALSE_WORDS = frozenset({"0", "false", "no", "off", "нет"})
 
@@ -267,19 +231,14 @@ class FastBuyNode(BaseNode):
     output_schema = FastBuyOutput
     required_inputs = ("item_id",)
 
-    async def execute(self, ctx: RunContext) -> StepResultDTO:
-        try:
-            item_id = as_int(ctx.resolve_input("item_id"), "item_id")
-            raw_dry_run = ctx.resolve_input("dry_run")
-            dry_run = True if raw_dry_run is None else _as_bool(raw_dry_run, "dry_run")
-            max_price = _as_ceiling(ctx.resolve_optional("max_price"))
-            max_price_currency = _as_currency(ctx.resolve_optional("max_price_currency"), max_price)
-            run_budget = _as_run_budget(ctx.resolve_optional("run_budget"), max_price)
-        except ValueError as exc:
-            # `relist` already raised RunFailed for the same class of defect while this node let a
-            # bare ValueError out to be re-wrapped by the runtime — same failure, two shapes, and
-            # the operator saw a nested message for one of them.
-            raise RunFailed(ctx.run_id, ctx.node.id, str(exc)) from exc
+    async def execute(self, ctx: RunContext[FastBuyInput]) -> StepResultDTO:
+        # Все пять портов и оба кросс-полевых правила проверены схемой при сборке контекста, и
+        # отказ приходит оттуда как `RunFailed` — денежный узел не начинается с разбора строк.
+        item_id = ctx.inputs.item_id
+        dry_run = ctx.inputs.dry_run
+        max_price = ctx.inputs.max_price
+        max_price_currency = ctx.inputs.max_price_currency
+        run_budget = ctx.inputs.run_budget
 
         # Before the idempotency guard, because refusing here spends nothing and must not burn the
         # key. Skipped on a dry run: a rehearsal records no purchase, so the spend is always 0 and

@@ -14,7 +14,7 @@ from __future__ import annotations
 import structlog
 from pydantic import Field
 
-from app.core.schema import BaseSchema
+from app.core.schema import BaseSchema, NumericPort
 from app.domain.catalog.capabilities import MARKET_MUTATE, NodeCategory
 from app.domain.flow_engine.base_node import BaseNode, RunContext
 from app.domain.flow_engine.dtos import StepResultDTO
@@ -23,7 +23,7 @@ log = structlog.get_logger()
 
 
 class AutoReplyInput(BaseSchema):
-    conversation_id: int = Field(
+    conversation_id: NumericPort = Field(
         title="Диалог",
         description="Идентификатор диалога, в который отправляется ответ.",
         json_schema_extra={"x-ui": {"widget": "number"}},
@@ -50,7 +50,7 @@ class AutoReplyNode(BaseNode):
     output_schema = AutoReplyOutput
     required_inputs = ("conversation_id", "message")
 
-    async def execute(self, ctx: RunContext) -> StepResultDTO:
+    async def execute(self, ctx: RunContext[AutoReplyInput]) -> StepResultDTO:
         first = await ctx.deps.guard.check_and_set(ctx.idempotency_key)
         if not first:
             return StepResultDTO(

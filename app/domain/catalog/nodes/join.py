@@ -7,7 +7,7 @@ registers, compiles, and shows correctly in the catalog — `execute()` raising 
 
 from __future__ import annotations
 
-from app.core.schema import BaseSchema
+from app.core.schema import BaseSchema, EmptyInput
 from app.domain.catalog.capabilities import PURE, NodeCategory
 from app.domain.flow_engine.base_node import BaseNode, RunContext
 from app.domain.flow_engine.dtos import StepResultDTO
@@ -24,7 +24,7 @@ class JoinNode(BaseNode):
     capabilities = PURE
     output_schema = JoinOutput
 
-    async def execute(self, ctx: RunContext) -> StepResultDTO:
+    async def execute(self, ctx: RunContext[EmptyInput]) -> StepResultDTO:
         raise AssertionError(
             "JoinNode.execute() should never be called directly — the interpreter's fork/join "
             "walk (_run_fork) synthesizes its result; a join node reached outside a fork means "

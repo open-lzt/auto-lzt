@@ -19,10 +19,11 @@ from __future__ import annotations
 import asyncio
 import json
 from collections.abc import Callable
+from typing import Any
 
 from pydantic import ValidationError
 
-from app.core.schema import BaseSchema
+from app.core.schema import BaseSchema, EmptyInput
 from app.domain.catalog.capabilities import MARKET_MUTATE_MONEY, NodeCategory
 from app.domain.catalog.nodes.fast_buy import as_int
 from app.domain.catalog.nodes.relist import as_price
@@ -76,7 +77,7 @@ def _local_child_id(child: IRNode) -> str:
     return child.id.rsplit("::", 1)[-1]
 
 
-def _resolve_child_inputs(child: IRNode, ctx: RunContext) -> dict[str, object]:
+def _resolve_child_inputs(child: IRNode, ctx: RunContext[Any]) -> dict[str, object]:
     """Wave-06 scope limit (documented, not a bug): a batch child's inputs must be literals or
     ``{"env": ...}`` — both context-free. A ``ref`` is refused because referencing another top-level
     node's output from inside a batch child would need the child's resolver to see the parent
@@ -101,7 +102,7 @@ def _resolve_child_inputs(child: IRNode, ctx: RunContext) -> dict[str, object]:
 
 
 def _validated_child_inputs(
-    child: IRNode, raw: dict[str, object], ctx: RunContext
+    child: IRNode, raw: dict[str, object], ctx: RunContext[Any]
 ) -> dict[str, object]:
     """Apply the owning node's own port validators to a batch child's resolved literals."""
     validators = _CHILD_PORT_VALIDATORS.get(child.type, {})
@@ -128,7 +129,7 @@ def _validated_child_inputs(
 
 
 async def _run_child(
-    client: object, child: IRNode, ctx: RunContext
+    client: object, child: IRNode, ctx: RunContext[Any]
 ) -> tuple[str, dict[str, object]]:
     child_id = _local_child_id(child)
     mapping = _BATCHABLE_NODE_TO_CALL.get(child.type)
@@ -188,7 +189,7 @@ class BatchNode(BaseNode):
     capabilities = MARKET_MUTATE_MONEY
     output_schema = BatchSubmitOutput
 
-    async def execute(self, ctx: RunContext) -> StepResultDTO:
+    async def execute(self, ctx: RunContext[EmptyInput]) -> StepResultDTO:
         # No batch-level guard: the money is spent per child, so the key is per child (_run_child).
         # A guard here used to swallow the whole replay — returning {"results": "{}"} and letting
         # the run COMPLETE while the lots it had already published stayed paid for and orphaned.

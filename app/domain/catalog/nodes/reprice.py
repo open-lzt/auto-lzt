@@ -20,7 +20,6 @@ from pylzt.types import Currency
 
 from app.core.schema import BaseSchema, NumericPort
 from app.domain.catalog.capabilities import MARKET_MUTATE, NodeCategory
-from app.domain.catalog.nodes.relist import as_price
 from app.domain.flow_engine.base_node import BaseNode, RunContext
 from app.domain.flow_engine.dtos import StepResultDTO
 from app.domain.flow_engine.errors import RunFailed
@@ -64,27 +63,19 @@ class RepriceOutput(BaseSchema):
     currency: str
 
 
-def _target_price(ctx: RunContext) -> int:
-    price = ctx.resolve_optional("price")
-    if price is not None:
-        # `as_price`, not `int(price)`: truncating 100.9 to 100 reprices the lot at a number nobody
-        # chose. The batch path already validates this port with the same function, so the node and
-        # its reflective sibling stay one contract instead of two.
-        try:
-            return as_price(price)
-        except ValueError as exc:
-            raise RunFailed(ctx.run_id, ctx.node.id, f"reprice 'price': {exc}") from exc
+def _target_price(ctx: RunContext[RepriceInput]) -> int:
+    # Цена задаётся ЛИБО прямо, ЛИБО выводится из скидки — «одно из двух» схема поля не выражает,
+    # поэтому выбор остаётся здесь; типы обоих путей уже проверены ею.
+    if ctx.inputs.price is not None:
+        return ctx.inputs.price
 
-    decay_pct = ctx.resolve_optional("decay_pct")
-    current_price = ctx.resolve_optional("current_price")
+    decay_pct, current_price = ctx.inputs.decay_pct, ctx.inputs.current_price
     if decay_pct is None or current_price is None:
         raise RunFailed(
             ctx.run_id,
             ctx.node.id,
             "reprice needs either 'price' or both 'decay_pct' and 'current_price'",
         )
-    if isinstance(decay_pct, bool) or isinstance(current_price, bool):
-        raise RunFailed(ctx.run_id, ctx.node.id, "reprice decay inputs must be numeric")
     # Decimal, not float — a float decay drifts by a unit at the rounding boundary (money rule).
     factor = Decimal(1) - Decimal(str(decay_pct)) / Decimal(100)
     target = Decimal(str(current_price)) * factor

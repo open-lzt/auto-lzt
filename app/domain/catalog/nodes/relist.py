@@ -32,7 +32,7 @@ from decimal import Decimal, InvalidOperation
 from pydantic import Field
 from pylzt.types import Currency, ItemOrigin
 
-from app.core.schema import BaseSchema
+from app.core.schema import BaseSchema, NumericPort
 from app.domain.account.errors import NoAvailableAccount
 from app.domain.catalog.capabilities import MARKET_MUTATE_MONEY, NodeCategory
 from app.domain.flow_engine.base_node import BaseNode, RunContext
@@ -41,12 +41,14 @@ from app.domain.flow_engine.errors import RunFailed
 
 
 class RelistInput(BaseSchema):
-    price: int = Field(title="Цена", json_schema_extra={"x-ui": {"widget": "number"}}, gt=0)
-    category_id: int = Field(
+    price: NumericPort = Field(title="Цена", json_schema_extra={"x-ui": {"widget": "number"}}, gt=0)
+    category_id: NumericPort = Field(
         title="Категория", json_schema_extra={"x-ui": {"widget": "select"}}, gt=0
     )
-    currency: str = Field(title="Валюта", json_schema_extra={"x-ui": {"widget": "select"}})
-    item_origin: str = Field(
+    # `Currency`/`ItemOrigin`, а не `str`: тело всё равно звало конструкторы enum, поэтому
+    # неизвестное значение проходило схему и падало голым `ValueError` уже после проверок.
+    currency: Currency = Field(title="Валюта", json_schema_extra={"x-ui": {"widget": "select"}})
+    item_origin: ItemOrigin = Field(
         title="Происхождение аккаунта", json_schema_extra={"x-ui": {"widget": "select"}}
     )
     title: str | None = Field(
@@ -62,10 +64,6 @@ class RelistInput(BaseSchema):
 
 class RelistOutput(BaseSchema):
     item_id: int
-
-
-def _str_or_none(value: str | int | float | bool | None) -> str | None:
-    return value if isinstance(value, str) else None
 
 
 def as_price(value: str | int | float | bool | None) -> int:
@@ -106,21 +104,11 @@ class RelistNode(BaseNode):
     required_inputs = ("price", "category_id", "currency", "item_origin")
     batchable = True
 
-    async def execute(self, ctx: RunContext) -> StepResultDTO:
-        category_id = ctx.resolve_input("category_id")
-        currency_raw = ctx.resolve_input("currency")
-        origin_raw = ctx.resolve_input("item_origin")
-        try:
-            price = as_price(ctx.resolve_input("price"))
-        except ValueError as exc:
-            raise RunFailed(ctx.run_id, ctx.node.id, str(exc)) from exc
-        if isinstance(category_id, bool) or not isinstance(category_id, int):
-            raise RunFailed(
-                ctx.run_id, ctx.node.id, f"category_id must be an int, got {category_id!r}"
-            )
-        if not isinstance(currency_raw, str) or not isinstance(origin_raw, str):
-            raise RunFailed(ctx.run_id, ctx.node.id, "currency/item_origin must be strings")
-
+    async def execute(self, ctx: RunContext[RelistInput]) -> StepResultDTO:
+        # Все четыре обязательных порта разобраны схемой при сборке контекста: цена целая и
+        # положительная, категория числовая, валюта и происхождение — члены перечислений.
+        # `as_price` остаётся публичной, потому что `batch_submit` гонит через неё литералы
+        # дочерних шагов, минуя этот узел.
         account_ref = ctx.active_account_id or ctx.node.account_ref
         if account_ref is None:
             raise NoAvailableAccount(ctx.tenant_id)
@@ -137,11 +125,11 @@ class RelistNode(BaseNode):
 
         result = await ctx.deps.market.relist(
             account,
-            price=price,
-            category_id=category_id,
-            currency=Currency(currency_raw),
-            item_origin=ItemOrigin(origin_raw),
-            title=_str_or_none(ctx.resolve_optional("title")),
-            description=_str_or_none(ctx.resolve_optional("description")),
+            price=ctx.inputs.price,
+            category_id=ctx.inputs.category_id,
+            currency=ctx.inputs.currency,
+            item_origin=ctx.inputs.item_origin,
+            title=ctx.inputs.title,
+            description=ctx.inputs.description,
         )
         return StepResultDTO(node_id=ctx.node.id, output={"item_id": result.item_id})

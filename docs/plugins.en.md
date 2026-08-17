@@ -54,9 +54,10 @@ class ShoutNode(BaseNode):
     node_type = "demo.shout"          # the key a flow references the node by
     required_inputs = ("text",)       # the compiler checks that this port is wired
 
-    async def execute(self, ctx: RunContext) -> StepResultDTO:
-        text = str(ctx.resolve_input("text"))
-        return StepResultDTO(node_id=ctx.node.id, output={"shouted": text.upper()})
+    async def execute(self, ctx: RunContext[ShoutInput]) -> StepResultDTO:
+        # Inputs are already parsed by the schema: `ctx.inputs.text` is a str, not a wire value.
+        # Bad input never reaches the body — the run fails earlier, naming the field.
+        return StepResultDTO(node_id=ctx.node.id, output={"shouted": ctx.inputs.text.upper()})
 
 
 REGISTRATIONS = [
@@ -299,8 +300,8 @@ class SendMessageNode(BaseRequestNode):
     node_type = "tg.send_message"
     required_inputs = ("bot_token", "chat_id", "text")
 
-    def build_request(self, ctx: RunContext) -> RequestSpec:
-        token = str(ctx.resolve_input("bot_token"))
+    def build_request(self, ctx: RunContext[SendMessageInput]) -> RequestSpec:
+        token = ctx.inputs.bot_token
         return RequestSpec(
             url=f"https://api.telegram.org/bot{token}/sendMessage",
             method=HttpMethod.POST,

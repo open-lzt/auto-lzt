@@ -11,7 +11,7 @@ import json
 
 from pydantic import Field
 
-from app.core.schema import BaseSchema
+from app.core.schema import BaseSchema, NumericPort
 from app.domain.catalog.capabilities import MARKET_READ, NodeCategory
 from app.domain.flow_engine.base_node import BaseNode, RunContext
 from app.domain.flow_engine.dtos import StepResultDTO
@@ -21,10 +21,12 @@ class BatchStatusInput(BaseSchema):
     only_pending: bool = Field(
         False, title="Только незавершённые", json_schema_extra={"x-ui": {"widget": "bool"}}
     )
-    limit: int | None = Field(
-        None, title="Сколько вернуть", json_schema_extra={"x-ui": {"widget": "number"}}
+    limit: NumericPort | None = Field(
+        None, title="Сколько вернуть", json_schema_extra={"x-ui": {"widget": "number"}}, gt=0
     )
-    offset: int = Field(0, title="Смещение", json_schema_extra={"x-ui": {"widget": "number"}})
+    offset: NumericPort = Field(
+        0, title="Смещение", json_schema_extra={"x-ui": {"widget": "number"}}, ge=0
+    )
     commit_record_ids: str = Field(
         "",
         title="Подтвердить записи",
@@ -51,13 +53,12 @@ class BatchStatusNode(BaseNode):
     input_schema = BatchStatusInput
     output_schema = BatchStatusOutput
 
-    async def execute(self, ctx: RunContext) -> StepResultDTO:
-        only_pending = bool(ctx.resolve_optional("only_pending") or False)
-        limit_raw = ctx.resolve_optional("limit")
-        limit = int(limit_raw) if limit_raw is not None else None
-        offset = int(ctx.resolve_optional("offset") or 0)
-        commit_ids: list[str] = json.loads(str(ctx.resolve_optional("commit_record_ids") or "[]"))
-        delete_ids: list[str] = json.loads(str(ctx.resolve_optional("delete_record_ids") or "[]"))
+    async def execute(self, ctx: RunContext[BatchStatusInput]) -> StepResultDTO:
+        only_pending = ctx.inputs.only_pending
+        limit = ctx.inputs.limit
+        offset = ctx.inputs.offset
+        commit_ids: list[str] = json.loads(ctx.inputs.commit_record_ids or "[]")
+        delete_ids: list[str] = json.loads(ctx.inputs.delete_record_ids or "[]")
 
         account_ref = ctx.active_account_id or ctx.node.account_ref
         async with ctx.deps.get_client(ctx.tenant_id, account_ref) as client:

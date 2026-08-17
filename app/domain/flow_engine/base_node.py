@@ -18,7 +18,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Awaitable, Callable, Container, Mapping
 from contextlib import AbstractAsyncContextManager
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, ClassVar, Generic, TypeVar
+from typing import TYPE_CHECKING, Any, ClassVar, Generic, TypeVar
 
 from pydantic import BaseModel, ValidationError
 
@@ -89,7 +89,10 @@ class NodeDeps:
     """
 
 
-TIn = TypeVar("TIn", bound=BaseModel)
+# Ковариантен: контекст заморожен и `inputs` только читаются, поэтому `RunContext[SearchInput]`
+# законно передаётся туда, где ждут `RunContext[BaseModel]` — иначе каждый помощник, которому
+# входы не нужны вовсе (`_record`, `_affordable`), пришлось бы дублировать под каждый узел.
+TIn_co = TypeVar("TIn_co", bound=BaseModel, covariant=True)
 
 
 def build_inputs(
@@ -118,10 +121,15 @@ def build_inputs(
     a token or somebody else's response body.
     """
     raw: dict[str, object] = {}
-    for name in schema.model_fields:
-        value = resolve_optional(name)
-        if value is not None or name in wired:
-            raw[name] = value
+    for name, field in schema.model_fields.items():
+        # По проводу едет ИМЯ ПОРТА, а это алиас, если он объявлен: `pylzt.dynamic_call` держит
+        # свои два служебных порта как `_facade`/`_method`, чтобы отличать их от динамических
+        # аргументов метода. Читая поле по имени класса, сборка не находила ни одного из них и
+        # роняла узел на «field required» при полностью верной проводке.
+        port = field.alias or name
+        value = resolve_optional(port)
+        if value is not None or port in wired:
+            raw[port] = value
     try:
         return schema.model_validate(raw)
     except ValidationError as exc:
@@ -131,7 +139,7 @@ def build_inputs(
 
 
 @dataclass(slots=True, frozen=True)
-class RunContext(Generic[TIn]):
+class RunContext(Generic[TIn_co]):
     """``inputs`` is this node's ``input_schema``, already validated — a node reads
     ``ctx.inputs.thread_id`` instead of ``ctx.resolve_input("thread_id")``. Declare the parameter
     to get the type: ``async def execute(self, ctx: RunContext[MyInput])``. ``resolve_input`` stays
@@ -148,7 +156,7 @@ class RunContext(Generic[TIn]):
     idempotency_key: str
     resolve_input: Callable[[str], str | int | float | bool | None]
     deps: NodeDeps
-    inputs: TIn
+    inputs: TIn_co
     active_account_id: AccountId | None = None
     step_replay: bool = False
     """True when a RunStep row for this exact step already existed and was NOT completed — i.e.
@@ -196,4 +204,4 @@ class BaseNode(ABC):
         """
 
     @abstractmethod
-    async def execute(self, ctx: RunContext) -> StepResultDTO: ...
+    async def execute(self, ctx: RunContext[Any]) -> StepResultDTO: ...

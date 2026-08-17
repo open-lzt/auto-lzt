@@ -13,11 +13,11 @@ import asyncio
 
 from pydantic import Field
 
-from app.core.schema import BaseSchema
+from app.core.schema import BaseSchema, NumericPort
 from app.domain.catalog.capabilities import PURE, NodeCategory
 from app.domain.flow_engine.base_node import BaseNode, RunContext
 from app.domain.flow_engine.dtos import StepResultDTO
-from app.domain.flow_engine.errors import RunFailed, WaitTimeoutError
+from app.domain.flow_engine.errors import WaitTimeoutError
 
 _WAIT_EDGE = "wait"
 _DONE_EDGE = "done"
@@ -25,10 +25,12 @@ _DONE_EDGE = "done"
 
 class WaitUntilInput(BaseSchema):
     condition: bool = Field(title="Условие", json_schema_extra={"x-ui": {"widget": "bool"}})
-    poll_interval_s: int = Field(
-        title="Интервал опроса, с", json_schema_extra={"x-ui": {"widget": "number"}}
+    poll_interval_s: NumericPort = Field(
+        title="Интервал опроса, с", json_schema_extra={"x-ui": {"widget": "number"}}, gt=0
     )
-    timeout_s: int = Field(title="Таймаут, с", json_schema_extra={"x-ui": {"widget": "number"}})
+    timeout_s: NumericPort = Field(
+        title="Таймаут, с", json_schema_extra={"x-ui": {"widget": "number"}}, gt=0
+    )
 
 
 class WaitUntilOutput(BaseSchema):
@@ -44,15 +46,11 @@ class WaitUntilNode(BaseNode):
     output_schema = WaitUntilOutput
     required_inputs = ("condition", "poll_interval_s", "timeout_s")
 
-    async def execute(self, ctx: RunContext) -> StepResultDTO:
-        condition = bool(ctx.resolve_input("condition"))
-        poll_raw, timeout_raw = (
-            ctx.resolve_input("poll_interval_s"),
-            ctx.resolve_input("timeout_s"),
-        )
-        if poll_raw is None or timeout_raw is None:
-            raise RunFailed(ctx.run_id, ctx.node.id, "poll_interval_s/timeout_s must not be null")
-        poll_interval_s, timeout_s = int(poll_raw), int(timeout_raw)
+    async def execute(self, ctx: RunContext[WaitUntilInput]) -> StepResultDTO:
+        # Прежний `bool(...)` считал строку «false» истиной и завершал ожидание на первом же
+        # круге; схема разбирает её как ложь и отвергает то, чего не узнала.
+        condition = ctx.inputs.condition
+        poll_interval_s, timeout_s = ctx.inputs.poll_interval_s, ctx.inputs.timeout_s
 
         if condition:
             return StepResultDTO(

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, datetime
+from unittest.mock import AsyncMock, patch
 from uuid import uuid4
 
 import pytest
@@ -171,7 +172,9 @@ async def test_switch_no_match_raises_typed_error() -> None:
 async def test_wait_until_condition_true_takes_done_edge() -> None:
     from app.domain.catalog.nodes.wait_until import WaitUntilNode
 
-    _, ctx = _ctx("logic.wait_until", {"condition": True, "poll_interval_s": 0, "timeout_s": 10})
+    # Не 0: нулевой интервал держит `elapsed` на нуле вечно, поэтому таймаут не наступает никогда,
+    # и цикл крутится до смерти воркера. Схема такой интервал теперь отвергает.
+    _, ctx = _ctx("logic.wait_until", {"condition": True, "poll_interval_s": 1, "timeout_s": 10})
     result = await WaitUntilNode().execute(ctx)
     assert result.output["__edge__"] == "done"
 
@@ -193,10 +196,12 @@ async def test_wait_until_still_waiting_takes_wait_edge() -> None:
     from app.domain.catalog.nodes.wait_until import WaitUntilNode
 
     node = build_node(
-        "n1", "logic.wait_until", {"condition": False, "poll_interval_s": 0, "timeout_s": 10}
+        "n1", "logic.wait_until", {"condition": False, "poll_interval_s": 1, "timeout_s": 10}
     )
     ctx = build_ctx(node, FakeMarket(), FakeGuard(), loop_iteration=0)
-    result = await WaitUntilNode().execute(ctx)
+    # Ждать секунду по-настоящему незачем: проверяется выбранное ребро, а не сон.
+    with patch("app.domain.catalog.nodes.wait_until.asyncio.sleep", new=AsyncMock()):
+        result = await WaitUntilNode().execute(ctx)
     assert result.output["__edge__"] == "wait"
 
 

@@ -46,14 +46,14 @@ class BaseRequestNode(BaseNode, ABC):
     retry_on_status: ClassVar[frozenset[int]] = frozenset({429, 500, 502, 503, 504})
 
     @abstractmethod
-    def build_request(self, ctx: RunContext) -> RequestSpec: ...
+    def build_request(self, ctx: RunContext[Any]) -> RequestSpec: ...
 
     @abstractmethod
     def parse_response(
-        self, ctx: RunContext, status: int, body: Mapping[str, Any]
+        self, ctx: RunContext[Any], status: int, body: Mapping[str, Any]
     ) -> StepResultDTO: ...
 
-    async def execute(self, ctx: RunContext) -> StepResultDTO:
+    async def execute(self, ctx: RunContext[Any]) -> StepResultDTO:
         """FINAL — do not override. Owns egress policy, retry/backoff, timeout and the idempotency
         claim, none of which a subclass may opt out of."""
         spec = self.build_request(ctx)

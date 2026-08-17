@@ -34,19 +34,16 @@ class SendMessageInput(BaseSchema):
         description="Токен бота, от имени которого уйдёт уведомление.",
         json_schema_extra={"x-ui": {"widget": "secret"}},
     )
-    chat_id: str = Field(title="Чат", json_schema_extra={"x-ui": {"widget": "text"}})
+    # `| int`, потому что чат приходит числом и по проводу, и из Telegram: pydantic число в
+    # строку не приводит, а прежний `_as_str` приводил — сузив до `str`, узел отказал бы на
+    # обычной проводке `chat_id` из соседнего шага.
+    chat_id: str | int = Field(title="Чат", json_schema_extra={"x-ui": {"widget": "text"}})
     text: str = Field(title="Текст", min_length=1, json_schema_extra={"x-ui": {"widget": "text"}})
 
 
 class SendMessageOutput(BaseSchema):
     message_id: int
     chat_id: str
-
-
-def _as_str(value: object, port: str) -> str:
-    if value is None or isinstance(value, bool):
-        raise ValueError(f"{port} must be a string, got {value!r}")
-    return str(value)
 
 
 class SendMessageNode(BaseRequestNode):
@@ -60,8 +57,8 @@ class SendMessageNode(BaseRequestNode):
     required_inputs = ("bot_token", "chat_id", "text")
     batchable = True
 
-    def build_request(self, ctx: RunContext) -> RequestSpec:
-        token = _as_str(ctx.resolve_input("bot_token"), "bot_token")
+    def build_request(self, ctx: RunContext[SendMessageInput]) -> RequestSpec:
+        token = ctx.inputs.bot_token
         return RequestSpec(
             # The token sits in the path because that is Telegram's API shape. It therefore must
             # never be logged: RequestSpec is not logged anywhere, and errors below quote the
@@ -70,14 +67,14 @@ class SendMessageNode(BaseRequestNode):
             method=HttpMethod.POST,
             headers={"Content-Type": "application/json"},
             json_body={
-                "chat_id": _as_str(ctx.resolve_input("chat_id"), "chat_id"),
-                "text": _as_str(ctx.resolve_input("text"), "text"),
+                "chat_id": str(ctx.inputs.chat_id),
+                "text": ctx.inputs.text,
             },
             timeout_s=_TIMEOUT_S,
         )
 
     def parse_response(
-        self, ctx: RunContext, status: int, body: Mapping[str, Any]
+        self, ctx: RunContext[Any], status: int, body: Mapping[str, Any]
     ) -> StepResultDTO:
         if status != _HTTP_OK or not body.get("ok"):
             raise RunFailed(
