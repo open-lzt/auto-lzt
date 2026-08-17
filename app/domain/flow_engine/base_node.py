@@ -18,9 +18,9 @@ from abc import ABC, abstractmethod
 from collections.abc import Awaitable, Callable, Mapping
 from contextlib import AbstractAsyncContextManager
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, ClassVar, Generic, TypeVar
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from app.core.schema import EmptyInput
 from app.domain.account.model import Account, AccountId, TenantId
@@ -89,9 +89,48 @@ class NodeDeps:
     """
 
 
+TIn = TypeVar("TIn", bound=BaseModel)
+
+
+def build_inputs(
+    schema: type[BaseModel], resolve_optional: Callable[[str], str | int | float | bool | None]
+) -> BaseModel:
+    """The node's declared ``input_schema``, filled from its wired ports.
+
+    ``input_schema`` used to be catalog metadata only — the compiler and the UI read it, and every
+    node then re-derived the same facts by hand inside ``execute()``: fetch the port by its string
+    name, check its type, apply its bounds. Building the model here deletes that whole class of
+    code from every node, and makes a mistyped port name an attribute error instead of a valid
+    ``None`` travelling on as a value.
+
+    An unwired optional port is DROPPED rather than passed as ``None``: passing it would override
+    the schema's own default, turning ``count: int = 1`` into a type error the flow never caused.
+
+    Raises ``ValueError`` — the interpreter turns it into ``RunFailed``, which is where the run id
+    lives. The message names the field and the problem but never the value: a node's input can be
+    a token or somebody else's response body.
+    """
+    raw: dict[str, object] = {}
+    for name in schema.model_fields:
+        value = resolve_optional(name)
+        if value is not None:
+            raw[name] = value
+    try:
+        return schema.model_validate(raw)
+    except ValidationError as exc:
+        first = exc.errors()[0]
+        where = ".".join(str(part) for part in first["loc"]) or "input"
+        raise ValueError(f"{where}: {first['msg']}") from exc
+
+
 @dataclass(slots=True, frozen=True)
-class RunContext:
-    """``active_account_id`` (Wave 4) is the *dynamic* per-iteration account pin a
+class RunContext(Generic[TIn]):
+    """``inputs`` is this node's ``input_schema``, already validated — a node reads
+    ``ctx.inputs.thread_id`` instead of ``ctx.resolve_input("thread_id")``. Declare the parameter
+    to get the type: ``async def execute(self, ctx: RunContext[MyInput])``. ``resolve_input`` stays
+    for what the model cannot express — a port whose meaning depends on another port's value.
+
+    ``active_account_id`` (Wave 4) is the *dynamic* per-iteration account pin a
     ``ForEachAccountNode`` fan-out sets on nested nodes via ``RunContext`` (decision #18/#23) — it
     is not part of the compiled ``IRNode.account_ref`` (static per node, not per fan-out item).
     A node resolves its pinned account as ``ctx.active_account_id or ctx.node.account_ref``."""
@@ -102,6 +141,7 @@ class RunContext:
     idempotency_key: str
     resolve_input: Callable[[str], str | int | float | bool | None]
     deps: NodeDeps
+    inputs: TIn
     active_account_id: AccountId | None = None
     step_replay: bool = False
     """True when a RunStep row for this exact step already existed and was NOT completed — i.e.

@@ -20,11 +20,12 @@ from uuid import UUID, uuid4
 from pylzt import Client
 from pylzt.types import Currency, ItemOrigin
 
+from app.core.schema import EmptyInput
 from app.domain.account.model import Account, AccountId, TenantId
 from app.domain.catalog.plugins import build_registry
-from app.domain.catalog.registry import NodeRegistry
+from app.domain.catalog.registry import BUILTIN_REGISTRATIONS, NodeRegistry
 from app.domain.egress.transport import RequestSpec
-from app.domain.flow_engine.base_node import BaseNode, NodeDeps, RunContext
+from app.domain.flow_engine.base_node import BaseNode, NodeDeps, RunContext, build_inputs
 from app.domain.flow_engine.dtos import StepResultDTO
 from app.domain.flow_engine.events import RunEvent
 from app.domain.flow_engine.idempotency import DedupGuard
@@ -560,12 +561,23 @@ def build_ctx(
         source = results[value.node_id]
         return source.output.get(value.port)
 
+    def resolve_optional(port: str) -> str | int | float | bool | None:
+        return resolve(port) if port in node.inputs else None
+
+    # Схема берётся из реестра ВСТРОЕННЫХ по типу узла: тест строит контекст до того, как
+    # рантайм выбрал реализацию, а `inputs` обязан быть тем же, что узел получит в проде.
+    # Тип вне каталога (узел, объявленный прямо в тесте) остаётся без разобранных входов —
+    # такой тест и не читает `ctx.inputs`.
+    node_cls = NodeRegistry(BUILTIN_REGISTRATIONS).node_classes().get(node.type)
+    schema = node_cls.input_schema if node_cls is not None else EmptyInput
+
     return RunContext(
         run_id=RunId(uuid4()),
         tenant_id=tenant_id,
         node=node,
         idempotency_key=f"test:{node.id}",
         resolve_input=resolve,
+        inputs=build_inputs(schema, resolve_optional),
         deps=build_node_deps(
             market,
             guard,

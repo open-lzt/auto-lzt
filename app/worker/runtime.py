@@ -64,7 +64,7 @@ from uuid import UUID, uuid4
 import structlog
 
 from app.domain.account.model import AccountId, TenantId
-from app.domain.flow_engine.base_node import BaseNode, NodeDeps, RunContext
+from app.domain.flow_engine.base_node import BaseNode, NodeDeps, RunContext, build_inputs
 from app.domain.flow_engine.dtos import StepResultDTO
 from app.domain.flow_engine.env_input import resolve_env
 from app.domain.flow_engine.errors import NodeTimeoutError, RunAlreadyClaimed, RunFailed
@@ -938,13 +938,26 @@ async def _run_node(
         # the effect while its key lives; `step_replay` carries the same fact durably, because
         # this row is in Postgres and the key is not.
 
+    resolver = _make_resolver(node, results, run.vars)
+
+    def _resolve_optional(port: str) -> str | int | float | bool | None:
+        return resolver(port) if port in node.inputs else None
+
+    try:
+        node_inputs = build_inputs(instance.input_schema, _resolve_optional)
+    except ValueError as exc:
+        # Вход не сходится со схемой узла — это отказ ЭТОГО шага, а не падение прогона:
+        # RunFailed несёт run_id и node_id, поэтому в журнале видно, какой узел и какое поле.
+        raise RunFailed(run.id, node.id, str(exc)) from exc
+
     ctx = RunContext(
         run_id=run.id,
         tenant_id=run.tenant_id,
         node=node,
         idempotency_key=idem_key,
-        resolve_input=_make_resolver(node, results, run.vars),
+        resolve_input=resolver,
         deps=node_deps,
+        inputs=node_inputs,
         active_account_id=active_account,
         step_replay=not claimed,
         loop_iteration=loop_iteration,
