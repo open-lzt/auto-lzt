@@ -183,13 +183,15 @@ async def test_an_unusable_ceiling_stops_the_run_instead_of_buying(raw: object) 
     class of defect, and the runtime wrapped the untyped one in a second `RunFailed` whose message
     the operator then had to read out of a nested repr."""
     market, guard = FakeMarket(), FakeGuard()
-    ctx = build_ctx(
-        _buy_node(item_id=7, dry_run=False, max_price=raw, max_price_currency="RUB"),
-        market,
-        guard,
-    )
 
+    # Потолок отвергается ещё раньше, чем прежде: схема (`max_price: int, gt=0`) проверяется при
+    # сборке `RunContext.inputs`, поэтому `execute()` не начинается вовсе. Требование то же —
+    # непригодный потолок обязан остановить прогон, а не прочитаться как «без потолка».
     with pytest.raises(RunFailed, match="max_price"):
-        await FastBuyNode().execute(ctx)
+        build_ctx(
+            _buy_node(item_id=7, dry_run=False, max_price=raw, max_price_currency="RUB"),
+            market,
+            guard,
+        )
 
     assert market.fast_buy_pooled_calls == []

@@ -27,6 +27,7 @@ from app.domain.catalog.registry import BUILTIN_REGISTRATIONS, NodeRegistry
 from app.domain.egress.transport import RequestSpec
 from app.domain.flow_engine.base_node import BaseNode, NodeDeps, RunContext, build_inputs
 from app.domain.flow_engine.dtos import StepResultDTO
+from app.domain.flow_engine.errors import RunFailed
 from app.domain.flow_engine.events import RunEvent
 from app.domain.flow_engine.idempotency import DedupGuard
 from app.domain.flow_engine.ir_node import IRNode, LiteralValue, PortRef
@@ -571,13 +572,21 @@ def build_ctx(
     node_cls = NodeRegistry(BUILTIN_REGISTRATIONS).node_classes().get(node.type)
     schema = node_cls.input_schema if node_cls is not None else EmptyInput
 
+    try:
+        node_inputs = build_inputs(schema, resolve_optional)
+    except ValueError as exc:
+        # Зеркалит рантайм (`app/worker/runtime.py`): плохой вход — это отказ ШАГА, `RunFailed`
+        # с run_id и node_id. Пустить отсюда голый ValueError значило бы, что фикстура
+        # воспроизводит не то поведение, которое увидит оператор в проде.
+        raise RunFailed(RunId(uuid4()), node.id, str(exc)) from exc
+
     return RunContext(
         run_id=RunId(uuid4()),
         tenant_id=tenant_id,
         node=node,
         idempotency_key=f"test:{node.id}",
         resolve_input=resolve,
-        inputs=build_inputs(schema, resolve_optional),
+        inputs=node_inputs,
         deps=build_node_deps(
             market,
             guard,

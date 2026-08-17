@@ -55,31 +55,7 @@ class SearchOutput(BaseSchema):
     median_price: float
 
 
-def _as_float(value: str | int | float | bool | None, port: str) -> float:
-    if isinstance(value, bool) or not isinstance(value, int | float | str):
-        raise ValueError(f"{port} must be a number, got {value!r}")
-    return float(value)
-
-
-def _as_category(value: str | int | float | bool | None) -> SearchableCategory:
-    """Unwired port means Steam — the historical behaviour, so an existing flow keeps working.
-
-    ``input_schema`` is catalog metadata only (it is rendered to JSON Schema for the picker, never
-    validated against a resolved port), so this is the one place an unknown slug can be rejected
-    before it reaches the facade.
-    """
-    if value is None:
-        return SearchableCategory.STEAM
-    if not isinstance(value, str):
-        raise ValueError(f"category must be a string, got {value!r}")
-    try:
-        return SearchableCategory(value)
-    except ValueError as exc:
-        known = ", ".join(sorted(c.value for c in SearchableCategory))
-        raise ValueError(f"unknown category {value!r}; searchable categories: {known}") from exc
-
-
-def _as_filters(value: str | int | float | bool | None) -> dict[str, object]:
+def _as_filters(value: str) -> dict[str, object]:
     """Unwired or empty means "no extra filters" — the historical behaviour, so existing flows keep
     working unchanged.
 
@@ -87,10 +63,8 @@ def _as_filters(value: str | int | float | bool | None) -> dict[str, object]:
     to, belongs to the category's own signature and is enforced once in ``MarketService`` — both the
     pinned and the pooled path go through it, so neither can reach the marketplace unchecked.
     """
-    if value is None or value == "":
+    if value == "":
         return {}
-    if not isinstance(value, str):
-        raise ValueError(f"filters must be a JSON object string, got {value!r}")
     try:
         parsed = json.loads(value)
     except ValueError as exc:
@@ -109,10 +83,10 @@ class SearchNode(BaseNode):
     output_schema = SearchOutput
     required_inputs = ("max_price",)
 
-    async def execute(self, ctx: RunContext) -> StepResultDTO:
-        max_price = _as_float(ctx.resolve_input("max_price"), "max_price")
-        category = _as_category(ctx.resolve_optional("category"))
-        filters = _as_filters(ctx.resolve_optional("filters"))
+    async def execute(self, ctx: RunContext[SearchInput]) -> StepResultDTO:
+        max_price = ctx.inputs.max_price
+        category = ctx.inputs.category
+        filters = _as_filters(ctx.inputs.filters)
 
         account_ref = ctx.active_account_id or ctx.node.account_ref
         if account_ref is not None:

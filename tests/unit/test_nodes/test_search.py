@@ -5,8 +5,10 @@ from __future__ import annotations
 import json
 
 import pytest
+from pydantic import ValidationError
 
-from app.domain.catalog.nodes.search import SearchNode, _as_category
+from app.domain.catalog.nodes.search import SearchInput, SearchNode
+from app.domain.flow_engine.errors import RunFailed
 from app.domain.market.categories import CATEGORY_METHODS, SearchableCategory
 from app.domain.market.dtos import SearchHit
 from tests.fixtures.flow_fakes import FakeGuard, FakeMarket, build_ctx, build_node
@@ -65,18 +67,25 @@ async def test_unknown_category_is_rejected_before_the_market_is_touched() -> No
     market = _market([1.0])
     node = build_node("s1", "market.search", {"max_price": 10, "category": "vkontakte"})
 
-    with pytest.raises(ValueError, match="unknown category"):
-        await SearchNode().execute(build_ctx(node, market, FakeGuard()))
+    # Отказ переехал ещё раньше по времени: неизвестный слаг не проходит валидацию схемы при
+    # сборке `RunContext.inputs`, поэтому `execute()` не начинается вовсе.
+    with pytest.raises(RunFailed, match="category"):
+        build_ctx(node, market, FakeGuard())
 
     assert market.search_calls == []
 
 
 def test_labelled_but_unsearchable_categories_are_absent() -> None:
-    """These five carry a picker label but no ``category_*`` facade method."""
+    """These five carry a picker label but no ``category_*`` facade method.
+
+    The rejection moved from a hand-written ``_as_category`` into the schema itself: the enum
+    field is now validated when ``RunContext.inputs`` is built, so an unknown slug is refused
+    before ``execute()`` runs rather than inside it.
+    """
     assert {c.value for c in SearchableCategory}.isdisjoint(UNSEARCHABLE)
     for slug in UNSEARCHABLE:
-        with pytest.raises(ValueError, match="unknown category"):
-            _as_category(slug)
+        with pytest.raises(ValidationError):
+            SearchInput(max_price=1.0, category=slug)  # type: ignore[arg-type]
 
 
 def test_every_searchable_category_resolves_to_a_real_facade_method() -> None:

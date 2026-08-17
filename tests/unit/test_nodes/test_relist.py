@@ -78,7 +78,9 @@ async def test_a_fractional_price_is_refused_rather_than_rounded(price: object) 
     async def load_account(tenant_id: object, account_id: object) -> object:
         return account
 
-    with pytest.raises(RunFailed, match="whole number"):
-        await RelistNode().execute(build_ctx(node, market, guard, load_account=load_account))
+    # Отказ даёт схема (`price: int`) при сборке `RunContext.inputs`, а не тело узла: сообщение
+    # теперь от pydantic, но требование то же — дробь не округляется, а отвергается.
+    with pytest.raises(RunFailed, match="integer"):
+        build_ctx(node, market, guard, load_account=load_account)
 
     assert market.relist_calls == []
