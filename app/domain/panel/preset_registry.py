@@ -286,6 +286,9 @@ class PresetSpec:
     params: type[PresetParams]
     build: Callable[[str, Any], FlowSpec]
     default_name: str
+    # Which distribution contributed this preset. Stamped by the loader, never self-declared —
+    # see `preset_plugins.py`. Built-ins keep the default.
+    origin: str = "builtin"
 
 
 class UnknownPreset(AppError):
@@ -301,14 +304,6 @@ class UnknownPreset(AppError):
     @property
     def client_message(self) -> str:
         return "Такого пресета нет"
-
-
-class DuplicatePresetKey(Exception):
-    """Two presets claimed one key — fails at import, like the node and tab registries."""
-
-    def __init__(self, key: str) -> None:
-        super().__init__(f"preset key {key!r} declared twice")
-        self.key = key
 
 
 BUILTIN_PRESETS: Final[tuple[PresetSpec, ...]] = (
@@ -339,20 +334,7 @@ BUILTIN_PRESETS: Final[tuple[PresetSpec, ...]] = (
 )
 
 
-def _by_key() -> dict[str, PresetSpec]:
-    presets: dict[str, PresetSpec] = {}
-    for preset in BUILTIN_PRESETS:
-        if preset.key in presets:
-            raise DuplicatePresetKey(preset.key)
-        presets[preset.key] = preset
-    return presets
-
-
-PRESETS_BY_KEY: Final[dict[str, PresetSpec]] = _by_key()
-
-
-def get_preset(key: str) -> PresetSpec:
-    preset = PRESETS_BY_KEY.get(key)
-    if preset is None:
-        raise UnknownPreset(key)
-    return preset
+# Keying and the duplicate check moved to `preset_plugins.PresetRegistry`: a module-global map
+# built at import could only ever hold the built-ins, so an installed preset pack would have been
+# invisible to `get_preset` while showing up in the list — a preset the panel offers and the deploy
+# route refuses.

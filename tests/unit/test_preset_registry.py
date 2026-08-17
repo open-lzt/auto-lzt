@@ -21,8 +21,8 @@ from app.domain.panel.preset_registry import (
     SchedulePreset,
     ThreadBumpParams,
     UnknownPreset,
-    get_preset,
 )
+from app.domain.panel.preset_plugins import build_presets
 
 _PARAMS: dict[str, dict[str, object]] = {
     "autobump": {"accounts": [uuid4()]},
@@ -90,7 +90,7 @@ def test_autobuy_defaults_to_a_dry_run() -> None:
 
 def test_an_unknown_preset_key_is_a_typed_404() -> None:
     with pytest.raises(UnknownPreset):
-        get_preset("does-not-exist")
+        build_presets(load_plugins=False).get("does-not-exist")
 
 
 def test_preset_keys_are_unique() -> None:

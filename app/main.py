@@ -38,6 +38,7 @@ from app.domain.account.exclusion import AccountExcluder
 from app.domain.account.pool import TokenPool
 from app.domain.catalog.plugins import build_registry
 from app.domain.modules.registry_client import OfficialRegistryClient
+from app.domain.panel.preset_plugins import build_presets
 from app.domain.panel.tabs import build_panel_tabs
 from app.plugin_runtime import PluginManager, PluginProcess
 from app.plugin_runtime.index_client import PluginIndexClient
@@ -79,6 +80,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # assembly as contributed ones, so a key collision fails the boot rather than resolving by load
     # order — and so the seam is exercised by the host's own tabs, not just by plugins.
     app.state.panel_tabs = build_panel_tabs(extra_tabs=contributions.panel_tabs)
+    # And the presets, for the third time and the same reason: a preset pack that could not be
+    # installed would force its author to patch this repository to ship a scenario.
+    app.state.preset_registry = build_presets()
     # Plugin API routers mount LAST (after the built-ins in create_app), so a built-in path wins an
     # exact collision; reset the cached schema so the plugin routes show up in OpenAPI.
     for router in contributions.api_routers:

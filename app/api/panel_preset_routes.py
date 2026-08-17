@@ -20,7 +20,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, Request
 from pydantic import ValidationError
 
-from app.api.deps import node_registry_dep
+from app.api.deps import node_registry_dep, preset_registry_dep
 from app.core.auth import protect
 from app.core.exceptions import AppError, ErrorCode
 from app.core.schema import BaseSchema
@@ -28,7 +28,8 @@ from app.core.tenant import tenant_id_dep
 from app.domain.account.model import TenantId
 from app.domain.flow_engine.repo import FlowIrRepository, FlowRepository
 from app.domain.flow_engine.service import FlowService
-from app.domain.panel.preset_registry import BUILTIN_PRESETS, PresetParams, get_preset
+from app.domain.panel.preset_plugins import PresetRegistry
+from app.domain.panel.preset_registry import PresetParams
 from app.domain.triggers.repo import TriggerRepository
 from app.domain.triggers.service import TriggerService
 
@@ -89,8 +90,10 @@ def _trigger_service(request: Request) -> TriggerService:
 
 
 @router.get("/list", dependencies=protect())
-async def list_presets() -> list[PresetSummary]:
-    """Every preset this build ships, with the fields it asks for."""
+async def list_presets(
+    presets: PresetRegistry = Depends(preset_registry_dep),
+) -> list[PresetSummary]:
+    """Every preset this process offers — shipped and installed — with the fields it asks for."""
     return [
         PresetSummary(
             key=preset.key,
@@ -99,7 +102,7 @@ async def list_presets() -> list[PresetSummary]:
             default_name=preset.default_name,
             params_schema=preset.params.model_json_schema(),
         )
-        for preset in BUILTIN_PRESETS
+        for preset in presets.all()
     ]
 
 
@@ -110,6 +113,7 @@ async def deploy_preset(
     tenant_id: TenantId = Depends(tenant_id_dep),
     flows: FlowService = Depends(_flow_service),
     triggers: TriggerService = Depends(_trigger_service),
+    presets: PresetRegistry = Depends(preset_registry_dep),
 ) -> DeployPresetResponse:
     """Validate the parameters against the preset, build the graph, save, compile, schedule.
 
@@ -117,7 +121,7 @@ async def deploy_preset(
     graph that cannot compile must never acquire a schedule that would try to run it every
     30 minutes.
     """
-    preset = get_preset(key)
+    preset = presets.get(key)
     try:
         params: PresetParams = preset.params.model_validate(body.params)
     except ValidationError as exc:
