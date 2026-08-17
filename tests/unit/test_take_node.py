@@ -8,7 +8,6 @@ from unittest.mock import Mock
 from uuid import uuid4
 
 import pytest
-
 from pydantic import ValidationError
 
 from app.domain.catalog.nodes.take import TakeInput, TakeNode
