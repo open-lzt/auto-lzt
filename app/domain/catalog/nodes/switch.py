@@ -18,7 +18,12 @@ from app.domain.flow_engine.errors import NoMatchingCase
 
 
 class SwitchInput(BaseSchema):
-    value: str = Field(title="Значение", json_schema_extra={"x-ui": {"widget": "text"}})
+    # Union по той же причине, что и в `logic.string_concat`: на порт приходит и число (счётчик,
+    # цена), а pydantic не приводит его к строке. Сравнение с ветками остаётся строковым — оно
+    # таким и было, `str(...)` в `execute` никуда не делся.
+    value: str | int | float | bool = Field(
+        title="Значение", json_schema_extra={"x-ui": {"widget": "text"}}
+    )
     cases: str = Field(
         title="Ветки",
         description="JSON-объект {метка_ребра: ожидаемое_значение}.",
@@ -39,9 +44,9 @@ class SwitchNode(BaseNode):
     output_schema = SwitchOutput
     required_inputs = ("value", "cases")
 
-    async def execute(self, ctx: RunContext) -> StepResultDTO:
-        value = str(ctx.resolve_input("value"))
-        cases: dict[str, str] = json.loads(str(ctx.resolve_input("cases")))
+    async def execute(self, ctx: RunContext[SwitchInput]) -> StepResultDTO:
+        value = str(ctx.inputs.value)
+        cases: dict[str, str] = json.loads(ctx.inputs.cases)
         for label, expected in cases.items():
             if value == expected:
                 return StepResultDTO(

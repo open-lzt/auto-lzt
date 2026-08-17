@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import json
 
-from app.core.schema import BaseSchema
+from app.core.schema import BaseSchema, EmptyInput
 from app.domain.account.model import AccountStatus
 from app.domain.catalog.capabilities import MARKET_READ, NodeCategory
 from app.domain.flow_engine.base_node import BaseNode, RunContext
@@ -34,7 +34,7 @@ class ForEachAccountNode(BaseNode):
     # input_schema defaults to EmptyInput — the tenant is implicit in ctx.tenant_id.
     output_schema = ForEachAccountOutput
 
-    async def execute(self, ctx: RunContext) -> StepResultDTO:
+    async def execute(self, ctx: RunContext[EmptyInput]) -> StepResultDTO:
         accounts = await ctx.deps.list_accounts(ctx.tenant_id)
         active_ids = [str(a.id) for a in accounts if a.status is AccountStatus.ACTIVE]
 

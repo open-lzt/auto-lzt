@@ -19,7 +19,6 @@ from app.core.schema import BaseSchema
 from app.domain.catalog.capabilities import PURE, NodeCategory
 from app.domain.flow_engine.base_node import BaseNode, RunContext
 from app.domain.flow_engine.dtos import StepResultDTO
-from app.domain.flow_engine.errors import RunFailed
 
 
 class TakeInput(BaseSchema):
@@ -28,12 +27,34 @@ class TakeInput(BaseSchema):
         description="JSON-массив — обычно выход get_my_lots.",
         json_schema_extra={"x-ui": {"widget": "text"}},
     )
+    # `int` в мягком режиме принимает и `3.0`, и это НЕСУЩЕЕ свойство, а не мелочь: `logic.math`
+    # типизирует любой результат как `float`, поэтому вычисленный на холсте счёт (автозакупка
+    # считает `budget // max_price`) приезжает как `3.0`. Отказ от него ломал бы граф ровно там,
+    # где счёт выведен, а не вписан руками — то есть незаметно. `3.5` при этом отвергается,
+    # и это тоже намеренно: дробный счёт означает ошибку в формуле.
+    # НЕ ставить сюда `strict=True`.
     count: int = Field(
         ge=0,
         title="Сколько взять",
+        # Ноль — законное значение, а не ошибка: он означает «бюджета не хватает и на один лот по
+        # этому потолку». Прогон при этом зелёный и пустой; расписанная автозакупка, падающая на
+        # каждом запуске до падения цены, — это тревога, на которую никто не может отреагировать.
         description="Сколько первых элементов оставить. Ноль — не брать ничего.",
         json_schema_extra={"x-ui": {"widget": "number"}},
     )
+
+    @field_validator("count", mode="before")
+    @classmethod
+    def _reject_bool(cls, value: object) -> object:
+        """`True` — это `int` в Python, и pydantic его принимает как `1`.
+
+        Здесь это недопустимо: `items[:True]` молча вернул бы ОДИН элемент вместо отказа на явно
+        неверном входе. Проверка стояла в снятом `_as_count` и восстановлена здесь — схема мягче
+        рукописной проверки ровно в этом месте.
+        """
+        if isinstance(value, bool):
+            raise ValueError("count must be a number, not a boolean")
+        return value
 
     @field_validator("items")
     @classmethod
@@ -51,28 +72,6 @@ class TakeOutput(BaseSchema):
     truncated: bool
 
 
-def _as_count(ctx: RunContext, raw: object) -> int:
-    """Zero and an integral float are both legal here, and both are load-bearing.
-
-    ``logic.math`` types every result as ``float``, so a count computed on the canvas — the autobuy
-    computes ``budget // max_price`` — arrives as ``3.0``. Refusing it made the whole graph
-    uncompilable in practice while a hand-typed ``3`` worked, which is the worst kind of failure:
-    only the derived path breaks.
-
-    Zero means "the budget does not cover one lot at this ceiling". That is a green run with
-    nothing taken, not an error — a scheduled autobuy that fails every fire until the price drops
-    is an alarm nobody can act on.
-    """
-    if isinstance(raw, bool) or not isinstance(raw, int | float):
-        raise RunFailed(ctx.run_id, ctx.node.id, f"count must be a number, got {raw!r}")
-    if isinstance(raw, float) and not raw.is_integer():
-        raise RunFailed(ctx.run_id, ctx.node.id, f"count must be a whole number, got {raw!r}")
-    count = int(raw)
-    if count < 0:
-        raise RunFailed(ctx.run_id, ctx.node.id, f"count must not be negative, got {raw!r}")
-    return count
-
-
 class TakeNode(BaseNode):
     node_type = "logic.take"
     category = NodeCategory.LOGIC
@@ -82,19 +81,12 @@ class TakeNode(BaseNode):
     output_schema = TakeOutput
     required_inputs = ("items", "count")
 
-    async def execute(self, ctx: RunContext) -> StepResultDTO:
-        raw = ctx.resolve_input("items")
-        if not isinstance(raw, str):
-            raise RunFailed(ctx.run_id, ctx.node.id, f"items must be a JSON string, got {raw!r}")
-        try:
-            items = json.loads(raw)
-        except ValueError as exc:
-            raise RunFailed(ctx.run_id, ctx.node.id, f"items is not valid JSON: {raw!r}") from exc
-        if not isinstance(items, list):
-            raise RunFailed(ctx.run_id, ctx.node.id, "items must decode to a JSON array")
-
-        count = _as_count(ctx, ctx.resolve_input("count"))
-        kept = items[:count]
+    async def execute(self, ctx: RunContext[TakeInput]) -> StepResultDTO:
+        # Форма `items` (строка, разбираемая в JSON-массив) и границы `count` проверены схемой при
+        # сборке контекста — здесь остаётся сам разбор, потому что дальше нужен список, а по
+        # проводу едет строка.
+        items = json.loads(ctx.inputs.items)
+        kept = items[: ctx.inputs.count]
         return StepResultDTO(
             node_id=ctx.node.id,
             output={

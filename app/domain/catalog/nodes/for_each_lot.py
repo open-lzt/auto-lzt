@@ -18,7 +18,6 @@ from app.core.schema import BaseSchema
 from app.domain.catalog.capabilities import PURE, NodeCategory
 from app.domain.flow_engine.base_node import BaseNode, RunContext
 from app.domain.flow_engine.dtos import StepResultDTO
-from app.domain.flow_engine.errors import RunFailed
 
 _FANOUT_PORT = "item_id"
 
@@ -52,18 +51,10 @@ class ForEachLotNode(BaseNode):
     output_schema = ForEachLotOutput
     required_inputs = ("item_ids",)
 
-    async def execute(self, ctx: RunContext) -> StepResultDTO:
-        raw = ctx.resolve_input("item_ids")
-        if not isinstance(raw, str):
-            raise RunFailed(ctx.run_id, ctx.node.id, f"item_ids must be a JSON string, got {raw!r}")
-        try:
-            item_ids = json.loads(raw)
-        except ValueError as exc:
-            raise RunFailed(
-                ctx.run_id, ctx.node.id, f"item_ids is not valid JSON: {raw!r}"
-            ) from exc
-        if not isinstance(item_ids, list) or not all(isinstance(v, int) for v in item_ids):
-            raise RunFailed(ctx.run_id, ctx.node.id, "item_ids must decode to a JSON array of ints")
+    async def execute(self, ctx: RunContext[ForEachLotInput]) -> StepResultDTO:
+        # Форма проверена валидатором схемы (`_must_be_json_int_list`) при сборке контекста —
+        # здесь остаётся разбор, потому что по проводу едет строка, а фан-ауту нужен список.
+        item_ids = json.loads(ctx.inputs.item_ids)
 
         return StepResultDTO(
             node_id=ctx.node.id,

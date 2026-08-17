@@ -12,9 +12,19 @@ from app.domain.flow_engine.dtos import StepResultDTO
 
 
 class StringConcatInput(BaseSchema):
-    a: str = Field(title="Первая часть", json_schema_extra={"x-ui": {"widget": "text"}})
-    b: str = Field(title="Вторая часть", json_schema_extra={"x-ui": {"widget": "text"}})
-    c: str = Field("", title="Третья часть", json_schema_extra={"x-ui": {"widget": "text"}})
+    # Union, а не `str`, потому что склеивать числа с текстом — обычное дело на холсте («куплено
+    # N лотов»), а pydantic НЕ приводит число к строке даже в мягком режиме. Объявить `str`
+    # значило бы отвергать вход, который узел до сих пор принимал и обязан принимать; приведение
+    # остаётся в `execute`, где оно и было.
+    a: str | int | float | bool = Field(
+        title="Первая часть", json_schema_extra={"x-ui": {"widget": "text"}}
+    )
+    b: str | int | float | bool = Field(
+        title="Вторая часть", json_schema_extra={"x-ui": {"widget": "text"}}
+    )
+    c: str | int | float | bool = Field(
+        "", title="Третья часть", json_schema_extra={"x-ui": {"widget": "text"}}
+    )
 
 
 class StringConcatOutput(BaseSchema):
@@ -30,8 +40,8 @@ class StringConcatNode(BaseNode):
     output_schema = StringConcatOutput
     required_inputs = ("a", "b")
 
-    async def execute(self, ctx: RunContext) -> StepResultDTO:
-        a = str(ctx.resolve_input("a"))
-        b = str(ctx.resolve_input("b"))
-        c = str(ctx.resolve_optional("c") or "")
-        return StepResultDTO(node_id=ctx.node.id, output={"result": a + b + c})
+    async def execute(self, ctx: RunContext[StringConcatInput]) -> StepResultDTO:
+        parts = (ctx.inputs.a, ctx.inputs.b, ctx.inputs.c)
+        return StepResultDTO(
+            node_id=ctx.node.id, output={"result": "".join(str(part) for part in parts)}
+        )

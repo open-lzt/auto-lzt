@@ -9,15 +9,29 @@ from uuid import uuid4
 
 import pytest
 
-from app.domain.catalog.nodes.take import TakeNode
+from pydantic import ValidationError
+
+from app.domain.catalog.nodes.take import TakeInput, TakeNode
 from app.domain.flow_engine.errors import RunFailed
 
 
 def _ctx(**inputs: Any) -> Mock:
+    """Мок несёт РАЗОБРАННЫЕ входы, как настоящий `RunContext`.
+
+    Валидация переехала из тела узла в схему (`build_inputs` при сборке контекста), поэтому мок,
+    отдающий сырые значения через `resolve_input`, перестал воспроизводить прод. Отказ схемы здесь
+    заворачивается в `RunFailed` ровно так же, как это делает интерпретатор.
+    """
     ctx = Mock()
     ctx.run_id = uuid4()
     ctx.node.id = "limit"
     ctx.resolve_input.side_effect = lambda key: inputs[key]
+    try:
+        ctx.inputs = TakeInput(**inputs)
+    except ValidationError as exc:
+        first = exc.errors()[0]
+        where = ".".join(str(part) for part in first["loc"]) or "input"
+        raise RunFailed(ctx.run_id, ctx.node.id, f"{where}: {first['msg']}") from exc
     return ctx
 
 
@@ -57,11 +71,16 @@ async def test_it_fails_loud_on_anything_that_is_not_a_json_list(bad: str) -> No
         await _run(items=bad, count=1)
 
 
-@pytest.mark.parametrize("bad", [-1, "3", True, 2.5])
+@pytest.mark.parametrize("bad", [-1, True, 2.5])
 async def test_a_count_that_is_not_a_whole_non_negative_number_fails(bad: object) -> None:
     """`True` is in this list deliberately: it is an int in Python, and `items[:True]` would quietly
     return one element instead of rejecting an obviously wrong input. `2.5` is here because the
-    autobuy derives its count arithmetically, and a fraction means the budget maths is wrong."""
+    autobuy derives its count arithmetically, and a fraction means the budget maths is wrong.
+
+    `"3"` left the list when validation moved into the schema: pydantic reads a numeric string as
+    the number it spells, and a literal typed into the canvas arrives as a string. Refusing it
+    would break the hand-typed path while the wired one worked — the same asymmetry the integral
+    float above exists to prevent."""
     with pytest.raises(RunFailed):
         await _run(items=json.dumps([1, 2, 3]), count=bad)
 
