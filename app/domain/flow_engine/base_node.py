@@ -117,8 +117,16 @@ def build_inputs(
     dropping a wired ``None`` would make the operator unable to ever see the thing it tests for.
 
     Raises ``ValueError`` — the interpreter turns it into ``RunFailed``, which is where the run id
-    lives. The message names the field and the problem but never the value: a node's input can be
-    a token or somebody else's response body.
+    lives. This function itself never puts the VALUE into the message: a node's input can be a
+    token or somebody else's response body.
+
+    That is a property of this function, not a guarantee about the message as a whole, and the
+    difference is worth stating because it was first written as the stronger claim. Pydantic
+    forwards whatever a field validator raised, so a validator that interpolates its input — one
+    shipped by a node pack, say — puts that value straight into the run's error text. Every
+    validator in this repository states the field and the problem and stops there; a pack's does
+    not have to. If that ever needs to be enforced rather than observed, the enforcement belongs
+    here, on the message, not in a rule nobody outside this repo reads.
     """
     raw: dict[str, object] = {}
     for name, field in schema.model_fields.items():

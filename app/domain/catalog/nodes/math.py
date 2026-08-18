@@ -6,7 +6,7 @@ from enum import StrEnum
 
 from pydantic import Field
 
-from app.core.schema import BaseSchema
+from app.core.schema import BaseSchema, FractionalPort
 from app.domain.catalog.capabilities import PURE, NodeCategory
 from app.domain.flow_engine.base_node import BaseNode, RunContext
 from app.domain.flow_engine.dtos import StepResultDTO
@@ -28,8 +28,12 @@ class MathOp(StrEnum):
 
 class MathInput(BaseSchema):
     op: MathOp = Field(title="Операция", json_schema_extra={"x-ui": {"widget": "select"}})
-    a: float = Field(title="Первый операнд", json_schema_extra={"x-ui": {"widget": "number"}})
-    b: float = Field(title="Второй операнд", json_schema_extra={"x-ui": {"widget": "number"}})
+    a: FractionalPort = Field(
+        title="Первый операнд", json_schema_extra={"x-ui": {"widget": "number"}}
+    )
+    b: FractionalPort = Field(
+        title="Второй операнд", json_schema_extra={"x-ui": {"widget": "number"}}
+    )
 
 
 class MathOutput(BaseSchema):

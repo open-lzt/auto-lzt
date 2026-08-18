@@ -67,6 +67,14 @@ NumericPort = Annotated[int, BeforeValidator(_reject_bool)]
 вычисленный на холсте, приезжает дробным по типу и целым по значению.
 """
 
+FractionalPort = Annotated[float, BeforeValidator(_reject_bool)]
+"""То же для порта, у которого дробная часть осмысленна: цена, процент, потолок.
+
+Заведён после того, как ревью нашло дыру: `NumericPort` закрыл целочисленные порты, а `float`-овые
+остались голыми, и `reprice.price=True` уезжал как цена **1**. Снятые при типизации `as_price` и
+`_as_float` отвергали `bool` явно; тип возвращает эту гарантию всем таким портам разом.
+"""
+
 
 class BaseSchema(BaseModel):
     pass

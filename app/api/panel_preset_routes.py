@@ -15,6 +15,7 @@ to go beyond what a form offers; a preset is an author, not a runtime.
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, Request
@@ -30,6 +31,7 @@ from app.domain.flow_engine.repo import FlowIrRepository, FlowRepository, RunRep
 from app.domain.flow_engine.service import FlowService, RunService
 from app.domain.panel.preset_plugins import PresetRegistry
 from app.domain.panel.preset_registry import PresetParams, ScheduledPresetParams
+from app.domain.tasks.service import RUN_NOW_WINDOW_S
 from app.domain.triggers.repo import TriggerRepository
 from app.domain.triggers.service import TriggerService
 from app.worker.enqueue import build_arq_enqueue
@@ -66,6 +68,10 @@ class PresetSummary(BaseSchema):
     # The JSON Schema of the preset's parameter model — what AutoForm renders. Sent whole rather
     # than reduced to a field list, so the client needs no second vocabulary for types.
     params_schema: dict[str, Any]
+    # Which distribution contributed it; "builtin" for the shipped three. Sent because the panel
+    # otherwise renders a pack's preset identically to ours, and pressing it hands the pack's graph
+    # the operator's accounts and money. They are entitled to know whose form they are filling in.
+    origin: str
 
 
 class DeployPresetRequest(BaseSchema):
@@ -118,6 +124,7 @@ async def list_presets(
             icon=preset.icon,
             default_name=preset.default_name,
             params_schema=preset.params.model_json_schema(),
+            origin=preset.origin,
         )
         for preset in presets.all()
     ]
@@ -156,7 +163,14 @@ async def deploy_preset(
     # field, and one that does not cannot accidentally claim otherwise. Typed, not looked up by
     # name, for the same reason it always was — the route never learns which preset it holds.
     if not isinstance(params, ScheduledPresetParams):
-        run = await runs.create_run(tenant_id, flow.id, f"preset:{key}:{flow.id}")
+        # Окно, а не постоянный ключ. `deploy_from_preset` переиспользует ОДИН flow на пресет, так
+        # что `preset:{key}:{flow_id}` не менялся между деплоями: `create_if_absent` делает
+        # ON CONFLICT (flow_id, run_key) DO NOTHING, поэтому вторая раздача не запускалась вовсе,
+        # а маршрут отвечал 201 с `run_id` ПЕРВОЙ. Оператор видел успех и ждал розыгрыша, которого
+        # не будет. Окно оставляет схлопнутым двойной клик — ровно то, зачем оно у «Поднять
+        # сейчас», — и пропускает осознанный повторный запуск.
+        bucket = int(datetime.now(UTC).timestamp()) // RUN_NOW_WINDOW_S
+        run = await runs.create_run(tenant_id, flow.id, f"preset:{key}:{flow.id}:{bucket}")
         return DeployPresetResponse(flow_id=str(flow.id), run_id=str(run.id))
 
     trigger = await triggers.replace_schedule(tenant_id, flow.id, params.schedule_cron.value)

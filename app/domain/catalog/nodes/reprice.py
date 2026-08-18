@@ -18,7 +18,7 @@ from decimal import ROUND_HALF_UP, Decimal
 from pydantic import Field
 from pylzt.types import Currency
 
-from app.core.schema import BaseSchema, NumericPort
+from app.core.schema import BaseSchema, FractionalPort, NumericPort
 from app.domain.catalog.capabilities import MARKET_MUTATE, NodeCategory
 from app.domain.flow_engine.base_node import BaseNode, RunContext
 from app.domain.flow_engine.dtos import StepResultDTO
@@ -34,21 +34,21 @@ class RepriceInput(BaseSchema):
     # `RunFailed`, и оператор читал причину из вложенного repr. Теперь отказ приходит от схемы и
     # называет допустимые значения.
     currency: Currency = Field(title="Валюта", json_schema_extra={"x-ui": {"widget": "select"}})
-    price: int | None = Field(
+    price: NumericPort | None = Field(
         title="Новая цена",
         description="Задайте либо цену, либо процент скидки.",
         json_schema_extra={"x-ui": {"widget": "number"}},
         default=None,
         gt=0,
     )
-    decay_pct: float | None = Field(
+    decay_pct: FractionalPort | None = Field(
         title="Скидка, %",
         json_schema_extra={"x-ui": {"widget": "number"}},
         default=None,
         gt=0,
         lt=100,
     )
-    current_price: int | None = Field(
+    current_price: NumericPort | None = Field(
         title="Текущая цена",
         description="Нужна только для расчёта скидки.",
         json_schema_extra={"x-ui": {"widget": "number"}},

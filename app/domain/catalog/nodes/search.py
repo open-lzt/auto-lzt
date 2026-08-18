@@ -17,7 +17,7 @@ import statistics
 
 from pydantic import Field
 
-from app.core.schema import BaseSchema
+from app.core.schema import BaseSchema, FractionalPort
 from app.domain.catalog.capabilities import MARKET_READ, NodeCategory
 from app.domain.flow_engine.base_node import BaseNode, RunContext
 from app.domain.flow_engine.dtos import StepResultDTO
@@ -25,7 +25,7 @@ from app.domain.market.categories import SearchableCategory
 
 
 class SearchInput(BaseSchema):
-    max_price: float = Field(
+    max_price: FractionalPort = Field(
         gt=0,
         title="Цена до",
         description="Потолок цены лота. Фильтрует маркет, а не мы — дороже сюда не попадёт.",

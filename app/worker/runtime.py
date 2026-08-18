@@ -66,7 +66,7 @@ import structlog
 from app.domain.account.model import AccountId, TenantId
 from app.domain.flow_engine.base_node import BaseNode, NodeDeps, RunContext, build_inputs
 from app.domain.flow_engine.dtos import StepResultDTO
-from app.domain.flow_engine.env_input import resolve_env
+from app.domain.flow_engine.env_input import EnvInputError, resolve_env
 from app.domain.flow_engine.errors import NodeTimeoutError, RunAlreadyClaimed, RunFailed
 from app.domain.flow_engine.events import (
     EventTransport,
@@ -945,9 +945,16 @@ async def _run_node(
 
     try:
         node_inputs = build_inputs(instance.input_schema, _resolve_optional, node.inputs)
-    except ValueError as exc:
+    except (ValueError, KeyError, EnvInputError) as exc:
         # Вход не сходится со схемой узла — это отказ ЭТОГО шага, а не падение прогона:
         # RunFailed несёт run_id и node_id, поэтому в журнале видно, какой узел и какое поле.
+        #
+        # Три типа, а не один. Разбор входа переехал СЮДА из тела узла, и вместе с ним переехали
+        # отказы резолвера: `KeyError` («вход ещё не произведён», «переменной потока нет») и
+        # `EnvInputError`, чей собственный докстринг обещает, что рантайм завернёт его в
+        # `RunFailed`. Ловя только `ValueError`, этот перехват отпускал их мимо себя и мимо
+        # catch-all вокруг `execute` — шаг оставался RUNNING, а оператор получал голый трейсбек
+        # без имени узла.
         raise RunFailed(run.id, node.id, str(exc)) from exc
 
     ctx = RunContext(
