@@ -57,8 +57,25 @@ async def test_every_preset_ships_a_form_with_fields(sqlite_app: Any) -> None:
     for preset in presets:
         properties = preset["params_schema"].get("properties")
         assert properties, f"preset {preset['key']} would render an empty form"
-        # The schedule is what the deploy route reads to attach the trigger.
-        assert "schedule_cron" in properties
+        # The schedule is what the deploy route reads to attach the trigger — and only a
+        # repeating preset has one. A one-shot preset asked for a cron would post a second
+        # commitment into somebody's thread on the next tick.
+        assert ("schedule_cron" in properties) is preset["repeats"]
+
+
+async def test_the_list_says_whether_a_preset_repeats(sqlite_app: Any) -> None:
+    """`repeats` is its own answer, so the panel never learns a behaviour from a field name."""
+    app = create_app()
+    async with LifespanManager(app), await _client(app) as client:
+        presets = (await client.get("/panel/presets/list")).json()
+
+    by_key = {p["key"]: p for p in presets}
+    assert by_key, "no presets advertised at all"
+    # Every shipped preset is scheduled; the one-shot case ships in a pack, so the invariant
+    # worth locking here is that the flag agrees with the schema, not a particular value.
+    for preset in presets:
+        assert isinstance(preset["repeats"], bool)
+    assert by_key["autobump"]["repeats"] is True
 
 
 async def test_deploying_a_preset_creates_a_flow_and_a_trigger(sqlite_app: Any) -> None:
