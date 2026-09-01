@@ -33,7 +33,7 @@ from uuid import uuid4
 import structlog
 from pydantic import BeforeValidator, Field, model_validator
 
-from app.core.schema import BaseSchema, NumericPort
+from app.core.schema import XUI, BaseSchema, NumericPort, Widget
 from app.domain.catalog.capabilities import MARKET_MUTATE_MONEY, NodeCategory
 from app.domain.flow_engine.base_node import BaseNode, RunContext
 from app.domain.flow_engine.dtos import StepResultDTO
@@ -46,23 +46,21 @@ logger = structlog.get_logger()
 
 
 class FastBuyInput(BaseSchema):
-    item_id: NumericPort = Field(
-        gt=0, title="Лот", json_schema_extra={"x-ui": {"widget": "lot_ref"}}
-    )
+    item_id: NumericPort = Field(gt=0, title="Лот", json_schema_extra=XUI(Widget.LOT_REF).extra())
     max_price: NumericPort | None = Field(
         default=None,
         gt=0,
         title="Платить не дороже",
         description="Пусто — платим сколько просят. Задано — перед оплатой сверяем текущую цену "
         "лота и пропускаем лот, если продавец поднял её выше этого потолка.",
-        json_schema_extra={"x-ui": {"widget": "number"}},
+        json_schema_extra=XUI(Widget.NUMBER).extra(),
     )
     max_price_currency: str | None = Field(
         default=None,
         title="Валюта потолка",
         description="Обязательна вместе с потолком: цена лота приходит в своей валюте, и потолок "
         "в другой валюте — не потолок. Лот в другой валюте пропускается, а не пересчитывается.",
-        json_schema_extra={"x-ui": {"widget": "select"}},
+        json_schema_extra=XUI(Widget.SELECT).extra(),
     )
     run_budget: NumericPort | None = Field(
         default=None,
@@ -72,7 +70,7 @@ class FastBuyInput(BaseSchema):
         "потраченное этим прогоном и отказывается покупать, если следующий лот в бюджет не "
         "влезает. Считается ПОТРАЧЕННОЕ, а не просмотренное: отказ маркета по лоту денег не "
         "стоит и бюджет не расходует.",
-        json_schema_extra={"x-ui": {"widget": "number"}},
+        json_schema_extra=XUI(Widget.NUMBER).extra(),
     )
     # Не голый `bool`: pydantic не знает «да»/«нет», а этот порт решает, уйдут ли деньги.
     # `_as_bool` ниже разбирает обе формы и отвергает всё, чего не узнал.
@@ -80,7 +78,7 @@ class FastBuyInput(BaseSchema):
         default=True,
         title="Холостой прогон",
         description="Включено — покупка не выполняется, узел только сообщает что купил бы.",
-        json_schema_extra={"x-ui": {"widget": "switch"}},
+        json_schema_extra=XUI(Widget.SWITCH).extra(),
     )
 
     @model_validator(mode="after")

@@ -14,7 +14,7 @@ import json
 
 from pydantic import Field, field_validator
 
-from app.core.schema import BaseSchema
+from app.core.schema import XUI, BaseSchema, Widget
 from app.domain.catalog.capabilities import PURE, NodeCategory
 from app.domain.flow_engine.base_node import BaseNode, RunContext
 from app.domain.flow_engine.dtos import StepResultDTO
@@ -26,7 +26,7 @@ class ForEachLotInput(BaseSchema):
     item_ids: str = Field(
         title="Лоты",
         description="JSON-массив id — обычно выход get_my_lots.",
-        json_schema_extra={"x-ui": {"widget": "text"}},
+        json_schema_extra=XUI(Widget.TEXT).extra(),
     )  # JSON-encoded list[int] — see get-my-lots' output
 
     @field_validator("item_ids")

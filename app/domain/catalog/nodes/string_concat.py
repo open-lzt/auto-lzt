@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from pydantic import Field
 
-from app.core.schema import BaseSchema
+from app.core.schema import XUI, BaseSchema, Widget
 from app.domain.catalog.capabilities import PURE, NodeCategory
 from app.domain.flow_engine.base_node import BaseNode, RunContext
 from app.domain.flow_engine.dtos import StepResultDTO
@@ -17,13 +17,13 @@ class StringConcatInput(BaseSchema):
     # значило бы отвергать вход, который узел до сих пор принимал и обязан принимать; приведение
     # остаётся в `execute`, где оно и было.
     a: str | int | float | bool = Field(
-        title="Первая часть", json_schema_extra={"x-ui": {"widget": "text"}}
+        title="Первая часть", json_schema_extra=XUI(Widget.TEXT).extra()
     )
     b: str | int | float | bool = Field(
-        title="Вторая часть", json_schema_extra={"x-ui": {"widget": "text"}}
+        title="Вторая часть", json_schema_extra=XUI(Widget.TEXT).extra()
     )
     c: str | int | float | bool = Field(
-        "", title="Третья часть", json_schema_extra={"x-ui": {"widget": "text"}}
+        "", title="Третья часть", json_schema_extra=XUI(Widget.TEXT).extra()
     )
 
 

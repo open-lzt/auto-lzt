@@ -10,7 +10,7 @@ from collections.abc import Mapping
 
 from pydantic import Field
 
-from app.core.schema import BaseSchema
+from app.core.schema import XUI, BaseSchema, Widget
 from app.domain.catalog.capabilities import PURE, NodeCategory
 from app.domain.catalog.nodes.operators import (
     ComparisonOp,
@@ -29,14 +29,14 @@ class ConditionInput(BaseSchema):
     # чтобы спросить «пришло ли пусто», поэтому тип, не допускающий пустоты, отменял бы его. До
     # валидации входов схемой это не проявлялось — схема не проверялась в рантайме.
     left: str | int | float | bool | None = Field(
-        title="Что сравниваем", json_schema_extra={"x-ui": {"widget": "text"}}
+        title="Что сравниваем", json_schema_extra=XUI(Widget.TEXT).extra()
     )
-    op: ComparisonOp = Field(title="Операция", json_schema_extra={"x-ui": {"widget": "select"}})
+    op: ComparisonOp = Field(title="Операция", json_schema_extra=XUI(Widget.SELECT).extra())
     right: str | int | float | bool | None = Field(
         None,
         title="С чем сравниваем",
         description="Не нужен для is_null.",
-        json_schema_extra={"x-ui": {"widget": "text"}},
+        json_schema_extra=XUI(Widget.TEXT).extra(),
     )
 
 

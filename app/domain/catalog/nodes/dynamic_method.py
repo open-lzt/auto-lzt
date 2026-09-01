@@ -17,7 +17,7 @@ from typing import Any, cast
 
 from pydantic import BaseModel, Field
 
-from app.core.schema import BaseSchema
+from app.core.schema import XUI, BaseSchema, Widget
 from app.domain.catalog.capabilities import REFLECTIVE, NodeCategory
 from app.domain.flow_engine.base_node import BaseNode, RunContext
 from app.domain.flow_engine.dtos import StepResultDTO
@@ -38,10 +38,10 @@ class DynamicMethodInput(BaseSchema):
     execute time against the resolved method's real signature, not against this schema."""
 
     facade: str = Field(
-        title="Раздел API", json_schema_extra={"x-ui": {"widget": "select"}}, alias="_facade"
+        title="Раздел API", json_schema_extra=XUI(Widget.SELECT).extra(), alias="_facade"
     )
     method: str = Field(
-        title="Метод", json_schema_extra={"x-ui": {"widget": "select"}}, alias="_method"
+        title="Метод", json_schema_extra=XUI(Widget.SELECT).extra(), alias="_method"
     )
 
     model_config = {"populate_by_name": True}

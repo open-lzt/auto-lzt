@@ -13,7 +13,7 @@ import asyncio
 
 from pydantic import Field
 
-from app.core.schema import BaseSchema, NumericPort
+from app.core.schema import XUI, BaseSchema, NumericPort, Widget
 from app.domain.catalog.capabilities import PURE, NodeCategory
 from app.domain.flow_engine.base_node import BaseNode, RunContext
 from app.domain.flow_engine.dtos import StepResultDTO
@@ -24,12 +24,12 @@ _DONE_EDGE = "done"
 
 
 class WaitUntilInput(BaseSchema):
-    condition: bool = Field(title="Условие", json_schema_extra={"x-ui": {"widget": "bool"}})
+    condition: bool = Field(title="Условие", json_schema_extra=XUI(Widget.BOOL).extra())
     poll_interval_s: NumericPort = Field(
-        title="Интервал опроса, с", json_schema_extra={"x-ui": {"widget": "number"}}, gt=0
+        title="Интервал опроса, с", json_schema_extra=XUI(Widget.NUMBER).extra(), gt=0
     )
     timeout_s: NumericPort = Field(
-        title="Таймаут, с", json_schema_extra={"x-ui": {"widget": "number"}}, gt=0
+        title="Таймаут, с", json_schema_extra=XUI(Widget.NUMBER).extra(), gt=0
     )
 
 

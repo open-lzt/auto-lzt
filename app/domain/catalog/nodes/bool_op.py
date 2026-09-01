@@ -6,7 +6,7 @@ from enum import StrEnum
 
 from pydantic import Field
 
-from app.core.schema import BaseSchema
+from app.core.schema import XUI, BaseSchema, Widget
 from app.domain.catalog.capabilities import PURE, NodeCategory
 from app.domain.flow_engine.base_node import BaseNode, RunContext
 from app.domain.flow_engine.dtos import StepResultDTO
@@ -19,13 +19,13 @@ class BoolOp(StrEnum):
 
 
 class BoolOpInput(BaseSchema):
-    op: BoolOp = Field(title="Операция", json_schema_extra={"x-ui": {"widget": "select"}})
-    a: bool = Field(title="Первый операнд", json_schema_extra={"x-ui": {"widget": "bool"}})
+    op: BoolOp = Field(title="Операция", json_schema_extra=XUI(Widget.SELECT).extra())
+    a: bool = Field(title="Первый операнд", json_schema_extra=XUI(Widget.BOOL).extra())
     b: bool | None = Field(
         None,
         title="Второй операнд",
         description="Не нужен для NOT.",
-        json_schema_extra={"x-ui": {"widget": "bool"}},
+        json_schema_extra=XUI(Widget.BOOL).extra(),
     )
 
 

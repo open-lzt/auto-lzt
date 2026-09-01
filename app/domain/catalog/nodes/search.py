@@ -17,7 +17,7 @@ import statistics
 
 from pydantic import Field
 
-from app.core.schema import BaseSchema, FractionalPort
+from app.core.schema import XUI, BaseSchema, FractionalPort, Widget
 from app.domain.catalog.capabilities import MARKET_READ, NodeCategory
 from app.domain.flow_engine.base_node import BaseNode, RunContext
 from app.domain.flow_engine.dtos import StepResultDTO
@@ -29,13 +29,13 @@ class SearchInput(BaseSchema):
         gt=0,
         title="Цена до",
         description="Потолок цены лота. Фильтрует маркет, а не мы — дороже сюда не попадёт.",
-        json_schema_extra={"x-ui": {"widget": "number"}},
+        json_schema_extra=XUI(Widget.NUMBER).extra(),
     )
     category: SearchableCategory = Field(
         default=SearchableCategory.STEAM,
         title="Категория",
         description="Раздел маркета, в котором искать.",
-        json_schema_extra={"x-ui": {"widget": "select"}},
+        json_schema_extra=XUI(Widget.SELECT).extra(),
     )
     filters: str = Field(
         default="{}",
@@ -44,7 +44,7 @@ class SearchInput(BaseSchema):
         # One string port, not 123 ports: the set of filters changes with the category, and a node
         # whose port list changed shape would have to be recompiled on every category switch. The
         # canvas renders this from `/catalog/filters/{category}` — see `market.filters.json_schema`.
-        json_schema_extra={"x-ui": {"widget": "filters"}},
+        json_schema_extra=XUI(Widget.FILTERS).extra(),
     )
 
 

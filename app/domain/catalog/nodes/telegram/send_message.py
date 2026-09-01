@@ -16,7 +16,7 @@ from typing import Any
 
 from pydantic import Field
 
-from app.core.schema import BaseSchema, NumericPort
+from app.core.schema import XUI, BaseSchema, NumericPort, Widget
 from app.domain.catalog.capabilities import NodeCategory
 from app.domain.catalog.nodes.base_request import BaseRequestNode, HttpMethod, RequestSpec
 from app.domain.flow_engine.base_node import RunContext
@@ -32,13 +32,13 @@ class SendMessageInput(BaseSchema):
     bot_token: str = Field(
         title="Токен бота",
         description="Токен бота, от имени которого уйдёт уведомление.",
-        json_schema_extra={"x-ui": {"widget": "secret"}},
+        json_schema_extra=XUI(Widget.SECRET).extra(),
     )
     # `| int`, потому что чат приходит числом и по проводу, и из Telegram: pydantic число в
     # строку не приводит, а прежний `_as_str` приводил — сузив до `str`, узел отказал бы на
     # обычной проводке `chat_id` из соседнего шага.
-    chat_id: str | NumericPort = Field(title="Чат", json_schema_extra={"x-ui": {"widget": "text"}})
-    text: str = Field(title="Текст", min_length=1, json_schema_extra={"x-ui": {"widget": "text"}})
+    chat_id: str | NumericPort = Field(title="Чат", json_schema_extra=XUI(Widget.TEXT).extra())
+    text: str = Field(title="Текст", min_length=1, json_schema_extra=XUI(Widget.TEXT).extra())
 
 
 class SendMessageOutput(BaseSchema):

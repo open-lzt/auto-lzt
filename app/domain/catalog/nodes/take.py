@@ -15,7 +15,7 @@ import json
 
 from pydantic import Field, field_validator
 
-from app.core.schema import BaseSchema, NumericPort
+from app.core.schema import XUI, BaseSchema, NumericPort, Widget
 from app.domain.catalog.capabilities import PURE, NodeCategory
 from app.domain.flow_engine.base_node import BaseNode, RunContext
 from app.domain.flow_engine.dtos import StepResultDTO
@@ -25,7 +25,7 @@ class TakeInput(BaseSchema):
     items: str = Field(
         title="Список",
         description="JSON-массив — обычно выход get_my_lots.",
-        json_schema_extra={"x-ui": {"widget": "text"}},
+        json_schema_extra=XUI(Widget.TEXT).extra(),
     )
     # `NumericPort`, а не голый `int`: он принимает `3` и `3.0` (счёт, вычисленный `logic.math`,
     # приезжает дробным по типу), но отвергает `True` — иначе `items[:True]` молча вернул бы один
@@ -37,7 +37,7 @@ class TakeInput(BaseSchema):
         # этому потолку». Прогон при этом зелёный и пустой; расписанная автозакупка, падающая на
         # каждом запуске до падения цены, — это тревога, на которую никто не может отреагировать.
         description="Сколько первых элементов оставить. Ноль — не брать ничего.",
-        json_schema_extra={"x-ui": {"widget": "number"}},
+        json_schema_extra=XUI(Widget.NUMBER).extra(),
     )
 
     @field_validator("items")
