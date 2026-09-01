@@ -11,7 +11,7 @@ from collections.abc import Mapping
 
 from pydantic import Field
 
-from app.core.schema import BaseSchema
+from app.core.schema import XUI, BaseSchema, Widget
 from app.domain.catalog.capabilities import PURE, NodeCategory
 from app.domain.catalog.nodes.condition import validate_operands
 from app.domain.catalog.nodes.operators import ComparisonOp, InvalidPattern, evaluate
@@ -33,17 +33,15 @@ def _coerce_numeric(value: _Scalar) -> _Scalar:
 
 
 class CompareInput(BaseSchema):
-    op: ComparisonOp = Field(title="Операция", json_schema_extra={"x-ui": {"widget": "select"}})
+    op: ComparisonOp = Field(title="Операция", json_schema_extra=XUI(Widget.SELECT).extra())
     # `| None` намеренно: пустой операнд не роняет прогон, а даёт False для всех операторов кроме
     # `is_null` — иначе единственный способ спросить «пришло ли пусто» перестал бы работать.
-    a: _Scalar | None = Field(
-        title="Первый операнд", json_schema_extra={"x-ui": {"widget": "text"}}
-    )
+    a: _Scalar | None = Field(title="Первый операнд", json_schema_extra=XUI(Widget.TEXT).extra())
     b: _Scalar | None = Field(
         None,
         title="Второй операнд",
         description="Не нужен для is_null.",
-        json_schema_extra={"x-ui": {"widget": "text"}},
+        json_schema_extra=XUI(Widget.TEXT).extra(),
     )
 
 

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from pydantic import Field
 
-from app.core.schema import BaseSchema, NumericPort
+from app.core.schema import XUI, BaseSchema, NumericPort, Widget
 from app.domain.catalog.capabilities import MARKET_MUTATE_MONEY, NodeCategory
 from app.domain.flow_engine.base_node import BaseNode, RunContext
 from app.domain.flow_engine.dtos import StepResultDTO
@@ -17,9 +17,7 @@ from app.domain.flow_engine.dtos import StepResultDTO
 class BumpInput(BaseSchema):
     # `NumericPort` отвергает `True`, который иначе уехал бы как лот номер 1 — на денежном узле
     # это покупка не того лота, а не опечатка.
-    item_id: NumericPort = Field(
-        title="Лот", json_schema_extra={"x-ui": {"widget": "lot_ref"}}, gt=0
-    )
+    item_id: NumericPort = Field(title="Лот", json_schema_extra=XUI(Widget.LOT_REF).extra(), gt=0)
 
 
 class BumpOutput(BaseSchema):

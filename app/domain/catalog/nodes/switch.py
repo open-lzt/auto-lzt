@@ -10,7 +10,7 @@ import json
 
 from pydantic import Field
 
-from app.core.schema import BaseSchema
+from app.core.schema import XUI, BaseSchema, Widget
 from app.domain.catalog.capabilities import PURE, NodeCategory
 from app.domain.flow_engine.base_node import BaseNode, RunContext
 from app.domain.flow_engine.dtos import StepResultDTO
@@ -22,12 +22,12 @@ class SwitchInput(BaseSchema):
     # цена), а pydantic не приводит его к строке. Сравнение с ветками остаётся строковым — оно
     # таким и было, `str(...)` в `execute` никуда не делся.
     value: str | int | float | bool = Field(
-        title="Значение", json_schema_extra={"x-ui": {"widget": "text"}}
+        title="Значение", json_schema_extra=XUI(Widget.TEXT).extra()
     )
     cases: str = Field(
         title="Ветки",
         description="JSON-объект {метка_ребра: ожидаемое_значение}.",
-        json_schema_extra={"x-ui": {"widget": "text"}},
+        json_schema_extra=XUI(Widget.TEXT).extra(),
     )  # JSON-encoded dict[str, str] — {edge_label: expected_value}
 
 

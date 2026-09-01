@@ -25,7 +25,7 @@ from uuid import UUID
 from pydantic import Field, field_validator
 
 from app.core.exceptions import AppError, ErrorCode
-from app.core.schema import BaseSchema
+from app.core.schema import XUI, BaseSchema, UiOption, Widget
 from app.domain.flow_engine.spec import FlowSpec
 from app.domain.market.categories import SearchableCategory
 from app.domain.panel.presets import (
@@ -83,19 +83,17 @@ def schedule_label(cron: str) -> str:
     return SCHEDULE_LABELS.get(cron, cron)
 
 
-_SCHEDULE_UI: _JsonDict = {
-    "x-ui": {
-        "widget": "select",
-        # Last in the form. It lives on the base class (so the deploy route can read it typed),
-        # and Pydantic puts base fields first — which would open every preset with «Как часто».
-        "order": 100,
-        "options": [{"value": value, "label": label} for value, label in SCHEDULE_LABELS.items()],
-    }
-}
+# Last in the form. It lives on the base class (so the deploy route can read it typed), and
+# Pydantic puts base fields first — which would open every preset with «Как часто».
+_SCHEDULE_UI: _JsonDict = XUI(
+    Widget.SELECT,
+    order=100,
+    options=tuple(UiOption(value, label) for value, label in SCHEDULE_LABELS.items()),
+).extra()
 
-_ACCOUNTS_UI: _JsonDict = {"x-ui": {"widget": "account_ref"}}
-_CATEGORY_UI: _JsonDict = {"x-ui": {"widget": "category_picker"}}
-_THREADS_UI: _JsonDict = {"x-ui": {"widget": "textarea"}}
+_ACCOUNTS_UI: _JsonDict = XUI(Widget.ACCOUNT_REF).extra()
+_CATEGORY_UI: _JsonDict = XUI(Widget.CATEGORY_PICKER).extra()
+_THREADS_UI: _JsonDict = XUI(Widget.TEXTAREA).extra()
 
 # Whitespace, commas and semicolons all separate ids — the field asks for "one per line, comma or
 # space separated", so all three have to work in one paste.

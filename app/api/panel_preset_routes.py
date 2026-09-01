@@ -72,6 +72,10 @@ class PresetSummary(BaseSchema):
     # otherwise renders a pack's preset identically to ours, and pressing it hands the pack's graph
     # the operator's accounts and money. They are entitled to know whose form they are filling in.
     origin: str
+    # Whether deploying it schedules a task or starts one run. Sent as its own answer rather than
+    # left to be guessed from a `schedule_cron` key in `params_schema`: the panel would be reading
+    # a field name to learn a behaviour, and renaming the field would silently flip the screen.
+    repeats: bool
 
 
 class DeployPresetRequest(BaseSchema):
@@ -125,6 +129,7 @@ async def list_presets(
             default_name=preset.default_name,
             params_schema=preset.params.model_json_schema(),
             origin=preset.origin,
+            repeats=issubclass(preset.params, ScheduledPresetParams),
         )
         for preset in presets.all()
     ]

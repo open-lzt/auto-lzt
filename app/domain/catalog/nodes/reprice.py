@@ -18,7 +18,7 @@ from decimal import ROUND_HALF_UP, Decimal
 from pydantic import Field
 from pylzt.types import Currency
 
-from app.core.schema import BaseSchema, FractionalPort, NumericPort
+from app.core.schema import XUI, BaseSchema, FractionalPort, NumericPort, Widget
 from app.domain.catalog.capabilities import MARKET_MUTATE, NodeCategory
 from app.domain.flow_engine.base_node import BaseNode, RunContext
 from app.domain.flow_engine.dtos import StepResultDTO
@@ -26,24 +26,22 @@ from app.domain.flow_engine.errors import RunFailed
 
 
 class RepriceInput(BaseSchema):
-    item_id: NumericPort = Field(
-        title="Лот", json_schema_extra={"x-ui": {"widget": "lot_ref"}}, gt=0
-    )
+    item_id: NumericPort = Field(title="Лот", json_schema_extra=XUI(Widget.LOT_REF).extra(), gt=0)
     # `Currency`, а не `str`: тело узла всё равно звало `Currency(...)`, поэтому неизвестная
     # валюта проходила схему и падала ГОЛЫМ `ValueError` — рантайм заворачивал его вторым
     # `RunFailed`, и оператор читал причину из вложенного repr. Теперь отказ приходит от схемы и
     # называет допустимые значения.
-    currency: Currency = Field(title="Валюта", json_schema_extra={"x-ui": {"widget": "select"}})
+    currency: Currency = Field(title="Валюта", json_schema_extra=XUI(Widget.SELECT).extra())
     price: NumericPort | None = Field(
         title="Новая цена",
         description="Задайте либо цену, либо процент скидки.",
-        json_schema_extra={"x-ui": {"widget": "number"}},
+        json_schema_extra=XUI(Widget.NUMBER).extra(),
         default=None,
         gt=0,
     )
     decay_pct: FractionalPort | None = Field(
         title="Скидка, %",
-        json_schema_extra={"x-ui": {"widget": "number"}},
+        json_schema_extra=XUI(Widget.NUMBER).extra(),
         default=None,
         gt=0,
         lt=100,
@@ -51,7 +49,7 @@ class RepriceInput(BaseSchema):
     current_price: NumericPort | None = Field(
         title="Текущая цена",
         description="Нужна только для расчёта скидки.",
-        json_schema_extra={"x-ui": {"widget": "number"}},
+        json_schema_extra=XUI(Widget.NUMBER).extra(),
         default=None,
         gt=0,
     )

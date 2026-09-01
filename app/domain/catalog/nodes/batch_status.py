@@ -11,7 +11,7 @@ import json
 
 from pydantic import Field
 
-from app.core.schema import BaseSchema, NumericPort
+from app.core.schema import XUI, BaseSchema, NumericPort, Widget
 from app.domain.catalog.capabilities import MARKET_READ, NodeCategory
 from app.domain.flow_engine.base_node import BaseNode, RunContext
 from app.domain.flow_engine.dtos import StepResultDTO
@@ -19,25 +19,25 @@ from app.domain.flow_engine.dtos import StepResultDTO
 
 class BatchStatusInput(BaseSchema):
     only_pending: bool = Field(
-        False, title="Только незавершённые", json_schema_extra={"x-ui": {"widget": "bool"}}
+        False, title="Только незавершённые", json_schema_extra=XUI(Widget.BOOL).extra()
     )
     limit: NumericPort | None = Field(
-        None, title="Сколько вернуть", json_schema_extra={"x-ui": {"widget": "number"}}, gt=0
+        None, title="Сколько вернуть", json_schema_extra=XUI(Widget.NUMBER).extra(), gt=0
     )
     offset: NumericPort = Field(
-        0, title="Смещение", json_schema_extra={"x-ui": {"widget": "number"}}, ge=0
+        0, title="Смещение", json_schema_extra=XUI(Widget.NUMBER).extra(), ge=0
     )
     commit_record_ids: str = Field(
         "",
         title="Подтвердить записи",
         description="JSON-массив record_id; пусто — ничего не подтверждать.",
-        json_schema_extra={"x-ui": {"widget": "text"}},
+        json_schema_extra=XUI(Widget.TEXT).extra(),
     )  # JSON array of record_ids to commit, "" = none
     delete_record_ids: str = Field(
         "",
         title="Удалить записи",
         description="JSON-массив record_id; пусто — ничего не удалять.",
-        json_schema_extra={"x-ui": {"widget": "text"}},
+        json_schema_extra=XUI(Widget.TEXT).extra(),
     )  # JSON array of record_ids to delete, "" = none
 
 

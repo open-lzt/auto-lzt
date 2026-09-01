@@ -32,7 +32,7 @@ from decimal import Decimal, InvalidOperation
 from pydantic import Field
 from pylzt.types import Currency, ItemOrigin
 
-from app.core.schema import BaseSchema, NumericPort
+from app.core.schema import XUI, BaseSchema, NumericPort, Widget
 from app.domain.account.errors import NoAvailableAccount
 from app.domain.catalog.capabilities import MARKET_MUTATE_MONEY, NodeCategory
 from app.domain.flow_engine.base_node import BaseNode, RunContext
@@ -41,24 +41,24 @@ from app.domain.flow_engine.errors import RunFailed
 
 
 class RelistInput(BaseSchema):
-    price: NumericPort = Field(title="Цена", json_schema_extra={"x-ui": {"widget": "number"}}, gt=0)
+    price: NumericPort = Field(title="Цена", json_schema_extra=XUI(Widget.NUMBER).extra(), gt=0)
     category_id: NumericPort = Field(
-        title="Категория", json_schema_extra={"x-ui": {"widget": "select"}}, gt=0
+        title="Категория", json_schema_extra=XUI(Widget.SELECT).extra(), gt=0
     )
     # `Currency`/`ItemOrigin`, а не `str`: тело всё равно звало конструкторы enum, поэтому
     # неизвестное значение проходило схему и падало голым `ValueError` уже после проверок.
-    currency: Currency = Field(title="Валюта", json_schema_extra={"x-ui": {"widget": "select"}})
+    currency: Currency = Field(title="Валюта", json_schema_extra=XUI(Widget.SELECT).extra())
     item_origin: ItemOrigin = Field(
-        title="Происхождение аккаунта", json_schema_extra={"x-ui": {"widget": "select"}}
+        title="Происхождение аккаунта", json_schema_extra=XUI(Widget.SELECT).extra()
     )
     title: str | None = Field(
         None,
         title="Заголовок",
         description="Пусто — берётся заголовок исходного лота.",
-        json_schema_extra={"x-ui": {"widget": "text"}},
+        json_schema_extra=XUI(Widget.TEXT).extra(),
     )
     description: str | None = Field(
-        None, title="Описание", json_schema_extra={"x-ui": {"widget": "text"}}
+        None, title="Описание", json_schema_extra=XUI(Widget.TEXT).extra()
     )
 
 

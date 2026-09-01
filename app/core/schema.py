@@ -27,6 +27,18 @@ class Widget(StrEnum):
     SELECT = "select"
     SECRET = "secret"
     FILTERS = "filters"
+    TEXTAREA = "textarea"
+    LOT_REF = "lot_ref"
+    ACCOUNT_REF = "account_ref"
+    CATEGORY_PICKER = "category_picker"
+
+
+@dataclass(frozen=True, slots=True)
+class UiOption:
+    """Один пункт выпадающего списка: что уедет в поле и что прочитает человек."""
+
+    value: str
+    label: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -34,18 +46,28 @@ class XUI:
     """Подсказка интерфейсу для поля схемы.
 
     Раньше писалась словарём прямо в `json_schema_extra={"x-ui": {"widget": "number"}}`. Словарь
-    принимает что угодно: опечатка в ключе или несуществующий виджет — валидный словарь, схема
-    собирается, поле молча рисуется не тем контролом или не рисуется вовсе. Замерено на этом
-    движке: `"widget": "textarea"` — виджета с таким именем нет ни в одном экране.
+    принимает что угодно: опечатка в имени виджета — валидный словарь, схема собирается, поле
+    молча рисуется не тем контролом.
+
+    Клиентов у словаря два, и умеют они разное: веб-холст рисует всё перечисленное, форма бота —
+    подмножество (`UiKind` в `app/bot/render/schema_form.py`), а незнакомое ей имя разбирает как
+    TEXT. Перечисление — про то, что МОЖНО объявить; деградация клиента его не сужает.
 
     Пишется так: ``Field(..., json_schema_extra=XUI(Widget.NUMBER).extra())``.
     """
 
     widget: Widget
+    options: tuple[UiOption, ...] | None = None
+    order: int | None = None
 
     def extra(self) -> dict[str, Any]:
         """Форма, которую ждёт pydantic. Ключ `x-` — соглашение JSON Schema о своих полях."""
-        return {"x-ui": {"widget": self.widget.value}}
+        ui: dict[str, Any] = {"widget": self.widget.value}
+        if self.order is not None:
+            ui["order"] = self.order
+        if self.options is not None:
+            ui["options"] = [{"value": o.value, "label": o.label} for o in self.options]
+        return {"x-ui": ui}
 
 
 def _reject_bool(value: object) -> object:

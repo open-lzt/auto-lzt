@@ -14,7 +14,7 @@ from __future__ import annotations
 import structlog
 from pydantic import Field
 
-from app.core.schema import BaseSchema, NumericPort
+from app.core.schema import XUI, BaseSchema, NumericPort, Widget
 from app.domain.catalog.capabilities import MARKET_MUTATE, NodeCategory
 from app.domain.flow_engine.base_node import BaseNode, RunContext
 from app.domain.flow_engine.dtos import StepResultDTO
@@ -26,11 +26,11 @@ class AutoReplyInput(BaseSchema):
     conversation_id: NumericPort = Field(
         title="Диалог",
         description="Идентификатор диалога, в который отправляется ответ.",
-        json_schema_extra={"x-ui": {"widget": "number"}},
+        json_schema_extra=XUI(Widget.NUMBER).extra(),
         gt=0,
     )
     message: str = Field(
-        title="Текст ответа", json_schema_extra={"x-ui": {"widget": "text"}}, min_length=1
+        title="Текст ответа", json_schema_extra=XUI(Widget.TEXT).extra(), min_length=1
     )
 
 

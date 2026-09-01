@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from pydantic import Field
 
-from app.core.schema import BaseSchema, NumericPort
+from app.core.schema import XUI, BaseSchema, NumericPort, Widget
 from app.domain.account.errors import NoAvailableAccount
 from app.domain.catalog.capabilities import MARKET_MUTATE, NodeCategory
 from app.domain.flow_engine.base_node import BaseNode, RunContext
@@ -20,7 +20,7 @@ class BumpThreadInput(BaseSchema):
     thread_id: NumericPort = Field(
         title="Тема",
         description="ID темы на форуме.",
-        json_schema_extra={"x-ui": {"widget": "number"}},
+        json_schema_extra=XUI(Widget.NUMBER).extra(),
         gt=0,
     )
 
